@@ -1,0 +1,23 @@
+# 依赖
+node_modules/
+miniprogram_npm/
+
+# 微信开发者工具：本地私有配置与自动备份
+project.private.config.json
+*.bak
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 构建产物
+dist/
+miniprogram/dist/
+
+# 日志
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
