@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues 和 specs 以 markdown 文件存放在本 repo 的 `.scratch/<feature-slug>/` 下。See `docs/agents/issue-tracker.md`.
+Issues 和 specs 存放在 GitHub Issues（`fantasywy/smart-locker-app`），所有操作走 `gh` CLI。See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
