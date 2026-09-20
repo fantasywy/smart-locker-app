@@ -8,8 +8,11 @@
 
 ## 版本控制
 
-- git 仓库于 2026-09-20 初始化，主分支 `main`，**暂无 remote**。
+- git 仓库于 2026-09-20 初始化，主分支 `main`。
+- remote：`origin` = `git@github.com:fantasywy/smart-locker-app.git`（SSH）；`main` 跟踪 `origin/main`。首次 push 于 2026-09-20 15:42 完成。
 - 提交者：`fantasywy <2329985979@qq.com>`（来自全局 git config）。
+- **沙箱内无法 push**：SSH 读不到 `~/.ssh`（`Could not stat /root/.ssh: Permission denied`），且 `ssh_config.d` 触发 "Bad owner or permissions"。推送需由用户在自己的终端执行；沙箱内可用 `git log`/reflog 验证同步状态。
+- `gh` 与 `glab` 均**未安装**，因此 GitHub issues / GitLab issues 作为 tracker 目前不可用。
 - `.gitignore` 排除：`node_modules/`、`miniprogram_npm/`、`project.private.config.json`、`*.bak`、`dist/`、编辑器与系统文件、`*.log`。
   - `*.bak` 是微信开发者工具自动生成的备份（`app.json.bak` 等），不入库。
   - `project.private.config.json` 按微信官方惯例属本地私有配置，不入库。
