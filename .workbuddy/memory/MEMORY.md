@@ -25,7 +25,8 @@
 
 - **Issue tracker**：**GitHub Issues**（`fantasywy/smart-locker-app`），操作走 `gh` CLI。最初因无 remote 选了 Local markdown，配好 remote 后改用 GitHub。
 - **Triage labels**：保留五个 canonical 字符串（`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`），见 `docs/agents/triage-labels.md`。在 GitHub 上这些是真实 label，`gh --add-label` 会自动创建。
-- **Domain docs**：single-context —— repo root `CONTEXT.md` + `docs/adr/`，由 `/domain-modeling` 懒创建，缺失时静默继续。
+- **Domain docs**：single-context —— repo root `CONTEXT.md` + `docs/adr/`，由 `/domain-modeling` 懒创建，缺失时静默继续。**`CONTEXT.md` 已于 2026-09-21 建立**（D2 的术语：柜机码 / 中控屏 / 开门指令 / 取件码 / 取件开门 / 存入 / 取件）。
+- **spec 编号**：`docs/spec/NN-<topic>.md`，编号即阅读顺序，D 票顺延取号。现有 `01-entry-and-identity.md`（D1）、`02-c-end-device-boundary.md`（D2）。ADR：`docs/adr/0001-c-end-no-locker-browsing.md`（D1 占用 0001，D7 的 ADR 需顺延为 0002）。
 
 改 tracker 或 label 名字直接编辑 `docs/agents/*.md`；只有换 tracker 类型或从零重来才需重跑该 skill。
 **前置依赖**：triage / to-tickets / to-spec / wayfinder 依赖能访问 GitHub，否则跑不起来。
@@ -44,8 +45,20 @@
 - 编号：R1 #2 / R2 #3 / R3 #4（research）；D1 #5 / D2 #6 / D3 #7 / D4 #8 / D5 #9 / D6 #10 / D7 #11（grilling）；P1 #12（prototype）；T1 #13 / T2 #14（task）。
 - Blocking edges：R1→D1/D4/D5/D6；R2→D2；R3→D3；D3→T1。
 - Labels：`wayfinder:map|research|grilling|prototype|task`。**R1–R3（#2–#4）已于 2026-09-20 resolve 关闭**，随之解锁 D1–D6；`#5`–`#10` 的 `blocked_by` 实测已归 0。**T1（#13）仍被 D3 阻塞**。
-- **Frontier（下一步可开）**：D1 #5、D2 #6、D3 #7、D4 #8、D5 #9、D6 #10、D7 #11、P1 #12、T2 #14。
+- **Frontier（下一步可开）**：D3 #7、D4 #8、D5 #9、D6 #10、D7 #11、P1 #12、T2 #14 —— **D1 #5 与 D2 #6 已于 2026-09-20 / 09-21 resolve**（T1 #13 仍被 D3 阻塞）。
 - Resolve 约定（来自 `docs/agents/issue-tracker.md`）：评论 answer → `gh issue close` → 向 map 的 Decisions so far 追加 context pointer。
+
+### D2 的结论（#6，2026-09-21，三轮 grilling）
+
+**取件链路的关键事实**（票面原前提被推翻）：
+
+- **开门只能由服务端 `OPEN_CELL` 指令驱动**，指令来源只有三个：`13.7` 下单（`USER_DROP`）、`13.11` 支付（`USER_PICKUP`，**支付即开门**）、管理端手动（`ADMIN_FORCE`）。
+- **屏端 `pickup-verify` 不产生任何指令** ⇒ 屏上敲取件码从不开门。屏 = 只读查询台，小程序 = 唯一开门发起方。
+- **取件码没有开门力**：它只是「带到屏上敲」的查询凭据。⇒ C 端必须有「**取件开门**」动作，实现 = 幂等 `13.11`（未清账先清账；已清账则只重发指令）。**重试入口就是同一个按钮**。
+- 派生判定：**能不能取件 = `pickupCode !== null`**；**付没付清 = `payAmount !== null`**（⚠️ 不是 `> 0` —— 全免单是 0 元 `SUCCESS` 支付单）。
+- ⚠️ **一期 `paid` 与 `openCommandIssued` 都写死 `true`**（`AppOrderServiceImpl.java:199`）⇒ 不是「指令下发了」的证据，点完不许渲染「门已开」。
+- 「把码发给别人代取」判死（开门只认本人 token）；取件不可达的唯一人工出口 = 客服 → 管理端 `ADMIN_FORCE`。
+- 产物：`docs/spec/02-c-end-device-boundary.md` + 新建 repo root **`CONTEXT.md`**（首个 glossary，single-context）。屏侧**无需改动**，只有两条登记项（hint 术语同步、屏端键盘按钮文案「开门」的观感冲突）。
 - findings 分支：`research/r1-api-mapping`、`research/r2-pickup-code-semantics`、`research/r3-open-gaps`（文件 `docs/research/*.md`）；本地副本 `.scratch/smart-locker-app/research/`。
 - 推送方式：正文写 `.scratch/smart-locker-app/chart/*.md` → `gh issue create --body-file`（脚本 `push-chart.sh`，台账 `created.map`）。
 
