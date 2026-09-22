@@ -12,6 +12,10 @@ project.private.config.json
 .DS_Store
 Thumbs.db
 
+# 本地工具目录（不是本仓库的产物）
+.workbuddy/
+.scratch/
+
 # 构建产物
 dist/
 miniprogram/dist/
