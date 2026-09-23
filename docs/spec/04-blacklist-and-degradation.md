@@ -215,7 +215,8 @@ R1 定的通用规则是「前端拦截器按 `code` 统一提示、**不硬编�
 |---|---|---|
 | 值 | `openTimeoutMinutes`（仅 `13.7` 回显）、`estimatedAmount`、`payAmount`、`planStartAt`、`planEndAt`、`total`、`score`、`delta`、`createdAt` | `score.blacklistThreshold`、`score.autoRemoveDays`、`score.max`、`score.timeoutDeduct`、`score.noShowDeduct`、`reservation.holdMinutes`、`reservation.noShowMinutes`、`reservation.maxHours`，以及**把 `openTimeoutMinutes` 复制到别的场景复用** |
 
-- **`openTimeoutMinutes` 的唯一合法位置**：`03` §8 已定的 **P1 #12 建单等待态**（那里有 `13.7` 刚返回的实时基准，且订单是刚创建的）。
+- **`openTimeoutMinutes` 的唯一合法位置**：~~`03` §8 已定的 **P1 #12 建单等待态**（那里有 `13.7` 刚返回的实时基准，且订单是刚创建的）。~~
+  - ⚠️ **就地补正（2026-09-22，P1 #12 收口）**：位置**确实存在**（建单等待态有 `13.7` 刚返回的实时基准），但 **P1 裁决「有基准也不用」—— 等待态一律不倒计时**（三条入口只有一条有基准，做倒计时会让同一组件呈现两副面孔）。⇒ **`openTimeoutMinutes` 目前没有任何合法展示位置**；它仍可被读取用于**非展示**用途（如软超时的时长取值），但**不得渲染成倒计时或分钟数**。见 `docs/spec/08-waiting-state.md` §8。
 - 本文是这条规则的**事实源**；**D5 #9 / D6 #10 / T1 #13 直接引用本条，不重新裁决**。
 
 ## 12. 登记项（跨仓库备忘，**不改任何代码**）
