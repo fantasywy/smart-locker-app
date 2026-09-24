@@ -170,24 +170,45 @@ describe('测试载体自证', () => {
 })
 
 describe('桩的隔离', () => {
-  it('用户显式 set 的 wx 会被下一个测试的清理卸载（第一半：设进去）', () => {
+  // ⚠️ 每个用例开始时全局必须是干净的 —— 这才是真正的「进入测试时的状态」。
+  // 上一版把「设进去」和「已经没了」拆成两个用例，于是第二半**静默依赖执行顺序**：
+  // 谁在中间插一个用例，第二半就变成为「它」写的断言，坏了还看不出原因。
+  // 改成「先自己弄脏、再断言别人弄脏的没留下」，顺序依赖消失。
+  it('进入测试时全局是干净的', () => {
+    expect((globalThis as unknown as Record<string, unknown>).wx).toBeUndefined()
+  })
+
+  it('本用例装的桩与调用记录，下一个用例看不到（自己弄脏 → 交给清理 → 下个用例验）', () => {
     const host = globalThis as unknown as Record<string, unknown>
-    expect(host.wx).toBeUndefined()
-    installWxStub()
+    const wx = installWxStub()
+    wx.getStorageSync.mockReturnValueOnce('dirty')
+    expect(wx.getStorageSync('k')).toBe('dirty')
+    expect(wx.getStorageSync).toHaveBeenCalledTimes(1)
     expect(host.wx).toBeDefined()
   })
 
-  it('上一个测试留下的桩不泄漏到这里（第二半：已经没了）', () => {
+  it('上一个用例装的桩没有留下（wx 必须没了）', () => {
     const host = globalThis as unknown as Record<string, unknown>
+    // 若 setup 的 afterEach 没跑，这里会撞见上一个用例装的那个桩。
+    // ⚠️ 只断言 `wx` —— 那是**载体拥有**的全局。用例随手塞的其它全局不归它管，
+    // 断言那些等于要求 setup 去清理它根本不认识的东西。
     expect(host.wx).toBeUndefined()
   })
 
-  it('上一个测试推进过的 fake timer 不泄漏到这里', () => {
-    // 若 setup 没还原真实计时器，这里会在 fake 时钟下「立刻」返回一个真实结果 —— 拿不到 99。
+  it('上一个用例推进过的 fake timer 不泄漏到这里', () => {
+    // ⚠️ 这条断言的是「计时器是真货」。若 setup 忘了 vi.useRealTimers()，本用例会跑在
+    // fake 时钟下 —— 除非有人手动推进，setTimeout(…, 0) 永不触发，value 停在 0；
+    // 而真实时钟下它会到 1。所以「等到 1」证明用的是真计时器。
+    // 用 await + 真实 0ms 计时器：代价可以忽略，换来的是不依赖执行顺序的自证。
     let value = 0
     setTimeout(() => {
-      value = 99
+      value = 1
     }, 0)
-    expect(value).toBe(0)
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        expect(value).toBe(1)
+        resolve()
+      }, 5)
+    })
   })
 })
