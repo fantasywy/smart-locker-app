@@ -1,0 +1,75 @@
+// 骨架屏样式 —— 全部走 `10` 的 token，**零裸 hex**。
+//
+// ⚠️ 骨架块一律用 **中性** 的 `$color-border`（`10` §3.4）：
+//   此刻还不知道这些行将来是什么状态，染上任何语义档都是在替数据说话。
+//   `10` §6 禁令 1 也禁止语义色做文字色 —— 而骨架屏连文字都没有，这条自然满足。
+//
+// ⚠️ 不用动画。小程序可以做 shimmer（`@keyframes` + 渐变位移），但：
+//   1. `10` 与 `09` 都没有为它定过任何口径 —— 加一个 spec 没写的视觉效果，
+//      等于让「色调层只有本文档定义的这些」这句话失效；
+//   2. 本票不实现业务页面，骨架屏的**视觉**按 `10` 的 token 与 `09` 的文案来，
+//      而 `09` §7.1 对骨架屏只说「纯图形占位」—— 静止的灰块就是它的完整口径。
+//   留给将来真的需要时再裁决（可以加，但那是一次有意识的改动）。
+
+@use '../../styles/variables' as v;
+
+.skeleton {
+  // ⚠️ 显式设一次主文字色 —— `10` §6 禁令 4：页面/组件根节点不得依赖继承。
+  // 骨架屏没有文字，但这条照写：**值对**不等于**有人用了它**。
+  color: v.$color-text-main;
+  padding: v.$spacing-md;
+}
+
+.skeleton__row {
+  display: flex;
+  align-items: center;
+  // ⚠️ 白底卡 —— 与真列表行同一形态（`10` 的 `card`）。
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+  padding: v.$spacing-md;
+  margin-bottom: v.$spacing-md;
+}
+
+.skeleton__bar {
+  // 真列表行左缘那条 3px 语义色条的位置（`03` §5）。骨架阶段它是中性的 ——
+  // 我们不知道这一行将来是什么档。
+  width: v.$status-bar-width;
+  align-self: stretch;
+  background: v.$color-border;
+  margin-right: v.$spacing-md;
+}
+
+.skeleton__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.skeleton__block {
+  background: v.$color-border;
+  border-radius: v.$radius-component;
+}
+
+.skeleton__block--title {
+  // 主行：短块。宽度用百分比 —— 不同屏宽下「看起来像一行字」比精确像素重要。
+  width: 60%;
+  height: 16px;
+}
+
+.skeleton__block--meta {
+  // 副行（时间 / cellNo 那一行）：更短、更矮。
+  width: 40%;
+  height: 12px;
+  margin-top: v.$spacing-sm;
+}
+
+.skeleton__chip {
+  // 状态标签位 —— 对照真版式的 `tone-chip` 尺寸（`10` §4）。
+  width: 48px;
+  height: 20px;
+  background: v.$color-border;
+  border-radius: v.$radius-component;
+  margin-left: v.$spacing-md;
+  flex-shrink: 0;
+}

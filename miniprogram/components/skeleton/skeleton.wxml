@@ -1,0 +1,20 @@
+<!--
+  骨架屏 —— 形状对照真实版式（09 §7.1：列表行 = 色条 + 两行短块 + 状态标签位）。
+
+  ⚠️ 纯图形占位，**无文字**。本文件里不得出现任何文本节点 / 「加载中」字样 ——
+     那是 09 §7.1 的逐字禁令（「不得放『加载中』文字盖住骨架」）。
+
+  ⚠️ 色条用真实 token（$status-bar-width 的 3px + $color-border），不用裸 hex；
+     骨架块是**中性**的（$color-border），不带任何语义档 —— 此刻我们还不知道
+     这些行将来是什么状态，染上任何一档都是在替数据说话。
+-->
+<view class="skeleton" aria-role="skeleton">
+  <view class="skeleton__row" wx:for="{{ rows }}" wx:key="*this">
+    <view class="skeleton__bar"></view>
+    <view class="skeleton__body">
+      <view class="skeleton__block skeleton__block--title"></view>
+      <view class="skeleton__block skeleton__block--meta"></view>
+    </view>
+    <view class="skeleton__chip"></view>
+  </view>
+</view>

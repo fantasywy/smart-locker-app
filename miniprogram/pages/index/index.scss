@@ -1,62 +1,48 @@
-/**index.scss**/
+// 首页 —— 启动闸门承载页的样式。全部走 `10` 的 token，**零裸 hex**。
+//
+// ⚠️ 本文件只画**闸门的三态容器**与 `ready` 的占位块；骨架屏与失败出口的视觉
+// 各自归它们的组件（`components/skeleton/`、`components/failure-exit/`）——
+// 页面不重复它们的样式，否则「唯一」这件事在样式层就先破了。
+
+@use '../../styles/variables' as v;
+
 page {
   height: 100vh;
   display: flex;
   flex-direction: column;
-}
-.scrollarea {
-  flex: 1;
-  overflow-y: hidden;
+  // ⚠️ 显式设一次主文字色 —— `10` §6 禁令 4：页面根节点不得依赖继承。
+  // device 曾因继承深色主题的文字色导致白底对比度 1.23、整片看不见（2026-09-17）。
+  color: v.$color-text-main;
+  background: v.$color-bg-page;
+  font-family: v.$font-family;
 }
 
-.userinfo {
+.page {
+  flex: 1;
+  overflow-y: auto;
+}
+
+// 闸门放行后的占位块 —— 订单列表落地前，「闸门通了」这件事在真机上可见。
+// ⚠️ 它不是空态（空态归 `03` §9，文案「还没有订单」+ 扫码存件入口），
+// 所以这里**不用空态的措辞**：那会让人以为订单列表已经做完了，只是恰好没数据。
+.gate-passed {
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: #aaa;
-  width: 80%;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 0 v.$spacing-xxl;
 }
 
-.userinfo-avatar {
-  overflow: hidden;
-  width: 128rpx;
-  height: 128rpx;
-  margin: 20rpx;
-  border-radius: 50%;
+.gate-passed__title {
+  font-size: v.$font-size-title;
+  line-height: 1.5;
 }
 
-.usermotto {
-  margin-top: 200px;
-}
-
-.avatar-wrapper {
-  padding: 0;
-  width: 56px !important;
-  border-radius: 8px;
-  margin-top: 40px;
-  margin-bottom: 40px;
-}
-
-.avatar {
-  display: block;
-  width: 56px;
-  height: 56px;
-}
-
-.nickname-wrapper {
-  display: flex;
-  width: 100%;
-  padding: 16px;
-  box-sizing: border-box;
-  border-top: .5px solid rgba(0, 0, 0, 0.1);
-  border-bottom: .5px solid rgba(0, 0, 0, 0.1);
-  color: black;
-}
-
-.nickname-label {
-  width: 105px;
-}
-
-.nickname-input {
-  flex: 1;
+.gate-passed__hint {
+  // 承载信息的辅助文字走 sub（5.45 ✅），不是 weak（3.02 ❌，只给占位符与禁用态）。
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+  margin-top: v.$spacing-sm;
 }

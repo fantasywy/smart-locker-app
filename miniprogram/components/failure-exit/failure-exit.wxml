@@ -1,0 +1,43 @@
+<!--
+  全局失败出口 —— 全端唯一的一处「登录链失败」呈现（01 §4）。
+
+  ⚠️ 三要素缺一不可（01 §4）：说明 + 重试 + 静态出口。
+  ⚠️ 文案全部来自 startup/copy.ts（09 §7.2 定稿逐字），此处**不写字面量** ——
+     拆进标签里之后「有没有照抄定稿」就只能靠眼睛看。
+  ⚠️ 不出现错误码、不出现「鉴权失败」这类术语、不按成因分叉（01 §4）：
+     本模板拿不到 UnifiedError，也就画不出错误码。
+-->
+<view class="failure-exit">
+  <view class="failure-exit__text">
+    <view class="failure-exit__title">{{ title }}</view>
+    <view class="failure-exit__detail">{{ detail }}</view>
+  </view>
+
+  <button class="failure-exit__retry" bindtap="onRetry">{{ retryLabel }}</button>
+
+  <!-- 静态出口三件套 —— 与「我的」页是同一份内容（01 §4「两条路一份内容」） -->
+  <view class="failure-exit__statics">
+    <block wx:for="{{ staticExits }}" wx:key="id">
+      <!--
+        ⚠️ 判据是 **id**，不是 label（copy.ts 的 STATIC_EXITS 里有完整理由）：
+           拿文案当行为选择器，改词就会让客服按钮静默退化成没反应的 view。
+
+        ⚠️ 「联系客服」必须走 open-type="contact"（04 §8）—— 微信原生承载，
+           不做运行时可用性探测、不做电话双出口（未配客服时静默无反应，
+           登记为上线前置项）。其余两项是本地内容页，一期未实现，点击交回页面。
+      -->
+      <button
+        wx:if="{{ item.id === contactExitId }}"
+        class="failure-exit__static"
+        open-type="contact"
+        hover-class="none"
+      >{{ item.label }}</button>
+      <view
+        wx:else
+        class="failure-exit__static"
+        data-exit-id="{{ item.id }}"
+        bindtap="onStaticExit"
+      >{{ item.label }}</view>
+    </block>
+  </view>
+</view>

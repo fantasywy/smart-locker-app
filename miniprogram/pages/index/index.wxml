@@ -1,28 +1,35 @@
-<!--index.wxml-->
-<navigation-bar title="Weixin" back="{{false}}" color="black" background="#FFF"></navigation-bar>
-<scroll-view class="scrollarea" scroll-y type="list">
-  <view class="container">
-    <view class="userinfo">
-      <block wx:if="{{canIUseNicknameComp && !hasUserInfo}}">
-        <button class="avatar-wrapper" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar">
-          <image class="avatar" src="{{userInfo.avatarUrl}}"></image>
-        </button>
-        <view class="nickname-wrapper">
-          <text class="nickname-label">昵称</text>
-          <input type="nickname" class="nickname-input" placeholder="请输入昵称" bind:change="onInputChange" />
-        </view>
-      </block>
-      <block wx:elif="{{!hasUserInfo}}">
-        <button wx:if="{{canIUseGetUserProfile}}" bindtap="getUserProfile"> 获取头像昵称 </button>
-        <view wx:else> 请使用2.10.4及以上版本基础库 </view>
-      </block>
-      <block wx:else>
-        <image bindtap="bindViewTap" class="userinfo-avatar" src="{{userInfo.avatarUrl}}" mode="cover"></image>
-        <text class="userinfo-nickname">{{userInfo.nickName}}</text>
-      </block>
-    </view>
-    <view class="usermotto">
-      <text class="user-motto">{{motto}}</text>
-    </view>
+<!--
+  首页 = 启动闸门的承载页（01 §2.3 首页 = 订单列表；本票只交付闸门形态）。
+
+  ⚠️ 三条分支**互斥**，由闸门的 phase 一个变量驱动（01 §4：失败出口由**启动态**驱动，
+     不下放到各页面的数据区）：
+       loading → 骨架屏（页面结构先出现，数据区等 token）
+       ready   → 业务数据区
+       failed  → 全局唯一失败出口（说明 + 重试 + 静态出口）
+-->
+<navigation-bar title="我的订单" back="{{false}}" color="black" background="#FFF"></navigation-bar>
+
+<view class="page">
+  <!-- ① 骨架屏 —— 页面结构先出现（01 §3.2）。纯图形占位、无文字（09 §7.1）。 -->
+  <skeleton wx:if="{{ phase === 'loading' }}" />
+
+  <!--
+    ② 业务数据区 —— 登录完成后才渲染。
+
+    ⚠️ 本票**不实现订单列表**（归 03 / D3）。这里是显式的占位块，让「闸门通了」
+       在真机上可见、可 demo；订单列表落地时替换本块内容即可，闸门形状不变。
+    ⚠️ 数据不得来自本地缓存（01 §3.2）—— 真实实现时这里只由 api/ 的请求填充。
+    ⚠️ 文案从 startup/copy.ts 来（它是**过渡期的债**，见那里的说明），
+       不在模板里写字面量 —— 用户可见的每个字都归文案层（09 §0 硬规则 1）。
+  -->
+  <view wx:elif="{{ phase === 'ready' }}" class="gate-passed">
+    <view class="gate-passed__title">{{ dataAreaTitle }}</view>
+    <view class="gate-passed__hint">{{ dataAreaHint }}</view>
   </view>
-</scroll-view>
+
+  <!--
+    ③ 全局失败出口 —— **唯一**一份，由组件承担（01 §4）。
+       页面只负责把它 wx:if 出来，不在数据区里再写一份失败态。
+  -->
+  <failure-exit wx:else bind:retry="onRetry" bind:staticexit="onStaticExit" />
+</view>

@@ -1,0 +1,91 @@
+// 全局失败出口的样式 —— 全部走 `10` 的 token，**零裸 hex**（`10` §6 禁令 5 / §8 第 6 条）。
+//
+// ⚠️ 三条硬规则（`10`）：
+//   1. **页面/组件根节点显式设一次 `$color-text-main`** —— 不得依赖继承（`10` §6 禁令 4）。
+//   2. **语义色不做文字色** —— 需要「警示」语义时走 `mixin` 的 ink 变体，不写 `$color-danger`。
+//      本出口**一个语义色都不用**：它不是「出错了」的红，而是「暂时连不上」的中性说明
+//      （`09` §7.2 的措辞是「暂时连不上」，不是「失败」）。
+//   3. **布局几何用 `rpx`，字号与 1px 级细节用 `px`**（`10` §7.2）。
+
+@use '../../styles/variables' as v;
+
+.failure-exit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  // ⚠️ 显式设一次主文字色 —— `10` §6 禁令 4：不得依赖继承。
+  // device 曾因继承深色主题的文字色导致白底对比度只有 1.23、整片看不见（2026-09-17）。
+  color: v.$color-text-main;
+  padding: 0 v.$spacing-xxl;
+  // 垂直居中：失败出口是这一屏的**全部**内容（数据区不渲染），不是页内一个区块。
+  // 用 vh 而不是固定 rpx：它要在一屏里居中，而屏高不是 750rpx 的等比量。
+  min-height: 60vh;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.failure-exit__text {
+  text-align: center;
+}
+
+.failure-exit__title {
+  font-size: v.$font-size-title;
+  line-height: 1.5;
+}
+
+.failure-exit__detail {
+  // ⚠️ 承载信息的辅助文字走 `$color-text-sub`（5.45 ✅），不是 `$color-text-weak`（3.02 ❌）。
+  // weak 只给占位符与禁用态（`10` §3.3）。
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.5;
+  margin-top: v.$spacing-sm;
+}
+
+.failure-exit__retry {
+  // 主按钮：白字压主色底（`10` §3.1：`$color-primary` 作底色，绿不新增颜色）。
+  background: v.$color-primary;
+  color: v.$color-bg-card;
+  font-size: v.$font-size-body;
+  border-radius: v.$radius-component;
+  margin-top: v.$spacing-xxl;
+  // ⚠️ 按钮宽度按内容 + 内边距，不撑满 —— 失败出口的主动作只有一个，撑满会把
+  // 下面三个静态出口压成配角，而它们是并列的三条路。
+  padding: 0 v.$spacing-xxl;
+  min-width: 240rpx;
+  line-height: 44px;
+  height: 44px;
+
+  // 小程序里 button 自带边框与背景，按下态用 `-hover` 值（`10` §3.1：小程序无 hover，
+  // 这个值留给「按下」反馈）。
+  &::after {
+    border: none;
+  }
+
+  &:active {
+    background: v.$color-primary-hover;
+  }
+}
+
+.failure-exit__statics {
+  display: flex;
+  justify-content: center;
+  margin-top: v.$spacing-xl;
+}
+
+.failure-exit__static {
+  // ⚠️ 静态出口是**并列的文本入口**，不是三个按钮：它们是退路，不是动作。
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+  padding: v.$spacing-sm v.$spacing-md;
+  // 重置 button 的原生样式 —— 「联系客服」是 button（open-type="contact"），
+  // 视觉上要与另外两个 view 完全一致。
+  background: transparent;
+  border: none;
+  margin: 0;
+
+  &::after {
+    border: none;
+  }
+}
