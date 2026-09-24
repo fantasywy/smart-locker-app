@@ -1,11 +1,35 @@
 {
   "pages": [
     "pages/index/index",
-    "pages/logs/logs"
+    "pages/profile/profile",
+    "pages/locker/locker",
+    "pages/order-detail/order-detail",
+    "pages/waiting/waiting",
+    "pages/reservation-list/reservation-list",
+    "pages/reservation-create/reservation-create",
+    "pages/score-logs/score-logs",
+    "pages/billing-info/billing-info",
+    "pages/faq/faq"
   ],
   "window": {
     "navigationBarTextStyle": "black",
     "navigationStyle": "custom"
+  },
+  "tabBar": {
+    "color": "#8f959e",
+    "selectedColor": "#1f2329",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "订单"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的"
+      }
+    ]
   },
   "renderer": "webview",
   "style": "v2",

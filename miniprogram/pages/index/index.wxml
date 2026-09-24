@@ -7,7 +7,7 @@
        ready   → 业务数据区
        failed  → 全局唯一失败出口（说明 + 重试 + 静态出口）
 -->
-<navigation-bar title="我的订单" back="{{false}}" color="black" background="#FFF"></navigation-bar>
+<navigation-bar title="{{ title }}" back="{{false}}" color="black" background="#FFF"></navigation-bar>
 
 <view class="page">
   <!-- ① 骨架屏 —— 页面结构先出现（01 §3.2）。纯图形占位、无文字（09 §7.1）。 -->

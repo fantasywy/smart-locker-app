@@ -1,0 +1,21 @@
+<!--
+  profile 页 —— **空壳**（issue #22 铺的骨架，页面本身归各自的功能票）。
+
+  ⚠️ 为什么先落空壳：`app.json` 的 `pages` 是**全局唯一**的注册表，
+     每张页面票各改一次它，必然并发冲突（`07` §5 页面清单 / §8）。
+     一次性把 10 个页面注册齐，页面票就只动自己那个目录。
+
+  ⚠️ 标题来自 `startup/copy.ts` 的 `PAGE_TITLES`，**不在本文件里写字面量** ——
+     标题是用户可见的字，归文案层（`09` §0 硬规则 1）；
+     `test/startup/conventions.test.ts` 有一条守卫会判违规（它在本票第一版抓过一次）。
+
+  ⚠️ 这个文件里**没有任何业务内容**，也**不假装**有：
+     不写「敬请期待」、不写占位数据、不写开发者台词。
+     它渲染的只有自绘导航栏（`07` §5：全端统一自绘）与一个空的页面容器。
+     承载它的页面票请**整体替换**本文件，而不是往上叠。
+
+  出处：`docs/spec/01-entry-and-identity.md` §5。
+-->
+<navigation-bar title="{{ title }}" back="{{true}}" color="black" background="#FFF"></navigation-bar>
+
+<view class="page"></view>

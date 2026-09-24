@@ -40,11 +40,12 @@ import { requestsTo, sentRequests, urlsOf } from '../helpers/http'
 import type { SentRequest } from '../helpers/http'
 import { request } from '../../miniprogram/request'
 import { getAccessToken, getRefreshToken } from '../../miniprogram/request/token'
+import { BASE_URL } from '../../miniprogram/request/config'
 
-const ORDERS_URL = 'https://api.example.com/api/app/v1/orders'
-const PROFILE_URL = 'https://api.example.com/api/app/v1/profile'
-const LOGIN_URL = 'https://api.example.com/api/app/v1/auth/login'
-const REFRESH_URL = 'https://api.example.com/api/app/v1/auth/refresh'
+const ORDERS_URL = `${BASE_URL}/api/app/v1/orders`
+const PROFILE_URL = `${BASE_URL}/api/app/v1/profile`
+const LOGIN_URL = `${BASE_URL}/api/app/v1/auth/login`
+const REFRESH_URL = `${BASE_URL}/api/app/v1/auth/refresh`
 
 /**
  * 造一份 `401 + code` 的失败响应。
@@ -538,9 +539,9 @@ describe('#19 递归防护：13.1 / 13.2 自身不触发登录失效处理', () 
     const result = await request('/api/app/v1/auth/logout', { method: 'POST' })
 
     expect(urlsOf(sentRequests(wx.request)), '/auth/* 里只有 login / refresh 豁免').toEqual([
-      'https://api.example.com/api/app/v1/auth/logout',
+      `${BASE_URL}/api/app/v1/auth/logout`,
       REFRESH_URL,
-      'https://api.example.com/api/app/v1/auth/logout',
+      `${BASE_URL}/api/app/v1/auth/logout`,
     ])
     expect(result.ok).toBe(true)
   })

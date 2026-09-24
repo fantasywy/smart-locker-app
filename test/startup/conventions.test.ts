@@ -20,6 +20,7 @@ import {
   DATA_AREA_PLACEHOLDER_TITLE,
   FAILURE_DETAIL,
   FAILURE_TITLE,
+  PAGE_TITLES,
   RETRY_LABEL,
   STATIC_EXITS,
 } from '../../miniprogram/startup/copy'
@@ -64,14 +65,25 @@ function rel(path: string): string {
 const allSources = (): string[] => collect(miniprogramDir, ['.ts', '.wxml', '.scss', '.json'])
 
 /**
- * **用户可见的全部文案**字面量 —— 从 `copy.ts` 的导出**反推**出来。
+ * **用户可见的全部文案**字面量。
  *
- * ⚠️ 刻意**不**手写第二份清单：手写的那一份会在「有人往 `copy.ts` 加一句新文案」时
- * 悄悄落后于实现，而落后的那一刻守卫就只剩一个假象（本文件第一版正是这么翻车的 ——
- * 见下面那条断言里的说明）。从 `copy.ts` 自己读出来，新增文案**自动纳入**。
+ * ⚠️ 刻意**不**手写一份「页面里出现过哪些字符串」的清单：手写的那一份会在「有人往
+ * `copy.ts` 加一句新文案」时悄悄落后于实现，而落后的那一刻守卫就只剩一个假象
+ * （本文件第一版正是这么翻车的 —— 见下面那条断言里的说明）。
+ *
+ * ⚠️⚠️ **但「反推」这一步本身仍是手写的** —— 下面这个数组就是一个手工维护的清单，
+ * 只是它的**每一项取值**来自 `copy.ts` 的导出（改了 `copy.ts` 的取值，这里自动跟着变；
+ * 但**往 `copy.ts` 新增一个导出**，这里不会自动多一项）。
+ * `#22` 的 review 正是抓到了这个缝：那一票往 `copy.ts` 加了 `PAGE_TITLES`，
+ * 却没人想起把它的值加进来 —— 于是 `pages/index/index.wxml` 里写死的「我的订单」
+ * **一路绿灯**通过，而它恰是那一票刚收进 `PAGE_TITLES` 的同一个字符串。
+ *
+ * ⇒ 结论：**新增导出时必须回来加一次**。`test/startup/skeleton.test.ts` 里有一条
+ * 「`PAGE_TITLES` 的值不得在别处以字面量出现」的断言作为第二道网 ——
+ * 但两道网都要有人补，**别再假设它是自动的**。
  *
  * 构成：三个失败出口的字符串常量 + `STATIC_EXITS` 每一项的 `label`
- * + 数据区占位那两句。
+ * + 数据区占位那两句 + `PAGE_TITLES` 的每一个标题。
  */
 const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   FAILURE_TITLE,
@@ -80,6 +92,8 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   ...STATIC_EXITS.map((exit) => exit.label),
   DATA_AREA_PLACEHOLDER_TITLE,
   DATA_AREA_PLACEHOLDER_HINT,
+  // ⚠️ `PAGE_TITLES` 的值 —— `#22` 新增的导出（见上方说明：新增导出必须回来补一次）。
+  ...Object.values(PAGE_TITLES),
 ]
 
 describe('#20 失败出口是唯一的一份（01 §4）', () => {
@@ -97,9 +111,19 @@ describe('#20 失败出口是唯一的一份（01 §4）', () => {
     // 不是手工维护的第二份清单）：任何一句以字面量形式出现在 `copy.ts` 之外，就是又抄了一份。
     // 覆盖面因此从「1 个探针」变成「这一整套出口的每一个字」，
     // 且**新增文案时自动纳入**（这正是它不再真空的原因）。
+    // ⚠️ **`app.json` 是唯一的例外，且它豁免的理由与别处不同。**
+    // tabBar 的 `text`（「订单」/「我的」）是**原生配置**，与 tabBar 的三个颜色同理：
+    // 它**引不到** `copy.ts`（那是 JSON，不是 JS，没有 import）。
+    // 所以这不是「又抄了一份文案」，而是**只能写在这里的一份**。
+    // ⇒ 代价是它与 `PAGE_TITLES['pages/profile/profile']` 有漂移空间，
+    //   由 `skeleton.test.ts` 的断言钉住（那里同时读两处断言 tabBar 项与实际页面标题一致）。
+    // 豁免必须**逐字面写死这个路径**，不能用「后缀是 .json 就放过」这类宽判据 ——
+    // 那会连页面自己的 `.json` 一起放过，而页面 `.json` 里**不该**有文案。
+    const appJsonPath = join(miniprogramDir, 'app.json')
     const offenders: string[] = []
     for (const file of allSources()) {
       if (file === join(startupDir, 'copy.ts')) continue
+      if (file === appJsonPath) continue
       const code = stripComments(readFileSync(file, 'utf8'))
       for (const literal of USER_VISIBLE_COPY_LITERALS) {
         if (code.includes(literal)) offenders.push(`${rel(file)} → 「${literal}」`)
@@ -283,8 +307,8 @@ describe('#20 不做本地业务数据缓存（01 §3.2）', () => {
     //
     // ⚠️ 判据落在**这几处新代码**上，而不是「全端零 storage」——
     // `request/token.ts` 本来就要写 token（那是登录身份，不是业务数据，
-    // 由 `07` §4.4 定案），`pages/logs` 是 quickstart 残留。
-    // 把守卫钉在闸门链路上，既准确又不会随无关代码的增减而误报。
+    // 由 `07` §4.4 定案）。把守卫钉在闸门链路上，既准确又不会随无关代码的增减而误报。
+    // （quickstart 残留的 `pages/logs` 已由 #22 删除，此处不再有它的例外。）
     const guarded = [
       ...collect(startupDir, ['.ts']),
       ...collect(join(componentsDir, 'skeleton'), ['.ts']),

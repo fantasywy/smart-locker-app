@@ -48,6 +48,14 @@ $color-danger-ink: #c05454; // 白底 4.53
 $color-text-main: #1f2329; // 白底 15.78。页面根节点必须显式设它，不得依赖继承
 $color-text-sub: #646a73; // 白底 5.45。**承载信息的辅助文字**（小标签、分组标题、时间、cellNo）用它
 $color-text-weak: #8f959e; // 白底 3.02。只给占位符与禁用态，**不承载信息**
+//
+// ⚠️ **`$color-text-weak` 与 `$color-text-main` 有一处「镜像」不在 SCSS 里**：
+// `app.json` 的 `tabBar` 只能写**字面色值**（那是原生配置，引不到 SCSS 变量）。
+// 本仓库把它的 `color` / `selectedColor` / `backgroundColor` 分别对齐到
+// weak / main / card 三个 token —— 于是这三个取值有了**第二个家**，就有漂移空间。
+// 漂移由 `test/startup/skeleton.test.ts` 的一条守卫挡住（它同时读本文件与 `app.json` 断言相等）。
+// ⚠️ 顺带说明为什么 tabBar 的未选中态用 weak：tabBar 的**未选中项**正是「非当前项」，
+// 视觉上属于弱化呈现；而它旁边永远有文字标签，不靠颜色单独承载信息，weak 的 3.02 在此可接受。
 
 // ---------------------------------------------------------------------------
 // 面与边框

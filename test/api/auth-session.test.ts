@@ -13,9 +13,10 @@ import { login, refresh } from '../../miniprogram/api/auth'
 import { ensureLoggedIn } from '../../miniprogram/api/session'
 import type { LoginResponse } from '../../miniprogram/types/auth'
 import { getAccessToken, getRefreshToken } from '../../miniprogram/request/token'
+import { BASE_URL } from '../../miniprogram/request/config'
 
-const LOGIN_URL = 'https://api.example.com/api/app/v1/auth/login'
-const REFRESH_URL = 'https://api.example.com/api/app/v1/auth/refresh'
+const LOGIN_URL = `${BASE_URL}/api/app/v1/auth/login`
+const REFRESH_URL = `${BASE_URL}/api/app/v1/auth/refresh`
 
 /** 一份契约形状的 `13.1` 成功响应体。 */
 function loginBody(overrides: Partial<LoginResponse> = {}): Record<string, unknown> {

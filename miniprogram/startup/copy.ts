@@ -102,3 +102,37 @@ export const DATA_AREA_PLACEHOLDER_TITLE = '已连接'
  * 用户看到的是「这里暂时是空的」，而不是「你们还没做完」。
  */
 export const DATA_AREA_PLACEHOLDER_HINT = '订单内容稍后在这里出现'
+
+/**
+ * 各页自绘导航栏的**标题** —— 一个页面一个，键 = `app.json` 里注册的 `pages` 路径。
+ *
+ * ⚠️ **为什么标题也要进文案层**（而不是在 wxml 里写 `title="计费说明"`）：
+ * 它是**用户可见的字**，`09` §0 硬规则 1 就是「用户可见的每一个字都归文案层」。
+ * `test/startup/conventions.test.ts` 有一条守卫从本文件**反推**用户可见文案，
+ * 任何一句以字面量出现在别处都会被判违规 —— 它在本票的第一版**确实抓到了**
+ * 空壳页里写死的「计费说明」/「常见问题」（那两句恰好也是 `STATIC_EXITS` 的 label）。
+ * 守卫是对的：这两个词在「静态出口」与「页面标题」两处出现，
+ * 若不并到一处，改一处漏一处的那天就是两条路分叉的那天（与 `STATIC_EXITS` 同一理由）。
+ *
+ * ⚠️ 本表的取值**多数尚未在 `09` 定稿** —— 它们随各页面票一起收敛：
+ *   • `pages/index/index` → 「我的订单」（`01` §2.3 逐字，柜机页出口也用它）
+ *   • `pages/profile/profile` → 「我的」（`01` §2.3 tabBar 逐字）
+ *   • `pages/billing-info/billing-info` / `pages/faq/faq` → 复用 `STATIC_EXITS` 的措辞（`01` §5，同一份内容）
+ *   • 其余为 **`07` §5 页面清单的归属名**，属过渡措辞 —— 页面票若从 `09` 拿到定稿，改这里一处即可。
+ * 把这些**集中**在本表，正是为了让那次修正只发生在一个地方。
+ */
+export const PAGE_TITLES = {
+  'pages/index/index': '我的订单',
+  'pages/profile/profile': '我的',
+  'pages/locker/locker': '储物柜',
+  'pages/order-detail/order-detail': '订单详情',
+  'pages/waiting/waiting': '等待关门',
+  'pages/reservation-list/reservation-list': '我的预约',
+  'pages/reservation-create/reservation-create': '预约存件',
+  'pages/score-logs/score-logs': '信用分明细',
+  'pages/billing-info/billing-info': '计费说明',
+  'pages/faq/faq': '常见问题',
+} as const satisfies Record<string, string>
+
+/** `app.json` 里注册的页面路径 —— `PAGE_TITLES` 的键。 */
+export type PagePath = keyof typeof PAGE_TITLES

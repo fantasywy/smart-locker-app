@@ -8,6 +8,7 @@ import { installWxStub, jsonResponse, seedStorage } from '../helpers/wx'
 import type { WxRequestSuccessResult } from '../helpers/wx'
 import { requestsTo, sentRequests } from '../helpers/http'
 import { request, requestWithoutAuth } from '../../miniprogram/request'
+import { BASE_URL } from '../../miniprogram/request/config'
 
 /** 装桩、编排固定响应、让 `wx.request` 下次调用即回话；返回桩本身供断言。 */
 function stubOk(data: unknown = null): ReturnType<typeof installWxStub> {
@@ -113,10 +114,10 @@ describe('#18 免鉴权豁免：13.1 与 13.2 不被附加 access 头', () => {
     await request('/api/app/v1/profile')
 
     const calls = sentRequests(wx.request)
-    expect(requestsTo(calls, 'https://api.example.com/api/app/v1/auth/logout')[0]?.header.Authorization).toBe(
+    expect(requestsTo(calls, `${BASE_URL}/api/app/v1/auth/logout`)[0]?.header.Authorization).toBe(
       'Bearer ACCESS-1',
     )
-    expect(requestsTo(calls, 'https://api.example.com/api/app/v1/profile')[0]?.header.Authorization).toBe(
+    expect(requestsTo(calls, `${BASE_URL}/api/app/v1/profile`)[0]?.header.Authorization).toBe(
       'Bearer ACCESS-1',
     )
   })
@@ -129,7 +130,7 @@ describe('#18 请求出口：URL / 方法 / 请求体按调用方的入参发出
     await request('/api/app/v1/orders')
 
     const [sent] = sentRequests(wx.request)
-    expect(sent.url).toBe('https://api.example.com/api/app/v1/orders')
+    expect(sent.url).toBe(`${BASE_URL}/api/app/v1/orders`)
     expect(sent.method).toBe('GET')
   })
 

@@ -22,7 +22,8 @@
 // 3. **失败态不在页面数据区里再写一份**（`01` §4）：失败落到 `components/failure-exit/`，
 //    页面只负责把它 `wx:if` 出来 —— 「唯一」由那个组件承担。
 //
-// ⚠️ 用的是 `Component()` 而不是 `Page()` —— 与仓库既有的页面（`pages/logs`）一致，
+// ⚠️ 用的是 `Component()` 而不是 `Page()` —— `07` §5 的全部 10 个页面都按这一形态落地
+// （出处是 quickstart 的既有写法，`pages/logs` 那处残留已由 #22 删除），
 // 且 `Component` 的 `lifetimes` 让「订阅在 `attached`、退订在 `detached`」这件事
 // 有明确的挂载点。
 //
@@ -33,7 +34,11 @@
 
 import { createStartupGate } from '../../startup/gate'
 import type { StartupGate, StartupState } from '../../startup/gate'
-import { DATA_AREA_PLACEHOLDER_HINT, DATA_AREA_PLACEHOLDER_TITLE } from '../../startup/copy'
+import {
+  DATA_AREA_PLACEHOLDER_HINT,
+  DATA_AREA_PLACEHOLDER_TITLE,
+  PAGE_TITLES,
+} from '../../startup/copy'
 
 /**
  * 闸门实例 —— **模块级的单例**，不是 `data` 里的一员。
@@ -72,6 +77,17 @@ interface IndexPageInstance {
 
 Component({
   data: {
+    /**
+     * 自绘导航栏标题 —— 唯一的家是 `startup/copy.ts` 的 `PAGE_TITLES`。
+     *
+     * ⚠️ 与 9 个空壳页同一个形状。本页原先在 wxml 里写死「我的订单」字面量，
+     * 而 `#22` 刚把这个字符串收进 `PAGE_TITLES` —— 于是同一个词有了两个家，
+     * 且 `test/startup/conventions.test.ts` 的文案守卫**覆盖不到**（它反推的是
+     * `USER_VISIBLE_COPY_LITERALS`，`PAGE_TITLES` 的值不在其中）。
+     * review 抓到了这一点：收拢动作做了一半，等于没做。现已改为一处。
+     */
+    title: PAGE_TITLES['pages/index/index'],
+
     /**
      * 闸门状态 —— wxml 用它决定画骨架屏、数据区、还是失败出口。
      *

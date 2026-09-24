@@ -15,8 +15,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { installWxStub, jsonResponse, reply } from '../helpers/wx'
 import { respondInOrder, sentRequests } from '../helpers/http'
+import { BASE_URL } from '../../miniprogram/request/config'
 
-const LOGIN_URL = 'https://api.example.com/api/app/v1/auth/login'
+const LOGIN_URL = `${BASE_URL}/api/app/v1/auth/login`
 
 /** 一份契约形状的 `13.1` 成功响应体。 */
 function loginBody(): Record<string, unknown> {
@@ -293,9 +294,12 @@ describe('#20 首页：闸门接线（重试真的到达闸门、状态真的画
     await vi_wait()
 
     expect(page.data.phase).toBe('failed')
-    // `data` 里只有 phase 与占位文案 —— 没有 error / code / message 任何一项。
+    // `data` 里只有 phase、导航栏标题与占位文案 —— 没有 error / code / message 任何一项。
+    // ⚠️ `title` 是 `#22` 加的：首页的自绘导航栏标题改从 `PAGE_TITLES` 取
+    // （原先写死在 wxml 里，与其余 9 个空壳页形状不一致）。它是**文案**，不是错误对象，
+    // 不在本断言要挡的东西里 —— 本断言的判据仍是「没有任何一项来自 `UnifiedError`」。
     expect(Object.keys(page.data).sort()).toEqual(
-      ['dataAreaHint', 'dataAreaTitle', 'phase'].sort(),
+      ['dataAreaHint', 'dataAreaTitle', 'phase', 'title'].sort(),
     )
   })
 })

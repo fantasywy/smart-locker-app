@@ -1,0 +1,18 @@
+// 计费说明页 —— 空壳样式（issue #22）。页面票整体替换本文件。
+
+@use '../../styles/variables' as v;
+
+page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  // ⚠️ 显式设一次主文字色 —— `10` §6 禁令 4：页面根节点不得依赖继承。
+  color: v.$color-text-main;
+  background: v.$color-bg-page;
+  font-family: v.$font-family;
+}
+
+.page {
+  flex: 1;
+  overflow-y: auto;
+}
