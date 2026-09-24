@@ -1,0 +1,269 @@
+// 全局 mixin。页面与组件通过 `@use '../../styles/mixins' as m;` 引入。
+//
+// 这里是**「语义色只做装饰、文字一律走 ink」这条硬规则唯一能被强制的地方**。
+// 文档里写「文字走 ink」是不够的 —— 实现者照样会敲 `color: v.$color-warning`。
+// 所以：**调用方给的是档名（warn），不是颜色。**
+//
+// 四支 mixin，各有明确适用面（docs/spec/10-visual-language.md §5）：
+//   tone-bar   左缘 3px 语义色条 —— 列表行 / 卡片
+//   tone-chip  标签：语义色边框 + 中性底 + ink 文字 —— 状态标签
+//   tone-text  只换文字色（ink）—— 已经是别的载体、只想把文字染成该档
+//   tone-dot   圆点 —— 需要状态点的场合
+//
+// ⚠️ 五档：ok（正常）/ info（提示）/ warn（警示）/ danger（危险）/ muted（中性）。
+//    档名描述**语义**，不描述颜色 —— 改配色时不该改名，改语义时才该改名。
+//
+// 注意 mixin 的输出会内联进每一个引用它的产物里，所以这里只放会被反复使用、
+// 且输出体量很小的东西。体量大的东西应当做成组件而不是 mixin。
+
+@use 'sass:list';
+@use './variables' as v;
+
+// 全部五档的 canonical 顺序。`$tones` 缺省即取它 —— 传参只是为了**排掉这一处用不到的档**，
+// 免得每个文件里都躺着一份永远匹配不上的规则。
+$all-tones: (ok, info, warn, danger, muted);
+
+/// 内侧校验：传进来的档名必须是五档之一，否则编译期就报错。
+/// 没有这一条时，拼错 `warn` 成 `warning` 会**静默生成一条永不匹配的规则**，
+/// 而界面会照常渲染成中性 —— 那种错查起来要翻三层。
+@function _check-tones($tones) {
+  @each $tone in $tones {
+    @if not list.index($all-tones, $tone) {
+      @error '未知的语义档 `#{$tone}`。合法值：#{$all-tones}。';
+    }
+  }
+  @return $tones;
+}
+
+/// **左缘那条 3px 语义色条**（`03` §5）—— 给「列表行 / 卡片要标状态」的场合。
+/// 语义色**原值**在这里只做装饰，一个字都不染；文字一律走 `tone-text`。
+/// 不写任何 `.is-*` 时是中性灰 `$color-info`。
+@mixin tone-bar(
+  $tones: (
+    ok,
+    info,
+    warn,
+    danger,
+    muted,
+  )
+) {
+  $_: _check-tones($tones);
+  border-left: v.$status-bar-width solid v.$color-info;
+
+  @if list.index($tones, ok) {
+    &.is-ok {
+      border-left-color: v.$color-primary;
+    }
+  }
+
+  @if list.index($tones, info) {
+    &.is-info {
+      border-left-color: v.$color-info;
+    }
+  }
+
+  @if list.index($tones, warn) {
+    &.is-warn {
+      border-left-color: v.$color-warning;
+    }
+  }
+
+  @if list.index($tones, danger) {
+    &.is-danger {
+      border-left-color: v.$color-danger;
+    }
+  }
+
+  @if list.index($tones, muted) {
+    &.is-muted {
+      border-left-color: v.$color-info;
+    }
+  }
+}
+
+/// **状态标签**：语义色边框 + 纯白底 + ink 文字。
+///
+/// ⚠️ 底色必须是**纯白 `$color-bg-card`** —— 这是实测逼出来的，两条路都不通：
+///   ① **语义色浅调底**：红 ink 压红调底最好只有 4.17（8%）、绿 ink 压绿调底最好只有 4.27，
+///      **怎么调都过不了 AA**；只有琥珀在恰好 8% 时勉强 4.50（10% 就掉到 4.44）。
+///   ② **浅灰面**：连 `$color-bg-page`（#f5f7fa）都不够 —— 三个 ink 掉到 4.44 / 4.22 / 4.31，
+///      **全部破线**；浅到 `#fcfcfd` 仍救不回危险档（4.42）。
+/// ⇒ **只有纯白同时满足三个 ink**。详见 spec §4.1 的实测表。
+///
+/// 这是**唯一**同时输出「原值做边框 + ink 做字」的 mixin —— 标签是唯一一个
+/// 两种用法叠在一起的地方。实现者**不得**手写标签样式绕过它。
+@mixin tone-chip(
+  $tones: (
+    ok,
+    info,
+    warn,
+    danger,
+    muted,
+  )
+) {
+  $_: _check-tones($tones);
+  display: inline-block;
+  padding: 0 v.$spacing-sm;
+  font-size: v.$font-size-aux;
+  line-height: 20px;
+  white-space: nowrap;
+  // ⚠️ 纯白，不是 $color-bg-page —— 浅灰面会把三个 ink 全部压破 AA（见上面的实测）。
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-component;
+  color: v.$color-text-sub;
+
+  @if list.index($tones, ok) {
+    &.is-ok {
+      color: v.$color-primary-active;
+      border-color: v.$color-primary;
+    }
+  }
+
+  @if list.index($tones, info) {
+    &.is-info {
+      color: v.$color-text-sub;
+      border-color: v.$color-info;
+    }
+  }
+
+  @if list.index($tones, warn) {
+    &.is-warn {
+      color: v.$color-warning-ink;
+      border-color: v.$color-warning;
+    }
+  }
+
+  @if list.index($tones, danger) {
+    &.is-danger {
+      color: v.$color-danger-ink;
+      border-color: v.$color-danger;
+    }
+  }
+
+  @if list.index($tones, muted) {
+    &.is-muted {
+      color: v.$color-text-sub;
+      border-color: v.$color-border; // 中性档的边框是普通边框，不是语义色（spec §4 读法 4）
+    }
+  }
+}
+
+/// **语义色当文字用**的那一档，一律取 ink（V25）。
+///
+/// 各档取值：
+///   - `ok`     → `$color-primary-active`（4.62，绿色唯一不新增颜色的语义色）
+///   - `info`   → `$color-text-sub`（5.45）—— ⚠️ **不是** `$color-info`（3.08，过不了 AA）
+///   - `warn`   → `$color-warning-ink`（4.77）
+///   - `danger` → `$color-danger-ink`（4.53）
+///   - `muted`  → `$color-text-sub`（5.45）—— 🔴 **与 `info` 同值，但两档并存是刻意的**。
+///     ⚠️ 与 device 的差异：device 只有四档（`process` / `ok` / `warn` / `danger`），
+///     **中性档靠「不写 `.is-*`」的默认值承担**（`tone-bar` 的基础声明就是灰）。
+///     小程序多一个 **`info`（提示）** 档 —— 承票面「五档：正常 / 提示 / 警示 / 危险 / 中性」。
+///     两档既然都映射到中性文字，就**显式各自输出一条**：否则 `info` 又会退回成
+///     「靠不写 class 来碰运气」，而调用方看不出这一档到底有没有被实现。
+@mixin tone-text(
+  $tones: (
+    ok,
+    info,
+    warn,
+    danger,
+    muted,
+  )
+) {
+  $_: _check-tones($tones);
+
+  @if list.index($tones, ok) {
+    &.is-ok {
+      color: v.$color-primary-active;
+    }
+  }
+
+  @if list.index($tones, info) {
+    &.is-info {
+      color: v.$color-text-sub;
+    }
+  }
+
+  @if list.index($tones, warn) {
+    &.is-warn {
+      color: v.$color-warning-ink;
+    }
+  }
+
+  @if list.index($tones, danger) {
+    &.is-danger {
+      color: v.$color-danger-ink;
+    }
+  }
+
+  @if list.index($tones, muted) {
+    &.is-muted {
+      color: v.$color-text-sub;
+    }
+  }
+}
+
+/// 状态圆点。尺寸固定 8px：它是**辅助信号**，不该跟标签抢注意力。
+/// 同理，它只出现在标签或主行左侧，不作独立信息载体。
+@mixin tone-dot(
+  $tones: (
+    ok,
+    info,
+    warn,
+    danger,
+    muted,
+  )
+) {
+  $_: _check-tones($tones);
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: v.$color-info;
+
+  @if list.index($tones, ok) {
+    &.is-ok {
+      background: v.$color-primary;
+    }
+  }
+
+  @if list.index($tones, info) {
+    &.is-info {
+      background: v.$color-info;
+    }
+  }
+
+  @if list.index($tones, warn) {
+    &.is-warn {
+      background: v.$color-warning;
+    }
+  }
+
+  @if list.index($tones, danger) {
+    &.is-danger {
+      background: v.$color-danger;
+    }
+  }
+
+  @if list.index($tones, muted) {
+    &.is-muted {
+      background: v.$color-info;
+    }
+  }
+}
+
+/// 一块**有边界的卡**：白底 + 一道描边 + 一层浅阴影（承 device V24 的「每个概念一块有边界的卡」）。
+@mixin card {
+  padding: v.$spacing-md;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+}
+
+/// 卡片 + 色条 —— 订单 / 预约列表行的标准形态，两个字说完。
+@mixin tone-card($tones: (ok, info, warn, danger, muted)) {
+  @include card;
+  @include tone-bar($tones);
+}
