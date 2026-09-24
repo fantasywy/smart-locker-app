@@ -19,12 +19,29 @@
     "lib": ["ES2020"],
     "typeRoots": [
       "./typings"
-    ]
+    ],
+    // ⚠️ 这一条是**预存问题**的修复，与测试载体无关，但必须一起修 —— 见下。
+    // `typings/types/wx/lib.wx.app.d.ts:265` 声明 `<T = IAnyObject>(opts?)`，而
+    // `skipLibCheck` 未开时 TS 5.9 会对**声明文件内部**的这个泛型默认值报 TS2344
+    // （`T` 不满足 `IAnyObject` 约束）。它是 miniprogram-api-typings 自带的，
+    // 从来就没通过过 —— 也就是说在加 `pnpm typecheck` 之前，仓库里「小程序源码过 strict」
+    // （`07` §2 的硬要求）这件事**没有任何可执行的验证**。
+    // 打开 skipLibCheck 只跳过对 **`.d.ts` 声明的**检查，我们自己的 `.ts` 仍然全量 strict。
+    "skipLibCheck": true
   },
   "include": [
     "./**/*.ts"
   ],
+  // 这份配置是**小程序构建**那一侧的：它认识 `wx.*`（typeRoots 指 ./typings）、
+  // `module: CommonJS`，且脚本按 rootDir 算相对路径（miniprogram/app.ts → app.js）。
+  // 因此测试侧的东西一律排除在外，否则会把两套运行时的类型混进同一个 program：
+  //   • test/            —— 需要 vitest 与 node 的类型，见 tsconfig.test.json
+  //   • vitest.config.ts —— 依赖 vitest/config（vite 的打包器解析），小程序构建不需要它
+  //   • scripts/         —— 验收脚本是 .mjs，node 直接跑，不经小程序 TS 编译链
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "test",
+    "vitest.config.ts",
+    "scripts"
   ]
 }

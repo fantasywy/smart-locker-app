@@ -1,0 +1,32 @@
+{
+  // 测试与脚本的**类型检查**配置 —— issue #16 的一条验收标准：
+  // 「测试直接跑 TypeScript，复用仓库既有 strict TS 配置，不需要额外编译链」。
+  // 复用 = `extends`，不是抄一份：下面只覆盖测试侧必须不同的两项。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // ⚠️ 必须显式覆盖 `typeRoots`。根配置把它指到 `./typings`（小程序那一侧的
+    // `wx.*` 类型），而它是**排他的** —— 一旦指定，`node_modules/@types` 就不再被自动
+    // 纳入，`types: ["node"]` 会因为找不到文件而直接报 TS2688。
+    // 测试侧要的正是 npm 那两套类型：node（读文件 / process.exitCode）与 vitest。
+    "typeRoots": ["./node_modules/@types"],
+    // ⚠️ 只要 'node'，**不要** 'vitest/globals'：`types` 的每一项按目录解析，
+    // 写子路径会直接 TS2688。而它本来也不必 —— 测试文件显式
+    // `import { describe, it, expect } from 'vitest'`（vitest.config.ts 里 `globals: false`），
+    // expect 从哪来是写在文件里的，不是隐式约定。
+    "types": ["node"],
+    // ⚠️ 必须从根的 `CommonJS` 改掉。小程序的 `module: CommonJS` 配上默认的 node10
+    // 解析，读不懂 export maps —— vitest/config 拉进来的 vite 声明的全是 `#types/*`
+    // 子路径，在 node10 下全线 TS2307。`bundler` 是测试侧的事实：这些包由 vite 自己打包消费。
+    // 小程序那一侧不受影响：它有自己的 tsconfig.json，仍走 CommonJS。
+    "module": "ESNext",
+    "moduleResolution": "bundler"
+  },
+  "include": [
+    "./test/**/*.ts",
+    "./vitest.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "miniprogram"
+  ]
+}

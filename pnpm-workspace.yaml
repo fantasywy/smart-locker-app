@@ -1,0 +1,6 @@
+# pnpm 11 在 workspace 根配置里管理「允许执行安装脚本的依赖」。
+# esbuild 是 vitest 的传递依赖（Vite 的打包器）：它的 postinstall 负责把平台二进制
+# 从 @esbuild/<platform> 包软链到 bin/，被拦下时 vitest 根本起不来。
+# ⚠️ 与测试载体本身同一性质 —— 它是 devDependency 链上的构建步骤，不进小程序包。
+allowBuilds:
+  esbuild: true
