@@ -104,6 +104,48 @@ export const DATA_AREA_PLACEHOLDER_TITLE = '已连接'
 export const DATA_AREA_PLACEHOLDER_HINT = '订单内容稍后在这里出现'
 
 /**
+ * **三个列表页的空态** —— `09` §7.1 三行**逐字**，`components/empty-state/` 的内容来源。
+ *
+ * ⚠️ 它们为什么在**这一张表**里、而不是分散在三个页面目录里：三个空态共用一个组件
+ * （`07` §3 把「空态」列为 `components/` 成员），而组件的 `properties` **不带默认文案**
+ * （见 `empty-state.ts` 的裁决 1）—— 于是三组文案必须有**一个共同的来源**交给它。
+ * 分散在三个页面里也能跑，但那意味着「空态文案有哪些」这件事在代码里查不到全貌，
+ * 而 `09` §7.1 恰恰是一张**完整的表**（三行，不多不少）。
+ *
+ * ⚠️ **`hint` / `actionLabel` 缺省是空串，不是缺失。** 信用分明细的空态
+ * 在 `09` §7.1 里**只有标题** —— 别为了「凑齐两行」给它编一句说明或一个按钮。
+ * 一句查不到出处的文案就是缺口，该登记而不是自编（`09` §0 硬规则 1）。
+ *
+ * ⚠️ **两个主行动都是「扫码存件」，这是同一个动作，不是两个恰好同名的动作**
+ * （`09` §5.6 规则 7：同一个动作在全局只能有一个名字）。预约空态**不是**「新建预约」——
+ * `05` §2 已裁决创建入口**只在柜机页**（`lockerId` 的唯一来源是扫码），
+ * 所以空态的出口**只能是扫码**。两者共用下面同一个常量，正是为了让那条裁决写不出来错。
+ */
+export const EMPTY_STATES = {
+  /** 订单列表空态 —— `09` §7.1 第 3 行逐字（`03` §9：一个空态，不区分「从没下过单」与「清空之后」）。 */
+  orders: {
+    title: '还没有订单',
+    hint: '扫码存件，把东西放进柜子',
+    actionLabel: '扫码存件',
+  },
+  /** 预约列表空态 —— `09` §7.1 第 4 行逐字（`05` §2：出口只能是扫码）。 */
+  reservations: {
+    title: '还没有预约',
+    hint: '到柜机前扫码后可以预约使用时段',
+    actionLabel: '扫码存件',
+  },
+  /** 信用分明细空态 —— `09` §7.1 第 5 行逐字（`04` §7.3 未定文案，本条是提案）。**只有标题。** */
+  scoreLogs: {
+    title: '还没有分数变动',
+    hint: '',
+    actionLabel: '',
+  },
+} as const satisfies Record<string, { title: string; hint: string; actionLabel: string }>
+
+/** 空态文案的形状 —— 键见 `EMPTY_STATES`。 */
+export type EmptyStateCopy = (typeof EMPTY_STATES)[keyof typeof EMPTY_STATES]
+
+/**
  * 各页自绘导航栏的**标题** —— 一个页面一个，键 = `app.json` 里注册的 `pages` 路径。
  *
  * ⚠️ **为什么标题也要进文案层**（而不是在 wxml 里写 `title="计费说明"`）：
@@ -136,3 +178,19 @@ export const PAGE_TITLES = {
 
 /** `app.json` 里注册的页面路径 —— `PAGE_TITLES` 的键。 */
 export type PagePath = keyof typeof PAGE_TITLES
+
+/**
+ * 订单列表（= 首页）的页面路径 —— **`wx.switchTab` 的目标**。
+ *
+ * `01` §2.4:57 逐字要求柜机页顶部固定一个「我的订单」出口，**走 `wx.switchTab` 到订单 tab**。
+ * 而柜机页是**冷启动、栈深 1 的非 tab 页**（`01` §2.2 通道 A：系统返回 = 直接退回微信、
+ * 底部 tabBar 不显示）⇒ 这是屏幕上**唯一**通往订单列表的可见路径（`07` §5:138）。
+ *
+ * ⚠️ **为什么不就地在 `navigation-bar` 里写 `'/pages/index/index'` 字面量**：
+ * `wx.switchTab` 的 url **必须**是 `app.json` 的 `tabBar.list[].pagePath` 之一，
+ * 差一个字符就是**静默失败**（不跳转、不报错、按钮继续点不动 —— 与它要修的那个死按钮
+ * 是同一个症状）。那个路径在 `app.json`（原生配置，引不到 TS）、`PAGE_TITLES` 的键
+ * 与调用点三处各有一份。集中到这里，`test/startup/conventions.test.ts` 有一条守卫
+ * 读 `app.json` 断言本常量**确实是 tabBar 的一项** —— 那次比对是唯一的兜底。
+ */
+export const ORDER_LIST_PATH: PagePath = 'pages/index/index'

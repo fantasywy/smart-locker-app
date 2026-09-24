@@ -79,6 +79,15 @@ export interface WxLoginOptions {
   complete?: () => void
 }
 
+/** `wx.switchTab` 的 options —— 柜机页的「我的订单」出口用它（`01` §2.4）。 */
+export interface WxSwitchTabOptions {
+  /** ⚠️ 必须以 `/` 开头的页面路径，且**必须**是 `app.json` 的 `tabBar.list[].pagePath` 之一。 */
+  url: string
+  success?: (res: { errMsg: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
 /** `wx.*` 全局的形状。刻意只列本仓库会碰到的成员 —— 用不到的 API 不预先编造。 */
 /** `installWxStub()` 的返回：桩本身，外加一个手动卸载口。 */
 export interface InstalledWxStub extends WxStub {
@@ -92,6 +101,7 @@ export interface WxStub {
   setStorageSync: Mock<(key: string, value: unknown) => void>
   removeStorageSync: Mock<(key: string) => void>
   request: Mock<(options: WxRequestOptions) => void>
+  switchTab: Mock<(options: WxSwitchTabOptions) => void>
 }
 
 /** 未编排调用时的兜底错误 —— 让「忘了编排」在测试输出里一眼可辨。 */
@@ -185,6 +195,9 @@ export function installWxStub(): InstalledWxStub {
       memory.delete(key)
     }),
     request: unstubbed<[WxRequestOptions]>('request'),
+    // ⚠️ 未编排即失败（与 `login` / `request` 同一条纪律）：柜机页的「我的订单」出口
+    // 若改回死按钮，这里会**抛错**而不是静默什么都不发生 —— 静默正是那个缺陷的症状。
+    switchTab: unstubbed<[WxSwitchTabOptions]>('switchTab'),
   }
 
   // ⚠️ 预置值走**内存表**而不是覆盖 mock：读写仍然是一张表，语义完整。

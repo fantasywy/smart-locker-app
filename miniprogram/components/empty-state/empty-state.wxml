@@ -1,0 +1,32 @@
+<!--
+  空态 —— 三个列表页共用的那一块「什么都没有」。
+
+  ⚠️ **本文件里没有任何文案字面量**（09 §0 硬规则 1：用户可见的每个字归文案层）。
+     三行内容全部由调用方从 startup/copy.ts 传进来 —— 见 empty-state.ts 的裁决 1。
+     `test/startup/conventions.test.ts` 的文案守卫从 copy.ts 反推字面量，
+     这里只要出现一句写死的文案就会被它抓到。
+
+  ⚠️ 说明句与主行动**都是可选的**：信用分明细只有标题（09 §7.1 那一行）。
+     用 wx:if 而不是「渲染一个空 `<view>`」—— 空的 `<view>` 在版式上仍占位，
+     会让「只有标题」的空态看起来像少了两行东西。
+
+  ⚠️ 纯图形 + 文字，没有任何图标：`07` §5:126 的「无本地图片资源」仍是事实，
+     也由 test/startup/skeleton.test.ts 的守卫钉住。
+-->
+<view class="empty-state">
+  <view class="empty-state__title">{{ title }}</view>
+
+  <!-- 说明句 —— 可选（信用分明细没有）。 -->
+  <view wx:if="{{ hint }}" class="empty-state__hint">{{ hint }}</view>
+
+  <!--
+    主行动 —— 可选。⚠️ 组件**不自己跳转**（见 empty-state.ts 裁决 2）：
+       扫码要用 wx.scanCode 再进柜机页，那条路属于页面。
+  -->
+  <button
+    wx:if="{{ actionLabel }}"
+    class="empty-state__action"
+    hover-class="empty-state__action_active"
+    bindtap="onAction"
+  >{{ actionLabel }}</button>
+</view>

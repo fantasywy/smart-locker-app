@@ -1,0 +1,56 @@
+// 空态 —— 三个列表页共用（09 §7.1）。色值全部走色调层 token，不写裸 hex（10 §6 禁令 5）。
+//
+// 出处：`docs/spec/10-visual-language.md` §6（禁令）/ §8（验收事实）；
+// `miniprogram/styles/_variables.scss`（取值）。
+//
+// ⚠️ 语气上它是**中性**的：「还没有订单」不是错误，不该染任何语义色。
+//    唯一的强调是主行动按钮，用主色底 + 白字（10 里唯一允许的「语义色 + 白字」组合）。
+
+@use '../../styles/variables' as v;
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  // ⚠️ 靠上不居中：空态下方往往还有内容会来（上拉加载的提示），
+  //    一个垂直居中的空态会在内容到位时整块跳一下。
+  padding: 96px v.$spacing-md v.$spacing-lg;
+}
+
+.empty-state__title {
+  // ⚠️ 页面根节点必须显式设 $color-text-main（_variables.scss 的硬规则 1），
+  //    但组件是**另一个节点树**，不能假设继承 —— 所以这里也显式设一次。
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  line-height: 1.4;
+}
+
+.empty-state__hint {
+  margin-top: v.$spacing-sm;
+  // 说明句是**辅助信息**（告诉用户怎么开始），走 sub 而不是 weak ——
+  // weak 只给占位符与禁用态，不承载信息（_variables.scss 的中性文字三档说明）。
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.empty-state__action {
+  margin-top: v.$spacing-lg;
+  // ⚠️ 小程序的 <button> 自带一层默认背景与边框，必须显式清掉才谈得上「主色底」。
+  &::after {
+    border: none;
+  }
+
+  background: v.$color-primary;
+  color: v.$color-bg-card;
+  font-size: v.$font-size-body;
+  line-height: 2.5;
+  border-radius: v.$radius-component;
+  padding: 0 v.$spacing-xl;
+}
+
+// 按下反馈 —— 小程序没有 :hover，用 hover-class 挂这个类（与 weui 骨架的 weui-active 同法）。
+.empty-state__action_active {
+  background: v.$color-primary-active;
+}

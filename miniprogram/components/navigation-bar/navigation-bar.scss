@@ -57,6 +57,42 @@
   background-color: var(--weui-FG-0);
 }
 
+// **返回首页按钮**的样式 —— issue #23 补上的第二半缺陷。
+//
+// ⚠️ 缺陷原样（#23 在模拟器上实测发现）：`wxml` 里那个 home 按钮的 class 是
+// `weui-navigation-bar__btn_home_wrapper` / `__btn_home`，而**本文件从来没有定义过它们**。
+// 于是 `homeButton` 打开后：渲染出了元素（DOM 里查得到、`aria-label="首页"` 也在）、
+// `bindtap` 也修好了 —— **但用户在屏上什么都看不见**：一个没有任何尺寸声明的 `view`
+// 塌成 0×0，图标更是无从谈起。点得到、看不见，与「死按钮」是同一种用户后果。
+//
+// ⚠️ 所以 #23 的 `home()` 交付**必须**包含这一段 —— 只补 TS 里的方法是不够的，
+// 真机走查会看到一个「点了能跳、但根本找不到的按钮」。这正是票面那句
+// 「补完必须真机验渲染」要拦的东西。
+//
+// 形态照抄 `__btn_goback`：同一套 padding/margin 负边距（把点击热区撑到 44px 上下）、
+// 同一个 `--weui-FG-0` 前景色、同一个 `mask` 画法 —— 只是把箭头换成房子。
+// ⚠️ 不引任何图片资源（`07` §5:126 的「无本地图片资源」仍是事实，有守卫钉着）：
+// `mask` + 内联 SVG 与 goback 用的是同一手法，零文件。
+.weui-navigation-bar__btn_home_wrapper {
+  padding: 11px 18px 11px 16px;
+  margin: -11px -18px -11px -16px;
+}
+
+.weui-navigation-bar__btn_home_wrapper.weui-active {
+  opacity: 0.5;
+}
+
+.weui-navigation-bar__btn_home {
+  font-size: 12px;
+  width: 20px;
+  height: 20px;
+  -webkit-mask: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'%3E%3Cpath fill-opacity='.9' fill-rule='evenodd' d='M12 3.1 2.4 11.2a1 1 0 0 0 .64 1.77H4v7.53a1 1 0 0 0 1 1h4.2v-5.2a1 1 0 0 1 1-1h3.6a1 1 0 0 1 1 1v5.2H19a1 1 0 0 0 1-1v-7.53h.96a1 1 0 0 0 .64-1.77L12 3.1z'/%3E%3C/svg%3E") no-repeat 50% 50%;
+  mask: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'%3E%3Cpath fill-opacity='.9' fill-rule='evenodd' d='M12 3.1 2.4 11.2a1 1 0 0 0 .64 1.77H4v7.53a1 1 0 0 0 1 1h4.2v-5.2a1 1 0 0 1 1-1h3.6a1 1 0 0 1 1 1v5.2H19a1 1 0 0 0 1-1v-7.53h.96a1 1 0 0 0 .64-1.77L12 3.1z'/%3E%3C/svg%3E") no-repeat 50% 50%;
+  -webkit-mask-size: cover;
+  mask-size: cover;
+  background-color: var(--weui-FG-0);
+}
+
 .weui-navigation-bar__center {
   font-size: 17px;
   text-align: center;

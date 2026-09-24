@@ -18,10 +18,12 @@ import { fileURLToPath } from 'node:url'
 import {
   DATA_AREA_PLACEHOLDER_HINT,
   DATA_AREA_PLACEHOLDER_TITLE,
+  EMPTY_STATES,
   FAILURE_DETAIL,
   FAILURE_TITLE,
   PAGE_TITLES,
   RETRY_LABEL,
+  ORDER_LIST_PATH,
   STATIC_EXITS,
 } from '../../miniprogram/startup/copy'
 
@@ -83,7 +85,7 @@ const allSources = (): string[] => collect(miniprogramDir, ['.ts', '.wxml', '.sc
  * 但两道网都要有人补，**别再假设它是自动的**。
  *
  * 构成：三个失败出口的字符串常量 + `STATIC_EXITS` 每一项的 `label`
- * + 数据区占位那两句 + `PAGE_TITLES` 的每一个标题。
+ * + 数据区占位那两句 + `PAGE_TITLES` 的每一个标题 + `EMPTY_STATES` 的每一句。
  */
 const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   FAILURE_TITLE,
@@ -94,7 +96,13 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   DATA_AREA_PLACEHOLDER_HINT,
   // ⚠️ `PAGE_TITLES` 的值 —— `#22` 新增的导出（见上方说明：新增导出必须回来补一次）。
   ...Object.values(PAGE_TITLES),
-]
+  // ⚠️ `EMPTY_STATES` 的每一句 —— `#23` 新增的导出。
+  // 空态的三组文案都是用户可见的字，必须能在 `09` §7.1 查到；
+  // 把它们纳入这份清单，任何一句以字面量出现在 `empty-state` 组件或页面里都会被抓住。
+  // ⚠️ 空串要滤掉：`scoreLogs` 的 `hint` / `actionLabel` 是**有意的缺省**，
+  // 而 `code.includes('')` 恒为 true —— 留着它这条守卫会当场全红。
+  ...Object.values(EMPTY_STATES).flatMap((state) => [state.title, state.hint, state.actionLabel]),
+].filter((literal) => literal !== '')
 
 describe('#20 失败出口是唯一的一份（01 §4）', () => {
   it('⚠️ 失败出口的**每一句**文案都不得在 `copy.ts` 之外以字面量出现', () => {
@@ -400,5 +408,60 @@ describe('#20 闸门链路的工程约束（07 §3 / §6）', () => {
     }
 
     expect(offenders, `startup/ 依赖了上层（07 §3 单向依赖）：${offenders.join(', ')}`).toEqual([])
+  })
+})
+
+describe('#23 `wx.switchTab` 的目标确实是 tabBar 的一项（01 §2.4）', () => {
+  it('⚠️ `ORDER_LIST_PATH` 是 `app.json` 里真实注册的 tabBar 页', () => {
+    // `01` §2.4:57 逐字：柜机页顶部固定一个「我的订单」出口，**走 `wx.switchTab` 到订单 tab**。
+    //
+    // ⚠️⚠️ 这条断言挡的是一个**静默失败**：`wx.switchTab` 的 url 必须是
+    // `tabBar.list[].pagePath` 之一，写错一个字符**不跳转、不报错** ——
+    // 症状与 #23 要修的那个死按钮**一模一样**，只是更难查（调用发生了，画面没动）。
+    //
+    // 那个路径在 `app.json` 里有一份（JSON 引不到 TS）、在 `copy.ts` 里有一份，
+    // 两处都可能被改。这条断言是**唯一**把它们扣在一起的地方。
+    const appJson = JSON.parse(readFileSync(join(miniprogramDir, 'app.json'), 'utf8')) as {
+      pages: string[]
+      tabBar: { list: { pagePath: string }[] }
+    }
+    const tabPaths = appJson.tabBar.list.map((item) => item.pagePath)
+
+    expect(tabPaths, '订单必须是 tabBar 的第一项（01 §2.3）').toContain(ORDER_LIST_PATH)
+    expect(appJson.pages, 'ORDER_LIST_PATH 不在 pages 注册表里').toContain(ORDER_LIST_PATH)
+    // ⚠️ `wx.switchTab` 的 url 拼成 `/${ORDER_LIST_PATH}` —— 断言拼出来的那个串
+    // 与 app.json 里的字面路径**逐字相同**（而不是「归一化之后相同」）。
+    expect(`/${ORDER_LIST_PATH}`).toBe(`/${tabPaths[0]}`)
+  })
+
+  it('⚠️ **`wx.switchTab` 的 url**不得由别处拼出来 —— 那是最像静默失败的一处', () => {
+    // `wx.switchTab` 的 url 是**静默失败**那一类（见上）。若某个页面自己拼一份
+    // `url: '/pages/index/index'`，改路径时它会悄悄留旧值 —— 而那正是
+    // `ORDER_LIST_PATH` 这个常量存在的理由。
+    //
+    // ⚠️⚠️ **判据必须收窄到「跳转的 url」，不能是「这个串出现在任何地方」。**
+    // 第一版就是宽判据（`code.includes('pages/index/index')`），它当场抓到了
+    // `pages/index/index.ts` —— 而那里出现这个串是**完全正当**的：
+    // `PAGE_TITLES['pages/index/index']` 是**用页面自己的路径当键查标题**，
+    // 与「往订单 tab 跳」是两件事。宽判据会逼着后来者为了消红灯去绕开一个正确的写法，
+    // 而守卫一旦逼人绕路，下一个人就会直接删掉它。
+    // ⇒ 只认**跳转 API 的 url 参数**里出现的那个串。`PAGE_TITLES` 的键不受影响。
+    const offenders: string[] = []
+    for (const file of allSources()) {
+      // `app.json` 是原生配置（JSON 引不到 TS，只能写在那里）；`copy.ts` 是它的家。
+      if (file === join(miniprogramDir, 'app.json')) continue
+      if (file === join(startupDir, 'copy.ts')) continue
+      const code = stripComments(readFileSync(file, 'utf8'))
+      // 形如 `url: '/pages/index/index'` 或 `url: \`/${ORDER_LIST_PATH}\`` 之外的硬编码。
+      const hardCoded = new RegExp(`url\\s*:\\s*['"\`]/?${ORDER_LIST_PATH}\\b`)
+      if (hardCoded.test(code)) offenders.push(rel(file))
+    }
+
+    expect(
+      offenders,
+      `以下位置把订单列表的页面路径写死进了跳转 url —— 它只有 copy.ts 的 ORDER_LIST_PATH ` +
+        `一个家，写错一个字符就是 wx.switchTab 的静默失败（01 §2.4）：\n` +
+        offenders.map((f) => `  • ${f}`).join('\n'),
+    ).toEqual([])
   })
 })

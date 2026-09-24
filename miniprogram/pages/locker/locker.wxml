@@ -16,6 +16,18 @@
 
   出处：`docs/spec/01-entry-and-identity.md` §6。
 -->
-<navigation-bar title="{{ title }}" back="{{true}}" color="black" background="#FFF"></navigation-bar>
+<!--
+  ⚠️ **`homeButton` 是 `01` §2.4 的硬要求，不是可选项**（#23 补上）。
+     柜机页经通道 A 冷启动时是**栈深 1 的非 tab 页**：系统返回 = 直接退回微信、
+     底部 tabBar 不显示 ⇒ 顶部这个出口是屏幕上**唯一**通往订单列表的可见路径。
+     一个死按钮等于把用户关在柜机页里（#23 修的正是那个缺陷）。
+-->
+<navigation-bar
+  title="{{ title }}"
+  back="{{true}}"
+  homeButton="{{true}}"
+  color="black"
+  background="#FFF"
+></navigation-bar>
 
 <view class="page"></view>
