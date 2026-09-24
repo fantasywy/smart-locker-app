@@ -23,7 +23,16 @@
   },
   "include": [
     "./test/**/*.ts",
-    "./vitest.config.ts"
+    "./vitest.config.ts",
+    // ⚠️ 必须显式带上小程序侧的**全局类型**。测试会 `import` `miniprogram/` 的源码
+    // （`request/`、`api/`），而那些源码里写着 `wx.request(...)` ——
+    // `exclude` 只挡住「作为入口被 include」，挡不住「被 import 进来因而被检查」。
+    //
+    // 为什么不靠 `typeRoots: ["./typings"]`：`typeRoots` 里的包要靠 `types` 才会被自动纳入，
+    // 而这里 `types` 必须是 `["node"]`（否则 vitest/globals 那类按目录解析会 TS2688）。
+    // 直接 include 这两个 `.d.ts` 是唯一不依赖「自动纳入」的写法 ——
+    // 它们本来就是 `/// <reference>` 串起来的纯 ambient 声明，不产出任何模块。
+    "./typings/index.d.ts"
   ],
   "exclude": [
     "node_modules",
