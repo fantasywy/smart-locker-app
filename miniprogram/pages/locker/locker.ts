@@ -48,15 +48,13 @@
 //    `09` §5.8 硬规则 5 允许的禁用（「请求进行中的技术性防抖」）在页面上的落点。
 
 import { getLockerByCode } from '../../api/lockers'
-import type { CellAvailability, LockerByCode } from '../../api/lockers'
 import { createOrder } from '../../api/orders'
-import type { CellType } from '../../api/orders'
+// ⚠️ DTO 从 `types/` 引，**不是**从 `api/`（`07` §3 硬规则 3：`types/` 与 `api/` 一一对应）。
+import type { CellAvailability, LockerByCode } from '../../types/lockers'
+import type { CellType } from '../../types/orders'
 import { resolveLockerCode } from '../../utils/locker-code'
-import { LOCKER_PAGE_COPY, ORDER_LIST_PATH, PAGE_TITLES } from '../../startup/copy'
-import { WAITING_PATH } from '../waiting/paths'
-
-/** 预约创建页的路径 —— `05` §2「创建入口只在柜机页」的那个目的地。 */
-const RESERVATION_CREATE_PATH = 'pages/reservation-create/reservation-create'
+import { LOCKER_PAGE_COPY, ORDER_LIST_PATH, PAGE_TITLES, RETRY_LABEL } from '../../startup/copy'
+import { RESERVATION_CREATE_PATH, WAITING_PATH } from '../../utils/routes'
 
 /**
  * `1002` —— **柜机不存在 / 已软删**（`R1` §1 13.6，契约 `:975`）。
@@ -107,7 +105,7 @@ const CELL_TYPES = [
  * 它们停留在 `'ready'` 上，靠 `cells[].enabled` 呈现（`01` §6.1）。
  * 一个 `'unavailable'` 相位就是「正常响应被当成错误处理」的代码形态。
  */
-type LockerPhase = 'loading' | 'ready' | 'entryFailed'
+type LockerPhase = 'loading' | 'ready' | 'entryFailed' | 'loadFailed'
 
 /** 一档规格在界面上的全部信息。 */
 interface CellRow {
@@ -131,6 +129,10 @@ interface LockerPageData {
   entryFailedTitle: string
   /** 入口失效页的说明句。 */
   entryFailedDetail: string
+  /** 加载失败页的说明句（`09` §7.2「详情页加载失败」逐字）。 */
+  loadFailedDetail: string
+  /** 加载失败页的重试按钮（`09` §6 第 33 条逐字，与全局失败出口同一个词）。 */
+  retryLabel: string
   /** 「重新扫码」按钮（`09` §6 第 6 条逐字）。 */
   rescanLabel: string
   /** 「我的订单」按钮（`09` §6 第 4 条逐字）。 */
@@ -183,6 +185,7 @@ interface LockerPageMethods {
   onReserve(): void
   onMyOrders(): void
   onRescan(): void
+  onRetryLoad(): void
 }
 
 // ⚠️ **`Component<..., true>` 的最后一个类型参数是 `TIsPage`** —— 它必须为 `true`，
@@ -206,6 +209,11 @@ Component<LockerPageData, Record<string, never>, LockerPageMethods, Record<strin
     // 不会出现「某个字段还是空的」这种半成品状态。
     entryFailedTitle: LOCKER_PAGE_COPY.unusableCodeTitle,
     entryFailedDetail: LOCKER_PAGE_COPY.unusableCodeDetail,
+    loadFailedDetail: LOCKER_PAGE_COPY.loadFailedDetail,
+    // ⚠️ 复用 `RETRY_LABEL`（`09` §6 第 33 条「重试」逐字）而不是在 `LOCKER_PAGE_COPY`
+    // 里再写一个同名的字面量 —— `09` §5.6 规则 7：「同一个动作在全局只能有一个名字」。
+    // 两个「重试」各自维护一份，改一处漏一处的那天就是同一个动作有两个名字的那天。
+    retryLabel: RETRY_LABEL,
 
     // 三个按钮的文案 —— 全部来自 `09` §6 的定稿。⚠️ 挂在 `data` 上而不是在 wxml 里
     // 写死：用户可见的每个字归文案层（`09` §0 硬规则 1），且这四个词在本页的不同
@@ -302,8 +310,6 @@ Component<LockerPageData, Record<string, never>, LockerPageMethods, Record<strin
         // ⚠️ 但只有 `1002` 是。其余失败（网络不通、5xx、别的业务码）**不能**冒充
         // 「这个码没用」—— 那会把一次网络抖动说成「你扫的码是废的」，
         // 用户于是走开去换一张贴纸，而真正该做的是重试。
-        // ⇒ 非 `1002` 时**停在骨架屏**（结构先出现、数据区等结果）—— 不编一个错误页，
-        // 也不弹窗（`07` §4.1：请求层不弹窗，页面也不该在这里造一个通用失败态）。
         if (result.error.code === LOCKER_NOT_FOUND) {
           page.setData({
             phase: 'entryFailed',
@@ -312,7 +318,20 @@ Component<LockerPageData, Record<string, never>, LockerPageMethods, Record<strin
           })
           return
         }
-        page.setData({ phase: 'loading' })
+
+        // ⚠️⚠️ 其余失败 → **加载失败页**（`09` §7.2「详情页加载失败：加载失败，请重试」）。
+        //
+        // **本分支第一版写的是 `setData({ phase: 'loading' })`（停在骨架屏），那是错的。**
+        // 它当时说服自己的理由是「不编一个错误页」—— 但骨架屏在语义上是**「还在加载」**，
+        // 而此刻请求已经回来了、并且失败了。结果是一屏永远不动的占位：
+        // 用户既不知道出了什么事，也**没有重试的入口**（`09` §7.2 给这一行的出路就是「重试」）。
+        //
+        // ⇒ 「不编错误页」这条纪律的正确读法是「**不自己造文案**」，
+        //   而不是「不给用户任何反馈」。文案取 `09` 已有的那一行，就不是自编。
+        //
+        // ⚠️ 仍然**不弹窗**（`07` §4.1：请求层不弹窗，页面也不该在这里造一个通用失败态）——
+        // 它是一屏页内内容，与「这个码没用」同一形态。
+        page.setData({ phase: 'loadFailed' })
         return
       }
 
@@ -336,9 +355,22 @@ Component<LockerPageData, Record<string, never>, LockerPageMethods, Record<strin
      */
     renderLocker(locker: LockerByCode): void {
       const page = this as unknown as LockerPageInstance
-      // ⚠️ 可用性**只读 `online`**，不对 `status` 做集合判断 ——
-      // `online` 就是后端收敛后的那个布尔（`13.6` :971），自己再抄一份
-      // 「哪些 status 算不可用」的清单，会在后端加一个状态时静默过期。
+      // ⚠️ 可用性**只读 `online`**，不对 `status` 做集合判断。
+      //
+      // ⚠️⚠️ 这一条看起来像「少实现了一半」，所以理由必须写清 ——
+      // `01` §6.1 与 `09` §7.2 都把条件写成**两个子句**：
+      // 「`online = false` **或** `status` 非 `ONLINE`」。但这两个子句**是同一件事**：
+      // `R1` §1 陷阱表逐字 ——「`online`｜口径 = `locker.status == ONLINE`（已按优先级链收敛）」。
+      // 也就是说 `online` 就是服务端替我们算好的那个布尔，`status` 只是它的原料。
+      //
+      // ⇒ 自己再对 `status` 做一次集合判断，等于**把后端的收敛逻辑抄一份到客户端**：
+      //   抄的那份会在后端新增一个状态（比如 `DECOMMISSIONED`）时静默过期 ——
+      //   届时 `online` 已经是 `false`（后端认了），而客户端的清单里没有那个新枚举，
+      //   于是入口**照样可点**。少写一个判断，换来「后端说了算」这件事在代码上成立。
+      //
+      // ⚠️ 这不是「没实现 `status` 那一半」，而是**两个子句本来就同义**，
+      // 实现取那个权威的、收敛过的。`LockerStatus` 类型仍然完整保留（类型层如实反映
+      // 后端形状，`07` §7 规则 2），只是**不参与判断**。
       const usable = locker.online
 
       const cells: CellRow[] = CELL_TYPES.map((cell) => {
@@ -368,12 +400,28 @@ Component<LockerPageData, Record<string, never>, LockerPageMethods, Record<strin
         return { type: cell.type, label: cell.label, available, enabled: true, reason: '' }
       })
 
-      // 预约入口在**柜机不可用**时与「开始存件」同等置灰（`05` §3.4 逐字）。
+      // 预约入口与「开始存件」**同等地**置灰 —— 两个触发条件都算（`05` §3.4 逐字）。
       //
-      // ⚠️ 但**余位 0 不影响预约入口** —— 这是刻意的，不是漏了：预约要的是「以后有格口」，
-      // 此刻满不代表预约时段也满（服务端在创建时判 `8002`，`05` §3.3）。
-      // 把预约入口跟着单档余位一起灰掉，会让用户在一台「大格口满了」的柜机前
-      // 完全看不到预约这条出路 —— 而它其实是通的。
+      // ⚠️⚠️ **本段的第一版是错的，且错得很有代表性。** 它只把预约入口挂在 `online` 上，
+      // 并给自己编了一条理由：「预约要的是以后有格口，此刻满不代表预约时段也满」。
+      // 那个推理听起来合理 —— 而它**恰好是 `05` §3.4 明文排除的那一个**：
+      //
+      // > 承 `01` §6.1：**余位 0 时不得引导「去预约」** —— 预约同样只认 `FREE` 格口
+      // > （`13.12` 无空闲 → `8002`），唯一真出口是「换一台柜机」。
+      // > **本节不推翻该结论**：`cellAvailability[type] === 0` 时，柜机页的「预约」入口
+      // > **与「开始存件」同样置灰**并写明「该规格已满」。
+      //
+      // ⇒ 判据是**两个条件的或**，且原因按**哪个条件先成立**来选：
+      //   ① 柜机整体不可用 → 那句说柜机不可用；
+      //   ② 柜机可用但**任一档**余位为 0 → 那句说该规格已满。
+      // ①优先，与 `cells` 的优先级一致（同一个理由：柜机离线时余位恒为 0，
+      // 说「该规格已满」会把用户推向「换一种规格试试」，而那条路同样走不通）。
+      //
+      // ⚠️ ②说的是「**任一档**为 0」而不是「三档全为 0」：预约入口在本页只有**一个**，
+      // 而 `05` §3.4 的原文是 `cellAvailability[type] === 0`（某规格为 0 即置灰）——
+      // 预约创建本身要选规格，任一档满就可能选不中，而 spec 已经替我们裁决了保守方向。
+      const anyCellFull = cells.some((cell) => cell.available === 0)
+
       page.setData({
         phase: 'ready',
         siteName: locker.siteName,
@@ -381,8 +429,12 @@ Component<LockerPageData, Record<string, never>, LockerPageMethods, Record<strin
         lockerUsable: usable,
         lockerReason: usable ? '' : LOCKER_PAGE_COPY.lockerUnavailableReason,
         cells,
-        reserveEnabled: usable,
-        reserveReason: usable ? '' : LOCKER_PAGE_COPY.lockerUnavailableReason,
+        reserveEnabled: usable && !anyCellFull,
+        reserveReason: !usable
+          ? LOCKER_PAGE_COPY.lockerUnavailableReason
+          : anyCellFull
+            ? LOCKER_PAGE_COPY.cellTypeFullReason
+            : '',
       })
     },
 
@@ -452,11 +504,20 @@ Component<LockerPageData, Record<string, never>, LockerPageMethods, Record<strin
      * ⚠️ 用 **`navigateTo`** 而不是 `redirectTo`：预约创建**不是移交**，
      * 用户在那里取消后应当能退回柜机页继续存件。移交语义（`redirectTo`）
      * 只属于等待态那一条路（`08` §2）。
+     *
+     * ⚠️⚠️ **守卫必须与 `onStartStoring` 对称地写在这里，不能只靠模板的 `disabled`。**
+     * review 抓到过第一版：它对「开始存件」判了 `enabled`、对「预约」却只判了
+     * `locker` 在不在 —— `reserveEnabled` 压根没读。
+     * 模板上确实有 `disabled="{{ !reserveEnabled }}"`，所以手点不出来；
+     * 但那是**渲染层**的保证，而那条纪律说的是「置灰的入口**点了什么都不做**」——
+     * 一个由模板单独承担的守卫，会在事件绑定、无障碍触发、或把 `<button>` 换成
+     * `<view bindtap>` 的任何一次改动里凭空消失，而**看一眼处理函数完全看不出来缺了什么**。
      */
     onReserve(): void {
       const page = this as unknown as LockerPageInstance
       const locker = page.locker
       if (locker === null || locker === undefined) return
+      if (!page.data.reserveEnabled) return
       wx.navigateTo({ url: `/${RESERVATION_CREATE_PATH}?lockerId=${locker.id}` })
     },
 
@@ -519,6 +580,25 @@ Component<LockerPageData, Record<string, never>, LockerPageMethods, Record<strin
         // 是替用户宣布一个他自己刚做的决定。
         fail: () => {},
       })
+    },
+
+    /**
+     * 「重试」—— 重新查一次柜机（`09` §7.2「详情页加载失败｜加载失败，请重试」）。
+     *
+     * ⚠️ 它必须**真的重发 `13.6`**，而不是把 `phase` 翻回 `loading` 就了事：
+     * 一个只改状态的假重试会让用户留在这一屏上反复点，而页面「看起来响应了」
+     * （骨架屏闪一下又回到失败页）。测试因此断言请求数真的变成 2。
+     *
+     * ⚠️ 复用 `lockerCode`（本实例上那个已解析好的码）而不是回头再解析一次页面参数：
+     * 页面参数是**进入时**的快照，`onRescan` 之后它会与 `lockerCode` 不一致 ——
+     * 重试要用的是**当前这一次**的码。
+     */
+    onRetryLoad(): void {
+      const page = this as unknown as LockerPageInstance
+      const code = page.lockerCode
+      if (code === null || code === undefined) return
+      page.setData({ phase: 'loading' })
+      void page.loadLocker?.(code)
     },
   },
 })

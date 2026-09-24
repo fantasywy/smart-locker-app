@@ -70,6 +70,34 @@
   </view>
 
   <!--
+    ②b 加载失败 —— `13.6` 回来了但失败了（且**不是** `1002`）。
+
+    ⚠️ 它**不是**入口失效：成因不同（网络/5xx vs 码本身没用），出路也不同
+       （**重试** vs 换一张贴纸）。混成一个页面会把一次网络抖动说成「你扫的码是废的」，
+       用户于是走开去换一张贴纸 —— 而真正该做的是重试。
+
+    ⚠️⚠️ 它也**不是骨架屏**：骨架屏在语义上说的是「还在加载」，而此刻请求已经回来、
+       并且失败了。本块的第一版就是停在骨架屏上，结果是**一屏永远不动的占位** ——
+       用户既不知道出了什么事，也没有任何重试入口。文案取 09 §7.2 已有的那一行
+       （「详情页加载失败｜**加载失败，请重试**」），所以它不是自编文案。
+
+    ⚠️ 复用入口失效页那套 `entry-failed__*` 样式 —— 两者版式同形（一句说明 + 主行动），
+       多造一套 class 只会多一份要同步的样式。标题位**留空**（`09` §7.2 那一行只有
+       说明句 + 重试，没有标题）—— 不为了「凑一块标题」编一句话（`09` §0 硬规则 1）。
+  -->
+  <view wx:elif="{{ phase === 'loadFailed' }}" class="entry-failed">
+    <view class="entry-failed__title"></view>
+    <view class="entry-failed__detail">{{ loadFailedDetail }}</view>
+    <view class="entry-failed__actions">
+      <button
+        class="entry-failed__primary"
+        hover-class="entry-failed__primary_active"
+        bindtap="onRetryLoad"
+      >{{ retryLabel }}</button>
+    </view>
+  </view>
+
+  <!--
     ③ 柜机信息 + 入口 —— **正常响应**（含 `online=false` 与余位 0 这两种）。
 
        ⚠️ 01 §6 已定「本页天然只有一屏」：`13.6` **不返回价格、不返回格口清单**
@@ -117,9 +145,10 @@
     <!--
       两个入口 —— 主行动 + 预约（09 §6 第 3 / 5 条逐字）。
 
-      ⚠️ 预约入口**不跟随单档余位置灰**（见 `locker.ts` 的 `renderLocker`）：
-         此刻某档满不代表预约时段也满 —— 而预约是这台柜机前**另一条可行的路**。
-         柜机整体不可用时它才跟着灰（同 `reserveEnabled`）。
+      ⚠️ 预约入口与「开始存件」**同等置灰**（05 §3.4 逐字）：柜机不可用、**或任一档
+         余位为 0** 时都置灰，并写明是哪一个原因。⚠️ **不得**因为「预约是以后的事」
+         就放行它 —— 预约同样只认 FREE 格口（13.12 无空闲 → 8002），
+         05 §3.4 用「本节不推翻该结论」把这条例外明确堵死了。
     -->
     <view class="locker__actions">
       <button
@@ -128,6 +157,7 @@
         disabled="{{ !reserveEnabled }}"
         bindtap="onReserve"
       >{{ reserveLabel }}</button>
+      <!-- 置灰原因 —— 同一条纪律：置灰必须写明原因，且它是页内一行字而不是弹窗。 -->
       <view wx:if="{{ reserveReason }}" class="locker__reserve-reason">{{ reserveReason }}</view>
     </view>
   </view>

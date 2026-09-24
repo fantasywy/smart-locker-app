@@ -29,14 +29,13 @@ import { installWxStub, jsonResponse, reply } from '../helpers/wx'
 import { respondInOrder, requestsTo, sentRequests } from '../helpers/http'
 import { BASE_URL } from '../../miniprogram/request/config'
 import { LOCKER_PAGE_COPY, PAGE_TITLES } from '../../miniprogram/startup/copy'
+import { RESERVATION_CREATE_PATH, WAITING_PATH } from '../../miniprogram/utils/routes'
 import type { InstalledWxStub } from '../helpers/wx'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
 
 const LOCKER_URL = `${BASE_URL}/api/app/v1/lockers/by-code?code=WD-01`
 const CREATE_ORDER_URL = `${BASE_URL}/api/app/v1/orders`
-const WAITING_PATH = 'pages/waiting/waiting'
-const RESERVATION_CREATE_PATH = 'pages/reservation-create/reservation-create'
 
 
 /** 一份契约形状的 `13.6` 响应体 —— 默认是一台**完全可用**的柜机。 */
@@ -351,6 +350,92 @@ describe('#26 柜机页 · 四种非正常进入（01 §6.1 表）', () => {
     expect(wx.showModal).not.toHaveBeenCalled()
   })
 
+  it('⚠️ 非 `1002` 的失败**不留骨架屏** —— 给说明 + 重试出路（09 §7.2）', async () => {
+    // ⚠️ 这条也是 review 阶段补上的，挡的是本页第一版的一个真实缺口。
+    //
+    // 第一版对非 `1002` 的失败只写了一句 `setData({ phase: 'loading' })`，
+    // 理由是「停在骨架屏，不编一个错误页」。它挡对了一半（**确实不该**冒充
+    // 「这个码没用」，见上面那条），但另一半是错的：
+    // **骨架屏是「还在加载」的形态，而那一刻请求已经回来了、并且失败了。**
+    // 用户于是盯着一屏永远不动的占位 —— 既不知道出了什么事，也**没有重试的入口**。
+    //
+    // ⇒ 正确的形态是 `09` §7.2 的「详情页加载失败」那一行：**加载失败，请重试** +
+    //   一个重试出口。它不是「编一个错误页」，它是 `09` 里已有的那一行。
+    const { page } = await enter({ code: 'WD-01' }, [
+      // 网络不通 —— `07` §4.2 的 `kind: 'network'`，既不是 `1002` 也不是成功。
+      { failure: { errMsg: 'request:fail timeout' } },
+    ])
+
+    expect(page.data.phase, '取柜机失败却停在骨架屏 —— 用户会永远等下去').toBe('loadFailed')
+    expect(page.data.loadFailedDetail).toBe(LOCKER_PAGE_COPY.loadFailedDetail)
+    // ⚠️ 且它**不是**入口失效 —— 成因不同、出路也不同（换贴纸 vs 重试）。
+    expect(page.data.entryFailedTitle).not.toBe(LOCKER_PAGE_COPY.staleStickerTitle)
+  })
+
+  it('⚠️ 「重试」真的重发 `13.6`，成功后进 ready', async () => {
+    // 有出口还不够 —— 那个按钮必须**真的重发请求**。一个只改 `phase` 的假重试
+    // 会把用户留在「加载失败」页上反复点，而页面看起来「响应了」。
+    const wx = installWxStub()
+    wx.login.mockImplementation(reply({ code: 'WX-CODE', errMsg: 'login:ok' }))
+    wx.request.mockImplementation(
+      respondInOrder([
+        { errMsg: 'request:fail timeout' },
+        jsonResponse(lockerBody()),
+      ]),
+    )
+    wx.switchTab.mockImplementation(() => {})
+    wx.navigateTo.mockImplementation(() => {})
+    wx.redirectTo.mockImplementation(() => {})
+    wx.showModal.mockImplementation(() => {})
+    wx.showToast.mockImplementation(() => {})
+
+    const def = await loadPage()
+    const page = instantiate(def)
+    page.onLoad?.({ code: 'WD-01' })
+    await settle()
+    expect(page.data.phase).toBe('loadFailed')
+
+    ;(page.onRetryLoad as () => void)()
+    await settle()
+
+    expect(page.data.phase).toBe('ready')
+    expect(page.data.siteName).toBe('望京 SOHO T1')
+    // ⚠️ 判据是「真的又发了一次」—— 只看 `phase` 的话，一个本地翻状态的实现也能过。
+    expect(requestsTo(sentRequests(wx.request), LOCKER_URL)).toHaveLength(2)
+  })
+
+  it('⚠️ 可用性判据是 `online` 一个字段 —— `status` **不参与判断**（R1 陷阱表）', async () => {
+    // ⚠️ 这条钉的是一个**看起来像漏实现**的设计选择，所以理由要写在测试里。
+    //
+    // `01` §6.1 / `09` §7.2 把条件写成两个子句（`online = false` **或** `status` 非 `ONLINE`），
+    // 但 `R1` §1 陷阱表已核实它们**同义**：「`online`｜口径 = `locker.status == ONLINE`
+    // （已按优先级链收敛）」—— `online` 就是服务端替我们算好的布尔。
+    //
+    // ⇒ 客户端若自己再对 `status` 做集合判断，就是**把后端的收敛逻辑抄一份**，
+    //   而抄的那份会在后端新增枚举时静默过期。
+    //
+    // ⚠️ 断言方式：构造一个 `online: true` 但 `status` **不在「可用」白名单里**的响应
+    // （这里用一个后端当前没有、将来可能加的值）。只读 `online` 的实现 ⇒ 入口可点；
+    // 而任何「自己维护一个可用状态清单」的实现 ⇒ 会把这一档灰掉，从而在这条上红。
+    const { page } = await enter({ code: 'WD-01' }, [
+      {
+        body: lockerBody({
+          // ⚠️ 刻意是一个**当前枚举之外**的值 —— 后端将来加状态时，
+          // `online` 会先跟上，而客户端的清单不会。
+          status: 'DECOMMISSIONED',
+          online: true,
+          cellAvailability: { small: 2, medium: 2, large: 2 },
+        }),
+      },
+    ])
+
+    expect(
+      page.data.lockerUsable,
+      '可用性没有跟着 online 走 —— 说明实现自己维护了一份 status 清单，那会在后端加枚举时静默过期',
+    ).toBe(true)
+    expect(cellOf(page, 'SMALL').enabled).toBe(true)
+  })
+
   it('⚠️ 余位为 0 时**不出现**「去预约」引导（01 §6.1 / 05 §3.4）', async () => {
     // 票面逐字：「**余位 0 时不得引导『去预约』** —— 预约同样只认 `FREE` 格口
     // （`13.12` 无空闲 → `8002`），唯一真出口是『换一台柜机』」。
@@ -510,7 +595,14 @@ describe('#26 柜机页 · 两个出口（01 §2.4 / 05 §2、§3.4）', () => {
     // `05` §2：「创建入口**只在柜机页**」；`05` §3.4：余位 0 时**同样置灰**。
     // ⚠️ 这里用 `navigateTo`（不是 `redirectTo`）是**对的** —— 预约创建不是移交，
     // 用户取消后应当能退回柜机页。移交语义（`redirectTo`）只属于等待态（`08` §2）。
-    const { wx, page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
+    //
+    // ⚠️ 夹具必须让**三档都有余位**：`lockerBody()` 的缺省大格口是 0，
+    // 而按 `05` §3.4 预约入口在**任一档**为 0 时就置灰 —— 用缺省夹具的话，
+    // 这条用例会因为「入口本来就该是灰的」而失败，看起来像 `navigateTo` 拼错了。
+    // 让每条用例的夹具只暴露它要测的那一件事。
+    const { wx, page } = await enter({ code: 'WD-01' }, [
+      { body: lockerBody({ cellAvailability: { small: 4, medium: 2, large: 1 } }) },
+    ])
 
     ;(page.onReserve as () => void)()
     await settle()
@@ -539,6 +631,44 @@ describe('#26 柜机页 · 两个出口（01 §2.4 / 05 §2、§3.4）', () => {
     expect(page.data.reserveReason).toBe(LOCKER_PAGE_COPY.lockerUnavailableReason)
   })
 
+  it('⚠️⚠️ 余位 0 时「预约」入口**同样置灰**，原因说「该规格已满」（05 §3.4 逐字）', async () => {
+    // ⚠️⚠️ **这条断言是本票 review 阶段抓出来补上的，而它抓的是一个真实的违规。**
+    //
+    // 实现第一版把预约入口只挂在 `online` 上，并在注释里给自己编了一条理由
+    // （「预约要的是以后有格口，此刻满不代表预约时段也满」）—— 听起来合理，
+    // 但它**恰好是 `05` §3.4 明文排除的那个推理**。原文逐字：
+    //
+    // > 承 `01` §6.1：**余位 0 时不得引导「去预约」** —— 预约同样只认 `FREE` 格口
+    // > （`13.12` 无空闲 → `8002`），唯一真出口是「换一台柜机」。
+    // > **本节不推翻该结论**：`cellAvailability[type] === 0` 时，柜机页的「预约」入口
+    // > **与「开始存件」同样置灰**并写明「该规格已满」。
+    //
+    // ⚠️ 上一句「本节不推翻该结论」说明作者预见到了这个推理 —— 而它还是发生了。
+    // 教训：**当一条 spec 明确写下「不得据 X 推导 Y」时，实现里任何复现那个推导的
+    // 注释都是危险信号**，无论它读起来多合理。规格在这里是权威，不是论据。
+    const { page } = await enter({ code: 'WD-01' }, [
+      // 柜机**可用**，但大格口余位为 0 —— 这正是 §3.4 描述的那个场景。
+      { body: lockerBody({ cellAvailability: { small: 4, medium: 2, large: 0 } }) },
+    ])
+
+    expect(
+      page.data.reserveEnabled,
+      '余位为 0 时预约入口没有置灰 —— 05 §3.4 明令它与「开始存件」同等置灰',
+    ).toBe(false)
+    expect(page.data.reserveReason).toBe(LOCKER_PAGE_COPY.cellTypeFullReason)
+  })
+
+  it('⚠️ 三档都还有余位时「预约」入口照常可点 —— 置灰只在有余位为 0 时发生', async () => {
+    // 上一条的反面，防止修得过头（把预约入口**永远**灰掉 —— 那会让「预约」这个
+    // 功能在本页彻底不可达，而它正是 `05` §2 定下的**创建唯一切入点**）。
+    const { page } = await enter({ code: 'WD-01' }, [
+      { body: lockerBody({ cellAvailability: { small: 1, medium: 1, large: 1 } }) },
+    ])
+
+    expect(page.data.reserveEnabled).toBe(true)
+    expect(page.data.reserveReason).toBe('')
+  })
+
   it('⚠️ 置灰的入口不发请求 —— 点了也不建单（防抖之外的第二道）', async () => {
     // 置灰是**服务端回显驱动**的（`09` §5.8 容许的例外）。既然界面明确说了
     // 「该规格已满」，那么照着点一下不该真的去打一次注定 `8002` 的请求 ——
@@ -554,6 +684,29 @@ describe('#26 柜机页 · 两个出口（01 §2.4 / 05 §2、§3.4）', () => {
 
     expect(requestsTo(sentRequests(wx.request), CREATE_ORDER_URL)).toEqual([])
     expect(wx.redirectTo).not.toHaveBeenCalled()
+  })
+
+  it('⚠️ 置灰的**预约**入口同样点了不动 —— 两条入口的守卫必须对称', async () => {
+    // ⚠️ 这条是 review 抓出来的：第一版对「开始存件」有守卫（`if (!row.enabled) return`），
+    // 对「预约」却只判了 `locker` 在不在 —— **`reserveEnabled` 根本没读**。
+    //
+    // 症状是真实的：wxml 上确实有 `disabled="{{ !reserveEnabled }}"`，所以**手点不出来**；
+    // 但「置灰的入口点了什么都不做」这条纪律就成了**只由模板保证**的东西 ——
+    // 而模板的 `disabled` 是**渲染层**的，事件绑定、无障碍触发、或将来把按钮换成
+    // `<view bindtap>` 的任何一次改动，都会让守卫凭空消失。守卫要长在处理函数里。
+    const { wx, page } = await enter({ code: 'WD-01' }, [
+      // 大格口满 ⇒ 预约入口置灰（05 §3.4）。
+      { body: lockerBody({ cellAvailability: { small: 4, medium: 2, large: 0 } }) },
+    ])
+    expect(page.data.reserveEnabled).toBe(false)
+
+    ;(page.onReserve as () => void)()
+    await settle()
+
+    expect(
+      wx.navigateTo,
+      '置灰的预约入口仍然跳转了 —— 守卫没有落在处理函数里，只靠模板的 disabled',
+    ).not.toHaveBeenCalled()
   })
 })
 
@@ -611,5 +764,60 @@ describe('#26 柜机页 · 渲染标题（09 §0 硬规则 1）', () => {
   it('⚠️ 导航栏标题来自文案层 —— 不在 wxml 里写字面量', async () => {
     const { page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
     expect(page.data.title).toBe(PAGE_TITLES['pages/locker/locker'])
+  })
+})
+
+describe('#26 跳转路径只有一个家（07 §3 / 05 §2 / 08 §2）', () => {
+  it('⚠️⚠️ 柜机页里**不出现任何页面路径字面量** —— 一律从 `utils/routes` 引', async () => {
+    // ⚠️ 这条是 review 抓出来的缺陷的守卫：本票第一版在柜机页里写死过
+    // `const RESERVATION_CREATE_PATH = 'pages/reservation-create/...'` ——
+    // 而**同一个 commit** 刚建了 `utils/routes.ts`，那个文件的注释正在为
+    // 完全相同的理由解释路径为什么不能是页面里的字面量。
+    //
+    // 症状与 `#23` 修的死按钮同源：`wx.*To` 拿到不存在的路径时**静默失败**
+    // （不跳转、不报错），用户看到的就是「点了没反应」。
+    //
+    // ⚠️⚠️ **判据必须收窄到「跳转目标的常量定义」，不能是「这个串出现在任何地方」。**
+    // 第一版用了宽判据，它当场抓到了 `PAGE_TITLES['pages/locker/locker']` ——
+    // 而那里出现这个串是**完全正当**的：那是用页面自己的路径当键**查标题**，
+    // 与「往这个页面跳」是两件事（`test/startup/conventions.test.ts` 里有一条
+    // 同源的守卫，它的注释记着同一个教训）。
+    // 守卫一旦逼人绕开一个正确的写法，下一个人就会直接删掉它。
+    //
+    // ⇒ 只认**模块顶层的 `const X = 'pages/...'`**：那正是「路径被抄了一份」的形状。
+    //   跳转调用点若内联字面量，同样会被 `url:` 那一支抓到。
+    const source = readFileSync(
+      join(repoRoot, 'miniprogram', 'pages', 'locker', 'locker.ts'),
+      'utf8',
+    )
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+    const inlined: string[] = []
+    // ① 顶层常量定义：`const ANY_PATH = 'pages/x/y'`
+    for (const m of code.matchAll(/^\s*const\s+\w*PATH\w*\s*=\s*['"`](pages\/[^'"`]+)['"`]/gm)) {
+      inlined.push(`const ... = '${m[1]}'`)
+    }
+    // ② 跳转 url 里内联的字面量：`url: '/pages/x/y...'`
+    for (const m of code.matchAll(/url\s*:\s*['"`]\/?(pages\/[^'"`?]+)/g)) {
+      inlined.push(`url: '${m[1]}'`)
+    }
+
+    expect(
+      inlined,
+      `柜机页里出现了写死的页面路径 —— 一律从 utils/routes 引（写错就是跳转的静默失败）：\n` +
+        inlined.map((p) => `  • ${p}`).join('\n'),
+    ).toEqual([])
+  })
+
+  it('⚠️ 两个路径常量都真的注册在 `app.json` 里 —— 否则跳转静默失败', async () => {
+    // `wx.*To` 对**未注册**的路径同样静默失败。这条断言把常量与那份原生配置
+    // 扣在一起 —— `app.json` 是 JSON，引不到 TS，所以只能靠测试比对。
+    const appJson = JSON.parse(
+      readFileSync(join(repoRoot, 'miniprogram', 'app.json'), 'utf8'),
+    ) as { pages: string[] }
+
+    expect(appJson.pages, 'WAITING_PATH 没有注册在 app.json 里').toContain(WAITING_PATH)
+    expect(appJson.pages, 'RESERVATION_CREATE_PATH 没有注册在 app.json 里').toContain(
+      RESERVATION_CREATE_PATH,
+    )
   })
 })
