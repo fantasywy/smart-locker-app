@@ -10,6 +10,7 @@
 // 这样既演示了票面要求的那条断言形态（非 JSON → `network`），又不会把任何还不存在的
 // 业务逻辑偷偷定义在测试里。`normalize` 实现完之后，`#18` 的请求层才是它的真身。
 
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { installWxStub, jsonResponse, networkFailure } from './helpers/wx'
 import type { WxRequestSuccessResult } from './helpers/wx'
@@ -210,5 +211,33 @@ describe('桩的隔离', () => {
         resolve()
       }, 5)
     })
+  })
+})
+
+describe('引用的出处必须是真的', () => {
+  // 为什么把这件「文档的事」变成测试：本票的实现过程中，同一类错误**犯了两次** ——
+  // 先是把「测试只断言外部行为」归给 `07` §7（该 spec 全文不含「测试」二字），
+  // 修正时又归给了 #16（真正的出处在 **#15** 的 Testing Decisions）。
+  // 两次都是「引了一个看起来合理、但根本没写这件事的地方」。注释里的错引用比没有引用更坏：
+  // 后来者会顺着它去一个不存在的地方找一个不存在的规则。所以让它可执行。
+  //
+  // ⚠️ 只断言「该文件里确实出现/不出现某关键词」这类**可判定**的事实，
+  // 不试图解析 Markdown 结构 —— 那会变成第二份真源（`07` §7 反对的正是这个）。
+
+  const spec07 = readFileSync(new URL('../docs/spec/07-engineering-form.md', import.meta.url), 'utf8')
+
+  it('07 全文不含「测试」—— 所以任何把测试裁决归给它的引用都是错的', () => {
+    expect(spec07.includes('测试')).toBe(false)
+  })
+
+  it('07 §2 确实讲工程约束（vitest.config.ts 引的就是它）', () => {
+    expect(spec07).toContain('## 2. 工程约束')
+  })
+
+  it('07 §4.2 / §4.3 确实分别讲归一化分类与单一飞行（wx.ts / http.ts 引的就是它们）', () => {
+    expect(spec07).toContain('### 4.2 业务错误形态')
+    expect(spec07).toContain('### 4.3 登录失效处理')
+    // `network` 确实由「非 JSON 响应」触发 —— wx.ts 的 data: unknown 就是为这条留的。
+    expect(spec07).toContain('非 JSON 响应')
   })
 })

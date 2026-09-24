@@ -5,9 +5,15 @@
 // 「第几个参数、options 里哪一层」这些噪音散到每个用例里，且一旦桩的形状变了就全线碎掉。
 //
 // ⚠️ 这里只读**一个** mock 的调用记录，不碰内部实现 —— 断言的对象是「发出了什么请求」，
-// 不是「请求层内部怎么排队」。这条口径出自 **issue #16 的 Testing Decisions**
+// 不是「请求层内部怎么排队」。
+//
+// 这条口径的出处是 **issue #15 的 Testing Decisions**
 // （「只断言外部行为……不断言内部实现：不测拦截器链表形状、不测队列的内部数据结构」），
-// ⚠️ **不是** `07` —— 该 spec 全文不含「测试」二字，测试载体是 #16 新裁决的（#16 decision 22）。
+// 连同「引入 Vitest」的裁决（#15 decision 22）也在那里。
+// ⚠️ 两处容易引错，都别再引回去：
+//   • **不是** `07` —— 该 spec 全文不含「测试」二字。
+//   • **不是** #16 —— #16 是那张**执行**票（「测试载体 + wx.* 桩」），
+//     只承接 #15 已定的裁决，正文里没有 Testing Decisions 一节。
 
 import type { Mock } from 'vitest'
 import type { WxRequestOptions, WxRequestSuccessResult } from './wx'
