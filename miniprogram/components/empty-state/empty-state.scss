@@ -1,10 +1,16 @@
 // 空态 —— 三个列表页共用（09 §7.1）。色值全部走色调层 token，不写裸 hex（10 §6 禁令 5）。
 //
-// 出处：`docs/spec/10-visual-language.md` §6（禁令）/ §8（验收事实）；
+// 出处：`docs/spec/10-visual-language.md` §6（禁令）/ §7.2（单位）/ §8（验收事实）；
 // `miniprogram/styles/_variables.scss`（取值）。
 //
+// ⚠️ **单位分工照 `10` §7.2**：**布局几何用 `rpx`**（`750rpx` = 屏宽，不同屏宽下版式一致），
+//    **字号与 1px 级细节用 `px`**。所以尺寸一律 `rpx`，字号一律走 `v.$font-size-*`
+//    （那些 token 本身是 px，同属 §7.2 的裁决）。
+//    ⚠️ 这条在本仓库是**真会咬人**的：`scripts/verify-visual-tokens.mjs` 的 68 条断言里
+//    **没有一条**查 px/rpx，所以走查与评审是唯一的网（#23 review 抓到过一次）。
+//
 // ⚠️ 语气上它是**中性**的：「还没有订单」不是错误，不该染任何语义色。
-//    唯一的强调是主行动按钮，用主色底 + 白字（10 里唯一允许的「语义色 + 白字」组合）。
+//    唯一的强调是主行动按钮，用主色底 + 白字（`10` 里唯一允许的「语义色 + 白字」组合）。
 
 @use '../../styles/variables' as v;
 
@@ -14,7 +20,7 @@
   align-items: center;
   // ⚠️ 靠上不居中：空态下方往往还有内容会来（上拉加载的提示），
   //    一个垂直居中的空态会在内容到位时整块跳一下。
-  padding: 96px v.$spacing-md v.$spacing-lg;
+  padding: 192rpx v.$spacing-md 32rpx;
 }
 
 .empty-state__title {
@@ -36,21 +42,40 @@
 }
 
 .empty-state__action {
-  margin-top: v.$spacing-lg;
   // ⚠️ 小程序的 <button> 自带一层默认背景与边框，必须显式清掉才谈得上「主色底」。
+  //
+  // ⚠️ 为什么是 `<button>` 而不是别的组件里那种 `<view>`：`failure-exit` 的静态出口用
+  //    `<view>` + `bindtap`（那是**次要**出口），而空态的主行动是这一屏**唯一**的动作 ——
+  //    `<button>` 带来原生的可点目标语义与无障碍角色，这在「一个空屏上只做一件事」的
+  //    场合值得那两行 reset 的代价。（`04` §8 的 `open-type="contact"` 也走 `<button>`。）
   &::after {
     border: none;
   }
 
+  // ⚠️ 88rpx（≈44px @375pt）而不是跟着字号走：`10` §7.2 的「组件密度」那条明写
+  //    「小程序是手指操作的移动端，可点目标与字号下限都更严」。
+  //    与 `failure-exit__retry` 的 `height: 44px` 对齐 —— 两个都是页面级的主按钮，
+  //    尺寸不一致会让两屏看起来像两个人做的。
+  //    ⚠️ 那两处数值写法不同（44px / 88rpx）不是分叉：`10` §7.2 允许用 `rpx` 表达
+  //    同一几何，而本组件是新建的，按 §7.2 的**默认**走 `rpx`。
+  margin-top: v.$spacing-lg;
+  height: 88rpx;
+  line-height: 88rpx;
+  padding: 0 v.$spacing-xl;
   background: v.$color-primary;
   color: v.$color-bg-card;
   font-size: v.$font-size-body;
-  line-height: 2.5;
   border-radius: v.$radius-component;
-  padding: 0 v.$spacing-xl;
 }
 
 // 按下反馈 —— 小程序没有 :hover，用 hover-class 挂这个类（与 weui 骨架的 weui-active 同法）。
+//
+// ⚠️ 用 `$color-primary-hover` 而不是 `$color-primary-active`：`10` §3.1 给这两个 token
+//    分了**不同的语义** —— `-hover` 是「按下态」（`_variables.scss` 的注释逐字：
+//    「按下态（小程序无 hover，留给『按下』反馈）」），`-active` 是「正常/激活档」，
+//    它同时是绿色文字的 ink（白底 4.62）与「白字压绿底」的底色。
+//    拿 ink 当按下态底色是两回事，且会与 `failure-exit__retry` 的按下态分叉 ——
+//    同一个概念两个 token。
 .empty-state__action_active {
-  background: v.$color-primary-active;
+  background: v.$color-primary-hover;
 }

@@ -12,6 +12,7 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  formatDurationSlot,
   formatFullTime,
   formatNotYetStored,
   formatOrderTime,
@@ -116,8 +117,13 @@ describe('#23 时区硬规则：只用服务端回显的值，不用客户端本
   it('⚠️ 本模块不提供任何「取当前时间」的入口 —— 双源真话在类型上就写不出来', () => {
     // 落地方式不是「记得别这么写」，而是**根本不给这个能力**（见 datetime.ts 文件头规则 1）。
     // 判据取模块的导出清单：多出一个 `formatNow` / `now` 之类的导出就是开了一个口子。
+    //
+    // ⚠️ 这份清单是**穷举**的（`toEqual` 而非 `toContain`）—— 所以新增导出时这条会红，
+    // 逼着作者回来说明「新增的这个为什么不算一个读时钟的口子」。
+    // `formatDurationSlot`（#23 review 补）正是被它拦下来过一次的。
     return import('../../miniprogram/utils/datetime').then((module) => {
       expect(Object.keys(module).sort()).toEqual([
+        'formatDurationSlot',
         'formatFullTime',
         'formatNotYetStored',
         'formatOrderTime',
@@ -127,6 +133,43 @@ describe('#23 时区硬规则：只用服务端回显的值，不用客户端本
         'formatSlotTime',
       ])
     })
+  })
+})
+
+describe('#23 09 §5.4 第 7 行：时长档位（不用 1h）', () => {
+  it('⚠️ `1小时 / 2小时 / 4小时 / 8小时` —— 单位写成中文「小时」', () => {
+    // `09` §5.4 第 7 行逐字：`1小时 / 2小时 / 4小时 / 8小时`（**不用 `1h`**）。
+    // ⚠️ 这不是一个假想的错法：`05` §3.1 的表格里写的**恰恰就是** `1h / 2h / 4h / 8h` ——
+    // 照那份 spec 抄就会写错，所以 §5.4 这一行的存在是有针对性的。
+    expect(formatDurationSlot(1)).toBe('1小时')
+    expect(formatDurationSlot(2)).toBe('2小时')
+    expect(formatDurationSlot(4)).toBe('4小时')
+    expect(formatDurationSlot(8)).toBe('8小时')
+  })
+
+  it('⚠️ **不得**出现 `h` 这个单位写法（09 §5.4 那一行的全部意义）', () => {
+    for (const hours of [1, 2, 4, 8]) {
+      const label = formatDurationSlot(hours)
+      expect(label).not.toContain('h')
+      expect(label).not.toContain('H')
+      expect(label).not.toMatch(/[A-Za-z]/)
+    }
+  })
+
+  it('⚠️ 非法档位值返回空串 —— 不编一个「0小时」或不存在的档位出来', () => {
+    // 与别的格式化函数同一口径：解析不出来就不给值。
+    // ⚠️ 判据是「正整数」，所以 `1.5` 也落空 —— `05` §3.1 的档位是整数小时，
+    // 一个小数说明调用方传错了东西，那种错该当场可见。
+    for (const bad of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(formatDurationSlot(bad), `${bad} 不该被格式化`).toBe('')
+    }
+  })
+
+  it('⚠️ 它不含任何上限判断（05 §1.2：C 端拿不到任何配置数字）', () => {
+    // ⚠️ 真正不许出现的是 `maxHours`(24) 那类**配置数字** —— C 端拿不到任何一个
+    // 预约配置数字（`05` §1.2），所以这里不能有「最多 24 小时」这类校验或文案。
+    // 24 不在五档里，传进来照样老实渲染 —— 上限归服务端（`8006`），不归格式化层。
+    expect(formatDurationSlot(24)).toBe('24小时')
   })
 })
 

@@ -98,3 +98,60 @@ describe('#23 空态组件：不持有文案、不自己跳转', () => {
     expect(titleBlock, 'title 不该有默认值').not.toContain('value')
   })
 })
+
+describe('#23 空态的视觉约束（10 §6 / §7.2 —— review 补的守卫）', () => {
+  it('⚠️ 不写裸 hex（10 §6 禁令 5）', () => {
+    const scss = stripped(join(emptyStateDir, 'empty-state.scss'))
+    const hexes = scss.match(/#[0-9a-f]{3,8}\b/gi) ?? []
+    expect(hexes, `出现了裸 hex：${hexes.join(', ')} —— 一律引 styles/ 的 token`).toEqual([])
+  })
+
+  it('⚠️⚠️ **布局几何用 `rpx`，不写裸 `px`**（10 §7.2）', () => {
+    // ⛔ 这条是本票 review 抓出来的**真违规**，而它此前**没有任何守卫**：
+    // `scripts/verify-visual-tokens.mjs` 的 68 条断言里一条都不查 px/rpx，
+    // 于是「布局几何用 rpx」这条 §7.2 的硬裁决在代码里是**裸奔**的 ——
+    // 第一版写了 `padding: 96px` 与 `line-height: 2.5`（≈35px，比 44px 的可点目标下限还小），
+    // 全绿通过。
+    //
+    // ⇒ 判据：`.empty-state` 的几何声明（padding / margin / height / width / line-height）
+    //    不得直接写 `px`。⚠️ 字号走 `v.$font-size-*`（那些 token 本身是 px，
+    //    属 §7.2「字号用 px」那一半），所以这条只查几何属性，不查 font-size。
+    const scss = stripped(join(emptyStateDir, 'empty-state.scss'))
+    const offenders: string[] = []
+    for (const line of scss.split('\n')) {
+      // 只挑几何属性；`font-size` 不在其中（字号按 §7.2 就该是 px 系的 token）。
+      if (!/^\s*(padding|margin|height|width|line-height|top|left|right|bottom)[\w-]*\s*:/.test(line)) {
+        continue
+      }
+      const px = line.match(/\b\d+(\.\d+)?px\b/g) ?? []
+      if (px.length > 0) offenders.push(`${line.trim()}  → ${px.join(', ')}`)
+    }
+    expect(
+      offenders,
+      `以下布局几何写了 px —— 10 §7.2 要求布局几何用 rpx（字号与 1px 细节才用 px）：\n` +
+        offenders.map((f) => `  • ${f}`).join('\n'),
+    ).toEqual([])
+  })
+
+  it('⚠️ 主行动的按下态用 `$color-primary-hover`，不是 `-active`（10 §3.1）', () => {
+    // `_variables.scss` 给这两个 token 分了不同语义：`-hover` 是**按下态**，
+    // `-active` 是「正常/激活档」，后者同时是绿色文字的 ink 与「白字压绿底」的底色。
+    // 拿 ink 当按下态的底色是两回事，且会与 `failure-exit__retry` 的按下态**分叉**。
+    const scss = stripped(join(emptyStateDir, 'empty-state.scss'))
+    const activeBlock = /\.empty-state__action_active\s*\{([^}]*)\}/.exec(scss)?.[1] ?? ''
+    expect(activeBlock, '没找到 __action_active 的规则体').not.toBe('')
+    expect(activeBlock).toContain('$color-primary-hover')
+    expect(activeBlock, '按下态用了 -active（那是 ink / 激活档，不是按下态）').not.toContain(
+      '$color-primary-active',
+    )
+  })
+
+  it('⚠️ 主行动的可点目标 ≥ 44px（10 §7.2「可点目标下限更严」）', () => {
+    // 88rpx @375pt ≈ 44px，与 `failure-exit__retry` 的 `height: 44px` 对齐 ——
+    // 两个都是页面级主按钮，尺寸不一致会让两屏看起来像两个人做的。
+    const scss = stripped(join(emptyStateDir, 'empty-state.scss'))
+    const actionBlock = /\.empty-state__action\s*\{([\s\S]*?)\n\}/.exec(scss)?.[1] ?? ''
+    expect(actionBlock, '没找到 __action 的规则体').not.toBe('')
+    expect(actionBlock).toMatch(/height:\s*88rpx/)
+  })
+})

@@ -62,9 +62,6 @@ const MONTH_DAY_LENGTH = 5
 /** `YYYY-MM-DD` 的长度。 */
 const YEAR_MONTH_DAY_LENGTH = 10
 
-/** `HH:mm` 的长度。 */
-const HOUR_MINUTE_LENGTH = 5
-
 /**
  * 从服务端串里切出 `YYYY-MM-DDTHH:mm` 那一段 —— **本模块唯一的解析点**。
  *
@@ -74,12 +71,29 @@ const HOUR_MINUTE_LENGTH = 5
  * ⚠️ 为什么不是 `value.slice(0, 16)`：那样一个格式不对的串（`2026-04-01 11:30`、
  * 空串、后端把 `null` 序列化成 `"null"`）会**静默切成一段垃圾**并渲染到屏上 ——
  * 而「看到的就是真的」正是这一层要保的东西。返回 `null` 让调用方显式处理。
+ *
+ * ⚠️ 返回值带 `monthDay` / `full` 两个**已经拼好的**标签，而不是让调用方各自
+ * `slice` 一遍。第一版就是让四处调用方各切一次（`${date.slice(-5)} ${time}` 抄了三遍）——
+ * 那不只是重复：`MONTH_DAY_LENGTH` 与 `YEAR_MONTH_DAY_LENGTH` 两个常量因此散在四个地方，
+ * 改一处漏一处就是「列表省年份、详情补全」这条口径悄悄失效（`09` §5.4 的分界）。
+ * 拼装收进这里之后，那三种写法各只有一个家。
  */
-function partsOf(instant: ServerInstant): { date: string; time: string } | null {
+function partsOf(
+  instant: ServerInstant,
+): { date: string; monthDay: string; full: string; time: string } | null {
   // 契约：`2026-04-01T11:30:00+08:00`，也容忍省掉秒的 `2026-04-01T11:30`。
   const matched = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(instant)
   if (matched === null) return null
-  return { date: matched[1] as string, time: matched[2] as string }
+  const date = matched[1] as string
+  const time = matched[2] as string
+  return {
+    // ⚠️ `date` 是**原始日期字面量**，只给「同日 / 跨天」那一次比较用
+    // （见 `formatReservationRange`）。三个拼好的标签是给渲染用的 —— 两者别混。
+    date,
+    monthDay: `${date.slice(-MONTH_DAY_LENGTH)} ${time}`,
+    full: `${date.slice(0, YEAR_MONTH_DAY_LENGTH)} ${time}`,
+    time,
+  }
 }
 
 /**
@@ -95,7 +109,7 @@ function partsOf(instant: ServerInstant): { date: string; time: string } | null 
 export function formatOrderTime(instant: ServerInstant): string {
   const parts = partsOf(instant)
   if (parts === null) return ''
-  return `${parts.date.slice(-MONTH_DAY_LENGTH)} ${parts.time}`
+  return parts.monthDay
 }
 
 /**
@@ -146,7 +160,7 @@ export function formatNotYetStored(): string {
 export function formatFullTime(instant: ServerInstant): string {
   const parts = partsOf(instant)
   if (parts === null) return ''
-  return `${parts.date.slice(0, YEAR_MONTH_DAY_LENGTH)} ${parts.time}`
+  return parts.full
 }
 
 /**
@@ -174,10 +188,11 @@ export function formatReservationRange(start: ServerInstant, end: ServerInstant)
   const to = partsOf(end)
   if (from === null || to === null) return ''
 
-  const fromLabel = `${from.date.slice(-MONTH_DAY_LENGTH)} ${from.time}`
   // 跨天 → 右端也带日期；同日 → 右端只给 HH:mm（同屏够用且更短）。
-  const toLabel = from.date === to.date ? to.time : `${to.date.slice(-MONTH_DAY_LENGTH)} ${to.time}`
-  return `${fromLabel} – ${toLabel}`
+  // ⚠️ 同日判定比的是**日期字面量**（`date`），不是拼好的标签 —— 标签里已经含了
+  // 时刻，拿它比会把「同一天不同时刻」判成跨天。
+  const toLabel = from.date === to.date ? to.time : to.monthDay
+  return `${from.monthDay} – ${toLabel}`
 }
 
 /**
@@ -198,7 +213,50 @@ export function formatReservationRange(start: ServerInstant, end: ServerInstant)
 export function formatSlotTime(instant: ServerInstant): string {
   const parts = partsOf(instant)
   if (parts === null) return ''
-  return parts.time.slice(0, HOUR_MINUTE_LENGTH)
+  return parts.time
+}
+
+/**
+ * **预约创建 · 时长档位** —— `1小时 / 2小时 / 4小时 / 8小时`（**不用 `1h`**）。
+ *
+ * 契约：`09` §5.4 第 7 行（`05` §3.1 定数值 + 提案定单位写法）：
+ *
+ * > **预约创建 · 时长档位** | `1小时 / 2小时 / 4小时 / 8小时`（**不用 `1h`**）
+ *
+ * ## ⚠️ 为什么它属于「时间写法」这一层（而不是页面的一个字符串数组）
+ *
+ * `09` §5.4 那张表把它**列为一行** —— 它与「开始档位」是同一个选择器的两半
+ * （`05` §3.1：用户回答「什么时候开始」+「要占多久」），而两半的**写法口径**
+ * 都归 §5.4。若它落在页面里，预约创建页要自己挑单位 —— 而 §5.4 那一行存在的
+ * 全部意义就是**预先否掉 `1h` 这个写法**（`05` §3.1 的表格用的恰恰是 `1h`，
+ * 所以这不是一个假想的错法：照 `05` §3.1 抄就会写错）。
+ *
+ * ## ⚠️ 入参是**小时数**，不是时刻 —— 这是本模块唯一的非时刻入参，有意为之
+ *
+ * 「时长档位」的取值在契约里是**数值**（`05` §3.1 的 `1h / 2h / 4h / 8h`），
+ * 不是服务端回显的时刻。所以它不吃 `ServerInstant`。
+ *
+ * ⚠️ **它因此也不违反「不用客户端本地时钟重算」**（文件头规则 1）：时长是一个
+ * 用户选出来的**量**，不是「现在是几点」。这里没有任何时钟参与。
+ *
+ * ⚠️ **档位值是页面从 `05` §3.1 拿的常量，不是服务端回显的** —— 这一点与
+ * `09` §5.8 硬规则 1（不得渲染未经服务端回显的值）**不冲突**：那条禁的是
+ * 「配置阈值 / 剩余天数 / 扣分额」这类**服务端知道而客户端不该猜**的事实，
+ * 而「档位有 1/2/4/8 小时四个选项」是 `05` §3.1 已裁决的**产品形态**，
+ * 用户看到的是他自己刚选的那个值，不是服务端的事实断言。
+ * ⚠️ 真正不许出现的是 `maxHours`(24) 那类**配置数字**（`05` §1.2：C 端拿不到任何
+ * 预约配置数字）—— 本函数不含任何上限判断，它只把传入的小时数写成中文。
+ *
+ * @returns 小时数不是正整数时返回**空串** —— 与别的格式化函数同一口径：
+ *          解析不出来就不给值，页面按自己的方式处理空档位，
+ *          ⛔ **不编一个 `0小时` 或 `1h` 出来**
+ */
+export function formatDurationSlot(hours: number): string {
+  // ⚠️ 判据是「正整数」而不是「> 0」：`1.5` 会渲染成「1.5小时」，
+  // 而 `05` §3.1 的档位是整数小时 —— 一个小数说明调用方传错了东西，
+  // 那种错该当场可见（空串）而不是画成一个不存在的档位。
+  if (!Number.isInteger(hours) || hours <= 0) return ''
+  return `${hours}小时`
 }
 
 /**
