@@ -15,7 +15,8 @@
 // 3. ⚠️ **`wx.request` / `wx.login` 是回调式的 —— 不要用 `mockResolvedValueOnce`。**
 //    它们**不返回 Promise**：请求层等的是 `options.success(...)`，一个被 resolve 的
 //    Promise 永远不会去调它。写了 `login.mockResolvedValueOnce(...)` 既不报错、也不生效，
-//    只会让测试在超时或「未编排」错误里绕远路。**回话要用 `once()` / `replyOnce()`。**
+//    只会让测试在超时或「未编排」错误里绕远路。
+//    **回话要用 `reply()`（或整组用的 `respondInOrder()`）配合 `mockImplementationOnce`。**
 //
 // 4. **每个 stub 都是标准 vitest mock。** 因此 `toHaveBeenCalledTimes()` / `mock.calls`
 //    直接可用 —— `07` §4.3 硬约束 1「单一飞行」的核心断言就是「`13.2` 只被调用一次」。
@@ -29,7 +30,7 @@
 //   // 整组一次编排好、并断言到达顺序 —— 见 test/helpers/http.ts：
 //   wxStub.request.mockImplementation(respondInOrder([jsonResponse(...), networkFailure()]))
 //
-// 本文件提供 `reply()` / `replyOnce()`（单次回话）；`http.ts` 提供 `respondInOrder()`
+// 本文件提供 `reply()`（单次回话）；`http.ts` 提供 `respondInOrder()`
 // （按序整组回话）与 `sentRequests()` / `urlsOf()` / `requestsTo()`（读调用记录）。
 
 import { vi } from 'vitest'
@@ -152,15 +153,6 @@ export function reply<T>(result: T, ok = true, delayMs?: number): (options: {
     if (delayMs === undefined) queueMicrotask(fire)
     else setTimeout(fire, delayMs)
   }
-}
-
-/** 只对下一次调用生效的编排 —— `reply()` 的逐次版本。 */
-export function replyOnce<T>(result: T, ok = true, delayMs?: number): (options: {
-  success?: (r: T) => void
-  fail?: (r: T) => void
-  complete?: () => void
-}) => void {
-  return reply(result, ok, delayMs)
 }
 
 /**
