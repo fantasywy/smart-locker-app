@@ -172,16 +172,59 @@ describe('#18 工程约束：token 读写集中在一个模块（07 §4.4）', (
     ).toEqual([])
   })
 
-  it('`pages/` 目前的骨架不含请求逻辑（本票不做页面 UI）', () => {
-    // #18 的一条验收标准是「本票不含任何页面 UI」（#15 的 Out of Scope 也有这条）。
-    // 现有页面还是官方 quickstart 的骨架，因此断言它们**没有**引入请求层 ——
-    // 这条会随着后续页面票被有意识地替换掉，而不是无声失效。
+  it('⚠️ `pages/` 只走 `api/`，**不直接引 `request/`** —— 分层单向（07 §3）', () => {
+    // ⚠️⚠️ **这条断言的前身与本条相反，而且那是刻意的。** #18 落地时它断言的是
+    // 「`pages/` 里没有任何 `request` / `api` 的 import」—— 因为那时页面还是
+    // quickstart 骨架，而 #18 的验收标准包含「本票不含任何页面 UI」。
+    // 那条注释当时就写明了它是一次性的：
+    //
+    // > 现有页面还是官方 quickstart 的骨架，因此断言它们**没有**引入请求层 ——
+    // > 这条会随着后续页面票被有意识地替换掉，而不是无声失效。
+    //
+    // #26（柜机页）就是那个页面票。它**必须**引 `api/`（票面验收：「`api/` 新增
+    // `13.6` / `13.7`」），于是旧断言必然要退场 —— 但**不能只是删掉**：
+    // 它守的那件事（页面不自己发请求）现在有了一个更准确的形态。
+    //
+    // ⇒ 换成的判据是 `07` §3 的分层本身：**`pages/ → api/ → request/`**。
+    //   页面调 `api/` 的函数是对的；页面**直接**引请求层意味着它绕过了 `api/`
+    //   这层搬运，开始自己拼 URL、自己判异常形状 —— 而那正是 `07` §3 硬规则 2
+    //   要把「端点搬运」集中到 `api/` 的理由（同一个端点出现在两个页面时不会长出两套语义）。
+    //
+    // ⚠️ 判据必须**只认 request、放行 api**。写成「引了 request 或 api 就违规」
+    // 会把正确的写法（`import { getLockerByCode } from '../../api/lockers'`）也判红 ——
+    // 而守卫一旦逼人绕开正确的分层，下一个人就会直接删掉它。
+    const offenders: string[] = []
     for (const file of collectSources(pagesDir)) {
       const code = stripComments(readFileSync(file, 'utf8'))
-      expect(code, `${rel(file)} 引了请求层/api —— 页面票不在 #18 范围内`).not.toMatch(
-        /from\s+['"][^'"]*(request|api)[^'"]*['"]/,
-      )
+      // 只匹配指到 `request/` 的那条路径 —— `api/` 是页面合法的依赖。
+      if (/from\s+['"][^'"]*\/request\//.test(code)) offenders.push(rel(file))
     }
+
+    expect(
+      offenders,
+      `以下页面直接 import 了请求层 —— 页面应调 api/ 的函数，不绕过分层（07 §3）：\n` +
+        offenders.map((f) => `  • ${f}`).join('\n'),
+    ).toEqual([])
+  })
+
+  it('⚠️ `pages/` 不出现裸 URL —— 端点路径只在 `api/` 里拼（07 §3 硬规则 2）', () => {
+    // 上一条挡的是「引了 request 模块」，这一条挡的是**另一半**：
+    // 页面自己拼一个 `/api/app/v1/...` 的字面量。它即使不 import 请求层也做不到 ——
+    // 但一旦有人把请求层从 `api/` 重新导出给页面，这条路就通了。
+    //
+    // ⚠️ 判据取 `API_PREFIX` 的字面值 `/api/app/v1`：它在 `request/config.ts` 里
+    // 有唯一一个家，页面里出现任何一个都说明端点路径被抄了一份。
+    const offenders: string[] = []
+    for (const file of collectSources(pagesDir)) {
+      const code = stripComments(readFileSync(file, 'utf8'))
+      if (code.includes('/api/app/v1')) offenders.push(rel(file))
+    }
+
+    expect(
+      offenders,
+      `以下页面里出现了裸的 API 前缀 —— 端点路径只在 api/ 里拼（07 §3 硬规则 2）：\n` +
+        offenders.map((f) => `  • ${f}`).join('\n'),
+    ).toEqual([])
   })
 })
 

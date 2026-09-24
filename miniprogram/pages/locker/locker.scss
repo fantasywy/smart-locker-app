@@ -1,12 +1,34 @@
-// 储物柜页 —— 空壳样式（issue #22）。页面票整体替换本文件。
+// 柜机页的样式 —— 全部走 `10` 的 token 与 mixin，**零裸 hex**（`10` §6 禁令 5）。
+//
+// 契约出处：`docs/spec/10-visual-language.md` §3（token 取值）、§5（mixin 契约）、
+// §6（使用禁令）、§7.2（`rpx` / `px` 分工）；页面形态出处
+// `docs/spec/01-entry-and-identity.md` §6 / §6.1。
+//
+// ## 三条视觉裁决
+//
+// 1. **单位照 `10` §7.2**：**布局几何用 `rpx`**（跟随屏宽），**字号与 1px 级细节用 `px`**
+//    （色条 3px、边框 1px）。本文件没有色条，所以几何一律 `rpx`、字号一律 `px`。
+//
+// 2. **置灰不造色、不借语义色。** `10` §6 禁令 7 逐字：「**不用语义色表达『可点 / 不可点』**…
+//    **不存在『灰色 = 禁用』这套用法**。中性档是语义档，不是禁用态。」
+//    ⇒ 置灰的表现是 **`$color-text-weak` 的文字 + 弱化的底色/边框**，且它**必须**配一行
+//    原因说明（`01` §6.1：「置灰并写明原因」—— 置灰即不给原因，是裸错误码的变体）。
+//    ⚠️ `$color-text-weak`（3.02）**只给占位符与禁用态**（`10` §3.3 逐字）——
+//    这里正是它合法的两个用途之一，而**原因行**承载信息，必须走 `$color-text-sub`（5.45）。
+//
+// 3. **三档入口是并列的等宽块，不是一列列表。** 用户在这一屏要回答的问题是
+//    「我要存多大的东西」——三档是**同一件事的三个选项**，横排让他一眼比完余位。
+//    竖排会让「哪一档还有空」变成三次视线移动。
 
 @use '../../styles/variables' as v;
+@use '../../styles/mixins' as m;
 
 page {
   height: 100vh;
   display: flex;
   flex-direction: column;
   // ⚠️ 显式设一次主文字色 —— `10` §6 禁令 4：页面根节点不得依赖继承。
+  // device 曾因继承深色主题的文字色导致白底对比度 1.23、整片看不见（2026-09-17）。
   color: v.$color-text-main;
   background: v.$color-bg-page;
   font-family: v.$font-family;
@@ -15,4 +37,267 @@ page {
 .page {
   flex: 1;
   overflow-y: auto;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 入口失效页 —— 两种情况（解析不出 code / 1002）共用这一份结构。
+// ─────────────────────────────────────────────────────────────────────────────
+
+.entry-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 160rpx v.$spacing-xxl 0;
+
+  &__title {
+    font-size: v.$font-size-title;
+    line-height: 1.5;
+  }
+
+  // 说明句承载信息 —— 走 sub（5.45 ✅），不是 weak（3.02 ❌）。
+  &__detail {
+    margin-top: v.$spacing-sm;
+    color: v.$color-text-sub;
+    font-size: v.$font-size-body;
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  &__actions {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    margin-top: v.$spacing-xxl;
+  }
+}
+
+// ⚠️ 两个出口都是 `<button>`：它们是这一屏**唯一的**两条出路，
+// 用 `<view>` + `bindtap` 会丢掉原生的可点目标语义与无障碍角色。
+// 与 `empty-state` 的主行动同一个裁决（那个文件里的裁决 4）。
+.entry-failed__primary,
+.entry-failed__secondary {
+  width: 100%;
+  height: 88rpx;
+  margin: 0;
+  padding: 0;
+  font-size: v.$font-size-title;
+  line-height: 88rpx;
+  border-radius: v.$radius-component;
+
+  // 小程序 `<button>` 自带一层边框，reset 掉。
+  &::after {
+    border: none;
+  }
+}
+
+// 主行动 —— 「重新扫码」。它是这一屏最该被点的那一个（用户手上的码没用了，
+// 而柜机上现在就贴着一张能用的）。
+.entry-failed__primary {
+  color: v.$color-bg-card;
+  background: v.$color-primary;
+}
+
+// ⚠️ 按下态用 `$color-primary-hover`，不是 `-active` —— `10` §3.1 给这两个 token 分了
+// 不同语义：`-hover` 是「按下态」，`-active` 是「正常/激活档」且同时是绿色文字的 ink。
+// 与 `empty-state__action_active` / `failure-exit__retry` 保持一致。
+.entry-failed__primary_active {
+  background: v.$color-primary-hover;
+}
+
+// 次行动 —— 「我的订单」。它退到描边样式：主行动是「再扫一次」，而出口是备选。
+.entry-failed__secondary {
+  margin-top: v.$spacing-md;
+  color: v.$color-text-main;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+}
+
+.entry-failed__secondary_active {
+  background: v.$color-bg-page;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 柜机信息 —— 站点名 + 位置 + （可能有的）不可用原因
+// ─────────────────────────────────────────────────────────────────────────────
+
+.locker {
+  padding: v.$spacing-lg;
+}
+
+.locker__header {
+  @include m.card;
+  padding: v.$spacing-lg;
+}
+
+.locker__site {
+  font-size: v.$font-size-title;
+  line-height: 1.5;
+}
+
+.locker__position {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.5;
+}
+
+// 柜机不可用的原因 —— **页内一行字**（`01` §6.1「置灰并写明原因」）。
+//
+// ⚠️ 它**不整块染红**（`10` §6 禁令 2：不得整卡、整行、整屏染色），
+// 也**不借语义色做文字**（禁令 1）。它是一个中性的事实陈述 ——
+// `01` §6.1 把「柜机不可用」明确归为**正常响应**，用警示色反而会把它说成异常。
+.locker__reason {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.6;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 三档入口 —— 横排等宽，逐档独立置灰
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ⚠️⚠️ **三档必须三等分，而 `flex: 1` 单独用是不够的。**
+//
+// 真机走查抓到的缺陷（本文件第一版）：三档渲染出来**只有两块**，第三块（大）整个不见了。
+// 成因是 flex 项的**默认 `min-width: auto`** —— 它让每一块的最小宽度等于内容的
+// 最小宽度，于是 `.cell__reason` 那行较长的置灰原因（「这台柜机暂时不可用，可以换一台
+// 或稍后再试」）把三块一起撑到超出容器，最后一块被挤出视口。
+// 更坏的是它**没有报错、没有溢出提示**：用户在屏上就是看不到「大」这一档，
+// 而那一档恰好是**唯一还有余位**的场合也不少见。
+//
+// ⇒ 修法是给 flex 项**同时**上 `flex: 1`、`min-width: 0` 与 `flex-basis: 0`：
+//   • `min-width: 0` 解除 `auto` 的最小宽度（**这一条是关键**，缺了它前两条都白搭）；
+//   • `flex-basis: 0` 让宽度**只**由 `flex-grow` 决定，三块因此严格等分，
+//     与各自内容的长度无关 —— 「小 0」与「中 0」两块的宽度不同也会让版式看起来是坏的。
+//
+// ⚠️ 这是**纯几何**问题，与 `10` 的色调层无关：置灰的颜色、原因文案都按 spec 写对了，
+// 唯独版式把它们挤没了。这类缺陷只有真机/模拟器看得出来 —— `pnpm test` 断言的是
+// `data.cells` 有三项（数据层完全正确），`verify-visual-tokens` 只看 token 取值。
+.locker__cells {
+  display: flex;
+  margin-top: v.$spacing-lg;
+}
+
+.cell {
+  flex: 1 1 0;
+  // ⚠️ 缺了这一条，`flex: 1` 会被内容的最小宽度顶住，三块不等分（见上）。
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  // 三块之间留缝 —— 用 `+` 而不是 `:first-child`，
+  // 后者在小程序的 wxss 选择器支持里要小心（本仓库一律用简单选择器）。
+  & + & {
+    margin-left: v.$spacing-md;
+  }
+}
+
+.cell__button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 176rpx;
+  margin: 0;
+  padding: 0;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  line-height: 1.4;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+
+  &::after {
+    border: none;
+  }
+}
+
+.cell__button_active {
+  background: v.$color-bg-page;
+}
+
+// ⚠️ **禁用态不是语义档**（`10` §6 禁令 7）。这里只做两件事：
+//   1. 把文字降到 `$color-text-weak`（`10` §3.3 明写「只给占位符与禁用态」——正是此处）；
+//   2. 把底色与边框降一级，让「可点 / 不可点」在**材质**上分开，而不是靠颜色语义。
+// ❌ 不染红、不染灰语义色、不加删除线 —— 那些都在替服务端说它没说的话。
+.cell__button.is-disabled {
+  color: v.$color-text-weak;
+  background: v.$color-bg-page;
+  border-color: v.$color-border;
+}
+
+.cell__label {
+  font-size: v.$font-size-title;
+}
+
+.cell__available {
+  margin-top: v.$spacing-xs;
+  font-size: v.$font-size-aux;
+}
+
+// 该档的置灰原因 —— 「该规格已满」/「这台柜机暂时不可用…」。
+//
+// ⚠️ 它**必须存在**（`01` §6.1：「置灰并**写明原因**」；`09` §10：
+// 「置灰即不给原因，是裸错误码的变体」）。走 `$color-text-sub`（5.45 ✅）——
+// 它是**承载信息**的文字，不是占位符；用 weak 会让最该被读到的那句话最看不清。
+.cell__reason {
+  margin-top: v.$spacing-sm;
+  // ⚠️ `width: 100%` 是**必须的**，与 `.cell` 的 `min-width: 0` 配套：
+  // 没有它时这行文字按**内容宽度**排版（不换行），于是它反过来把 `.cell` 撑宽 ——
+  // 而 `.cell` 一旦被撑宽，三档就不再等分，最宽的那一块把第三块挤出视口。
+  // 真机走查里「大档整个不见了」的直接成因就是这一条（见 `.locker__cells` 的说明）。
+  width: 100%;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-meta;
+  line-height: 1.5;
+  text-align: center;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 预约入口 —— 本页的次要行动
+// ─────────────────────────────────────────────────────────────────────────────
+
+.locker__actions {
+  margin-top: v.$spacing-xxl;
+}
+
+// ⚠️ 它是次要入口（`09` §6 第 5 条），所以用描边而不是实心 ——
+// 实心会把「预约」抬到与三档存件入口同等的视觉重量，而用户扫码进来
+// 十有八九是来存件的。
+.locker__reserve {
+  width: 100%;
+  height: 88rpx;
+  margin: 0;
+  padding: 0;
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  line-height: 88rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-component;
+
+  &::after {
+    border: none;
+  }
+}
+
+.locker__reserve_active {
+  background: v.$color-bg-page;
+}
+
+// 与 `.cell__button.is-disabled` 同一条口径：置灰不造色、不借语义档。
+.locker__reserve.is-disabled {
+  color: v.$color-text-weak;
+  background: v.$color-bg-page;
+}
+
+// 预约入口的置灰原因 —— 与三档的原因行同一条纪律（它必须写明原因）。
+.locker__reserve-reason {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-meta;
+  line-height: 1.5;
 }

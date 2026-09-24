@@ -88,6 +88,53 @@ export interface WxSwitchTabOptions {
   complete?: () => void
 }
 
+/** `wx.navigateTo` / `wx.redirectTo` 的 options —— 形状相同，一个类型够用。 */
+export interface WxNavigateToOptions {
+  /**
+   * ⚠️ **不能是 tabBar 页**（`wx.navigateTo` 对 tabBar 页**静默失败**）——
+   * 这也正是 `wx.switchTab` 存在的原因（见 `WxSwitchTabOptions`）。
+   */
+  url: string
+  success?: (res: { errMsg: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `wx.scanCode` 的 options —— 通道 B（`01` §2.2）。 */
+export interface WxScanCodeOptions {
+  onlyFromCamera?: boolean
+  scanType?: string[]
+  success?: (res: { result: string; scanType?: string; errMsg?: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/**
+ * `wx.showModal` / `wx.showToast` 的 options。
+ *
+ * ⚠️ 它们出现在桩里的**唯一**理由是让「**不该弹窗**」这条断言写得出来 ——
+ * `01` §6.1 把 `online = false` 与余位 0 定为**正常响应**，而「做成错误弹窗」
+ * 恰恰是最像「功能正常」的那种退化（弹窗真的弹出来了，手测不会觉得有问题）。
+ * 有了这两个桩，「一次都没弹过」就是一条可执行的事实。
+ */
+export interface WxShowModalOptions {
+  title?: string
+  content?: string
+  showCancel?: boolean
+  success?: (res: { confirm: boolean; cancel: boolean }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+export interface WxShowToastOptions {
+  title?: string
+  icon?: string
+  duration?: number
+  success?: (res: { errMsg: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
 /** `wx.*` 全局的形状。刻意只列本仓库会碰到的成员 —— 用不到的 API 不预先编造。 */
 /** `installWxStub()` 的返回：桩本身，外加一个手动卸载口。 */
 export interface InstalledWxStub extends WxStub {
@@ -102,6 +149,11 @@ export interface WxStub {
   removeStorageSync: Mock<(key: string) => void>
   request: Mock<(options: WxRequestOptions) => void>
   switchTab: Mock<(options: WxSwitchTabOptions) => void>
+  navigateTo: Mock<(options: WxNavigateToOptions) => void>
+  redirectTo: Mock<(options: WxNavigateToOptions) => void>
+  scanCode: Mock<(options: WxScanCodeOptions) => void>
+  showModal: Mock<(options: WxShowModalOptions) => void>
+  showToast: Mock<(options: WxShowToastOptions) => void>
 }
 
 /** 未编排调用时的兜底错误 —— 让「忘了编排」在测试输出里一眼可辨。 */
@@ -198,6 +250,20 @@ export function installWxStub(): InstalledWxStub {
     // ⚠️ 未编排即失败（与 `login` / `request` 同一条纪律）：柜机页的「我的订单」出口
     // 若改回死按钮，这里会**抛错**而不是静默什么都不发生 —— 静默正是那个缺陷的症状。
     switchTab: unstubbed<[WxSwitchTabOptions]>('switchTab'),
+    // ⚠️ 三个跳转 API **同一条纪律**，理由在柜机页上尤其硬：
+    //   • `navigateTo` / `redirectTo` —— 等待态的移交**必须**是 `redirectTo`（`08` §2）。
+    //     一个静默返回的桩会让「用了 navigateTo」与「用了 redirectTo」都绿，
+    //     而那个差别是「返回键能不能退回柜机页再开一次门」。
+    //   • `scanCode` —— 入口失效页的「重新扫码」是用户唯一的出路；静默成功等于死按钮。
+    navigateTo: unstubbed<[WxNavigateToOptions]>('navigateTo'),
+    redirectTo: unstubbed<[WxNavigateToOptions]>('redirectTo'),
+    scanCode: unstubbed<[WxScanCodeOptions]>('scanCode'),
+    // ⚠️ 这两个是**故意**未编排即失败的，与上面几个的方向相反：
+    // 它们的正确用量是**零次**（`01` §6.1 把柜机不可用与余位 0 定为**正常响应**，
+    // 而通用错误弹窗正是最像「功能正常」的退化）。未编排即抛错让
+    // 「一次都不该弹」这件事在**任何**用例里都自动成立 —— 而不必每个用例都写一遍断言。
+    showModal: unstubbed<[WxShowModalOptions]>('showModal'),
+    showToast: unstubbed<[WxShowToastOptions]>('showToast'),
   }
 
   // ⚠️ 预置值走**内存表**而不是覆盖 mock：读写仍然是一张表，语义完整。
