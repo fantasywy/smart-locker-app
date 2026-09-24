@@ -6,7 +6,7 @@
 // **不测**内部实现 —— 不测登录链内部怎么分叉、不测私有函数被调用几次。
 
 import { describe, expect, it } from 'vitest'
-import { installWxStub, jsonResponse, reply } from '../helpers/wx'
+import { installWxStub, jsonResponse, reply, seedStorage } from '../helpers/wx'
 import type { WxRequestSuccessResult } from '../helpers/wx'
 import { requestsTo, respondInOrder, sentRequests } from '../helpers/http'
 import { login, refresh } from '../../miniprogram/api/auth'
@@ -167,9 +167,7 @@ describe('#18 冷启动登录链：无 refresh token → wx.login → 13.1 → �
     // 两者都是错的 —— 刷新只由 401 驱动（#19），本地时间不可信。
     const wx = installWxStub()
     // storage 里**只有** refresh、没有 access：这正是一个「可能已过期」的真实形态。
-    wx.getStorageSync.mockImplementation((key: string) =>
-      key === 'auth.refreshToken' ? 'REFRESH-EXISTING' : undefined,
-    )
+    seedStorage('auth.refreshToken', 'REFRESH-EXISTING')
 
     const result = await ensureLoggedIn()
 
@@ -248,9 +246,7 @@ describe('#18 冷启动登录链：13.1 / 13.2 不被附加 access 头（防递�
     // `401 + 2005` 清态重登会走到它，那时 storage 里可能还残留着旧 access。
     // 这条锁住：重登请求**不**带旧 access（免鉴权豁免对登录链的每一条路都成立）。
     const wx = stubLoginFlow([jsonResponse(loginBody())])
-    wx.getStorageSync.mockImplementation((key: string) =>
-      key === 'auth.accessToken' ? 'STALE-ACCESS' : undefined,
-    )
+    seedStorage('auth.accessToken', 'STALE-ACCESS')
 
     await ensureLoggedIn()
 

@@ -184,3 +184,50 @@ describe('#18 工程约束：token 读写集中在一个模块（07 §4.4）', (
     }
   })
 })
+
+describe('#19 工程约束：依赖方向单向 —— request/ 不得依赖 api/（07 §3 / §4）', () => {
+  it('⚠️ `request/` 里没有任何 `../api/...` 的 import', () => {
+    // `07` §3 的分层是 `pages/ → api/ → request/`：**页面调 `api/` 的函数**，而请求层被
+    // 所有人依赖、自己不被任何上层依赖。
+    //
+    // ⚠️ 这条守卫是 #19 逼出来的。登录失效处理必须自己去调 `13.1` / `13.2`，最自然的写法是
+    // `request/index.ts` 里 `import { login, refresh } from '../api/auth'` —— 而 `api/auth.ts`
+    // 反过来用的正是请求层的出口。两行同时写下去就是 `request ⇄ api` **模块循环**。
+    //
+    // 循环**不会在类型上报错**，也不一定立刻炸：只有某一方在**模块求值期**（顶层常量、
+    // 装饰器、立即执行的表达式）用到另一方时才会拿到 `undefined`。今天「碰巧没事」，
+    // 而它会在未来某次无害的重构里突然显形，症状（`login is not a function`）与改动毫无关系
+    // —— 这正是必须用守卫钉住、而不是靠注释提醒的那类约束。
+    //
+    // 正解见 `request/auth-endpoints.ts` 的头注释：端点形状长在 request/ 里，`api/auth.ts` 重导出。
+    const offenders: string[] = []
+    for (const file of collectSources(requestDir)) {
+      const code = stripComments(readFileSync(file, 'utf8'))
+      if (/from\s+['"][^'"]*\/api\//.test(code)) offenders.push(rel(file))
+    }
+
+    expect(
+      offenders,
+      `request/ 里的文件 import 了 api/ —— 这构成模块循环，破坏单向依赖（07 §3）：\n` +
+        offenders.map((f) => `  • ${f}`).join('\n'),
+    ).toEqual([])
+  })
+
+  it('端点的 URL 字面量仍然只有一份（重导出没有制造第二份路径）', () => {
+    // 重导出 `13.1` / `13.2` 时最容易的退化是「顺手把路径字符串也抄一份」——
+    // 而 `07` §4.3 硬约束 5 的豁免名单就是拿这个字符串比对的，
+    // 两处字面量之间的漂移**就是鉴权缺口**。`config.ts` 是它唯一的家。
+    const offenders: string[] = []
+    for (const file of [...collectSources(requestDir), ...collectSources(apiDir)]) {
+      if (file === join(requestDir, 'config.ts')) continue
+      const code = stripComments(readFileSync(file, 'utf8'))
+      if (/['"]\/api\/app\/v1\/auth\//.test(code)) offenders.push(rel(file))
+    }
+
+    expect(
+      offenders,
+      `以下文件自己写了 auth 端点路径字面量 —— 路径只有 config.ts 一个家（07 §4.3 硬约束 5）：\n` +
+        offenders.map((f) => `  • ${f}`).join('\n'),
+    ).toEqual([])
+  })
+})

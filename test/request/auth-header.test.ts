@@ -4,7 +4,7 @@
 // 读法用 `test/helpers/http.ts` 的 `sentRequests()` / `requestsTo()`。
 
 import { describe, expect, it } from 'vitest'
-import { installWxStub, jsonResponse } from '../helpers/wx'
+import { installWxStub, jsonResponse, seedStorage } from '../helpers/wx'
 import type { WxRequestSuccessResult } from '../helpers/wx'
 import { requestsTo, sentRequests } from '../helpers/http'
 import { request, requestWithoutAuth } from '../../miniprogram/request'
@@ -22,7 +22,7 @@ function stubOk(data: unknown = null): ReturnType<typeof installWxStub> {
 describe('#18 鉴权头：需鉴权的请求携带 Authorization: Bearer <access>', () => {
   it('storage 里有 access → 请求头带 Bearer access', async () => {
     const wx = stubOk()
-    wx.getStorageSync.mockReturnValue('ACCESS-1')
+    seedStorage('auth.accessToken', 'ACCESS-1')
 
     await request('/api/app/v1/orders')
 
@@ -35,7 +35,7 @@ describe('#18 鉴权头：需鉴权的请求携带 Authorization: Bearer <access
     // `Authorization: Bearer undefined`，后端回一个与真实原因无关的错误码，
     // 排查时会被误导到别处。没 token 就不带这个头，让服务端如实回 2001。
     const wx = stubOk()
-    wx.getStorageSync.mockReturnValue(undefined)
+    // 空的 storage 就是新装桩的默认状态 —— 不再覆盖读取实现（见 wx.ts 的 seedStorage 注释）
 
     await request('/api/app/v1/orders')
 
@@ -49,7 +49,7 @@ describe('#18 鉴权头：需鉴权的请求携带 Authorization: Bearer <access
     // 就该走同一条路。
     for (const bogus of [{}, '', 0]) {
       const wx = stubOk()
-      wx.getStorageSync.mockReturnValue(bogus)
+      seedStorage('auth.accessToken', bogus)
 
       await request('/api/app/v1/orders')
 
@@ -65,7 +65,7 @@ describe('#18 免鉴权豁免：13.1 与 13.2 不被附加 access 头', () => {
     // 唯二豁免端点的硬编码依据：`WebMvcConfig.java:46-47` 的 `excludePathPatterns`
     // （`/api/app/v1/auth/login`、`/api/app/v1/auth/refresh`）—— **只有这两个**（`07` §4.3 硬约束 5）。
     const wx = stubOk()
-    wx.getStorageSync.mockReturnValue('ACCESS-EXISTS')
+    seedStorage('auth.accessToken', 'ACCESS-EXISTS')
 
     await requestWithoutAuth('/api/app/v1/auth/login', { method: 'POST', data: { code: 'C1' } })
 
@@ -75,7 +75,7 @@ describe('#18 免鉴权豁免：13.1 与 13.2 不被附加 access 头', () => {
 
   it('13.2 /auth/refresh 即使 storage 里有 access 也不带头', async () => {
     const wx = stubOk()
-    wx.getStorageSync.mockReturnValue('ACCESS-EXISTS')
+    seedStorage('auth.accessToken', 'ACCESS-EXISTS')
 
     await requestWithoutAuth('/api/app/v1/auth/refresh', {
       method: 'POST',
@@ -92,7 +92,7 @@ describe('#18 免鉴权豁免：13.1 与 13.2 不被附加 access 头', () => {
     // 登录链带上 access，进而在 #19 的刷新队列上长出递归。
     // 两道闸门都要能独立挡住，这条验的是名单那道。
     const wx = stubOk()
-    wx.getStorageSync.mockReturnValue('ACCESS-EXISTS')
+    seedStorage('auth.accessToken', 'ACCESS-EXISTS')
 
     await request('/api/app/v1/auth/login', { method: 'POST', data: { code: 'C1' } })
     await request('/api/app/v1/auth/refresh', { method: 'POST' })
@@ -107,7 +107,7 @@ describe('#18 免鉴权豁免：13.1 与 13.2 不被附加 access 头', () => {
     // `13.3 logout` 在用户端**不在**豁免名单里（`WebMvcConfig` 的 app 拦截器那两行只排除了
     // login / refresh），而 `/profile` 这类更明显。
     const wx = stubOk()
-    wx.getStorageSync.mockReturnValue('ACCESS-1')
+    seedStorage('auth.accessToken', 'ACCESS-1')
 
     await request('/api/app/v1/auth/logout', { method: 'POST' })
     await request('/api/app/v1/profile')

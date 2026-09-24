@@ -18,9 +18,9 @@
 //    （页面从不读它）。集中在一处还有一个收益：将来若加「退出登录」（一期不做，
 //    `01` §5 有意不做），只需改这一个文件。
 //
-//    ⚠️ 但**本票只提供当前真正被用到的读 / 写**：`getAccessToken` / `getRefreshToken` /
-//    `saveTokens` / `setAccessToken`。清态（`clearTokens`）与刷新都属 #19，
-//    等它们有调用点时再写进来 —— 不为了「读写面完整」而提前放一个无人调用的破坏性函数。
+//    ⚠️ **读写面只提供当前真正被用到的**：`getAccessToken` / `getRefreshToken` /
+//    `saveTokens` / `setAccessToken` / `clearTokens`。最后一个由 #19 的登录失效处理
+//    带来（`401 + 2005` 的清态重登）—— 它有真实调用点，不是为「读写面完整」预放的。
 //
 // ⚠️ 已知副作用（**有意接受，勿当缺陷修**，`07` §4.4 已登记）：
 // token 持久化叠加「不做退出登录」⇒ **App 内没有任何清除登录身份的入口**，
@@ -61,6 +61,22 @@ export function saveTokens(accessToken: string, refreshToken: string): void {
 }
 
 /**
+ * ⚠️ **清登录态** —— 两个 key 一起删，`401 + 2005` 分支的「清态」用的是它。
+ *
+ * `01` §3.4 的状态机写作 `[清态重登] = wx.login → 13.1`，清态**先于**重登：
+ * 它保证重登失败时不会留下一个「refresh 看起来还在、其实已经失效」的假登录态
+ * —— 否则下一次冷启动会因为「有 refresh」而被 `api/session.ts` 直接放行，
+ * 用户被永久卡在一个每次都 401 的死循环里。
+ *
+ * ⚠️ 它**不是**「退出登录」功能：`01` §5 有意不做退出登录，本函数没有任何 UI 调用点，
+ * 只在登录失效处理内部被调用（`07` §4.3）。
+ */
+export function clearTokens(): void {
+  wx.removeStorageSync(ACCESS_TOKEN_KEY)
+  wx.removeStorageSync(REFRESH_TOKEN_KEY)
+}
+
+/**
  * ⚠️ **只更新 access，refresh 原值保留。**
  *
  * `13.2` 的响应里**没有** `refreshToken`（只有 `{ accessToken, expiresIn }`，
@@ -76,13 +92,9 @@ export function setAccessToken(accessToken: string): void {
 }
 
 /**
- * ⚠️ **刻意没有 `clearTokens()`。** 清登录态属 #19 的 `401 + 2005` 链路（清态重登），
- * 本票（#18）没有任何调用点。
- *
- * 早先这里有一个「为了读写面完整」而提前加上的 `clearTokens()` —— 那是 Speculative
- * Generality：**没有任何验收标准要求它**，而 #19 真要清态时，它会连同自己的测试一起
- * 写在这里（成本几乎为零）。提前放一个无人调用的破坏性函数，收益是零、风险是
- * 「后来者以为它已经在某处被用上了」。
+ * ⚠️ **本模块刻意不加别的东西。** 每加一个函数都该有真实调用点 —— #18 落地时这里
+ * 曾提前放过一个无人调用的 `clearTokens()`，那是 Speculative Generality，
+ * 后来被删掉、等 #19 真的要用时才连同测试一起写回来（见上面的 `clearTokens`）。
  */
 
 /**

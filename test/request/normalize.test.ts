@@ -13,9 +13,9 @@
 // （`API:44`）。只判 HTTP 状态码会漏掉全部业务错误；只判 `code` 会把 403 误当业务错误。
 
 import { describe, expect, it } from 'vitest'
-import { installWxStub, jsonResponse, networkFailure } from '../helpers/wx'
+import { installWxStub, jsonResponse, networkFailure, seedStorage } from '../helpers/wx'
 import type { WxRequestSuccessResult } from '../helpers/wx'
-import { request } from '../../miniprogram/request'
+import { request, requestWithoutAuth } from '../../miniprogram/request'
 import { installFakeTimers } from '../helpers/timers'
 
 /** 编排 `wx.request` 依次返回给定的响应，然后发一条请求，返回调用方拿到的东西。 */
@@ -34,8 +34,37 @@ async function callWith(
     })
   })
   // storage 预置一个 access —— 本组用例验的是归一化，不该被「没登录」干扰。
-  wx.getStorageSync.mockReturnValue('ACCESS')
+  seedStorage('auth.accessToken', 'ACCESS')
   return request('/api/app/v1/orders')
+}
+
+/**
+ * 与 `callWith` 相同，但走**免鉴权出口** —— 用它来观察请求层对一份原始响应的**归一化分类**。
+ *
+ * ⚠️ 为什么 401 的用例必须走这条路（#19 之后）：`request()` 会把 `401 + 2001 / 2005`
+ * 在**内部消费掉**（刷新 / 清态重登 + 重放，`07` §4.3），调用方看到的已经不是那个 401 了。
+ * 而归一化分类本身（`07` §4.2 的表）仍然要逐条锁住 —— 它是刷新分支的**判据**：
+ * `recoveryTriggerFor()` 读的就是这里归出来的 `code`。
+ * `13.1` / `13.2` 这两个豁免端点不挂恢复逻辑（硬约束 4），因此这里看到的是**原始分类**。
+ *
+ * 这是**外部行为**的断言，不是内部实现耦合：走的是公开出口，验的是公开契约
+ * （「一份 401 响应被归成什么」），与归一化的内部结构无关。
+ */
+async function classifyRaw(
+  responses: readonly (WxRequestSuccessResult | { errMsg: string })[],
+): Promise<unknown> {
+  const wx = installWxStub()
+  let index = 0
+  wx.request.mockImplementation((options) => {
+    const result = responses[index]
+    index += 1
+    if (result === undefined) throw new Error(`只编排了 ${responses.length} 个响应，但发生了第 ${index} 次请求`)
+    queueMicrotask(() => {
+      if ('statusCode' in result) options.success?.(result)
+      else options.fail?.(result)
+    })
+  })
+  return requestWithoutAuth('/api/app/v1/auth/refresh', { method: 'POST' })
 }
 
 /** 取失败分支的统一异常对象；拿到成功分支说明断言前提就不成立。 */
@@ -101,8 +130,8 @@ describe('#18 请求层归一化：业务错误走 HTTP 200 + code ≠ 0', () =>
 })
 
 describe('#18 请求层归一化：认证 / 权限走真 HTTP 状态码', () => {
-  it('401 + 2001 → kind 为 unauthorized（本票只分类，处理归 #19）', async () => {
-    const result = await callWith([jsonResponse({ code: 2001, message: '未登录或登录已过期' }, 401)])
+  it('401 + 2001 → kind 为 unauthorized（本票只分类；消费它的是 #19 的刷新队列）', async () => {
+    const result = await classifyRaw([jsonResponse({ code: 2001, message: '未登录或登录已过期' }, 401)])
     const error = errorOf(result)
 
     expect(error.kind).toBe('unauthorized')
@@ -112,7 +141,7 @@ describe('#18 请求层归一化：认证 / 权限走真 HTTP 状态码', () => 
   })
 
   it('401 + 2005 → kind 为 unauthorized', async () => {
-    const result = await callWith([jsonResponse({ code: 2005, message: '刷新令牌已失效' }, 401)])
+    const result = await classifyRaw([jsonResponse({ code: 2005, message: '刷新令牌已失效' }, 401)])
     const error = errorOf(result)
 
     expect(error.kind).toBe('unauthorized')
@@ -163,7 +192,7 @@ describe('#18 请求层归一化：网络失败与超时', () => {
     wx.request.mockImplementation((options) => {
       setTimeout(() => options.fail?.({ errMsg: 'request:fail timeout' }), 60_000)
     })
-    wx.getStorageSync.mockReturnValue('ACCESS')
+    seedStorage('auth.accessToken', 'ACCESS')
 
     const pending = request('/api/app/v1/orders')
     await timers.tick(60_000)
@@ -239,7 +268,7 @@ describe('#18 请求层归一化：5004 的判定只看 code（07 §4.2 原表�
 
   it('反面：401 + code 2001（非 5004）仍归 unauthorized，message 照常透传', async () => {
     // 守卫的边界：修 5004 的顺序不能把 401 的常规语义一起改掉。
-    const result = await callWith([jsonResponse({ code: 2001, message: '登录已过期', data: null }, 401)])
+    const result = await classifyRaw([jsonResponse({ code: 2001, message: '登录已过期', data: null }, 401)])
     const error = errorOf(result)
 
     expect(error.kind).toBe('unauthorized')

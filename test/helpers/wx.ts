@@ -168,7 +168,11 @@ export function installWxStub(): InstalledWxStub {
   // storage 的默认实现：一个真的会读写的内存表。
   // 为什么默认不是「未编排即失败」：storage 的语义就是读回自己写过的东西，
   // 让每个用例都手写一遍 getStorageSync 的返回值只会把真实验为噪音。
-  // 需要「storage 里本来就有 token」时，照样可以覆盖：getStorageSync.mockReturnValueOnce('...')。
+  //
+  // ⚠️ 需要「storage 里本来就有 token」时用下面导出的 `seedStorage()`，**不要**
+  // `getStorageSync.mockImplementation(...)` —— 那会整个替换掉内存表的读取实现，
+  // 于是 `setStorageSync` 再写什么都读不回来。「重放必须带刷新后的新 access」
+  // 这类断言会因此假失败（第一次请求的旧令牌被读了一辈子）。
   const memory = new Map<string, unknown>()
 
   const stub: WxStub = {
@@ -183,12 +187,36 @@ export function installWxStub(): InstalledWxStub {
     request: unstubbed<[WxRequestOptions]>('request'),
   }
 
+  // ⚠️ 预置值走**内存表**而不是覆盖 mock：读写仍然是一张表，语义完整。
+  seedStorageInto = (key: string, value: unknown): void => {
+    memory.set(key, value)
+  }
+
   host.wx = stub
   // ⚠️ 用**身份**登记归属，而不是鸭子类型判别。见 installedStub 的注释。
   owned = stub
 
   return Object.assign(stub, { uninstall: uninstallWxStub }) as InstalledWxStub
 }
+
+/**
+ * 往**当前**已安装的桩的 storage 内存表里预置一个值（如「冷启动时 token 已经在」）。
+ *
+ * ⚠️ 它是**函数**而不是 `installWxStub()` 的返回成员：`memory` 是每次安装新造的闭包，
+ * 而「预置」这件事只在装完之后才有意义。写成返回成员会诱导出
+ * `installWxStub().seed(...)` 这种丢掉其他成员的链式写法。
+ *
+ * @throws 还没装桩就调用时 —— 静默无效会让用例变成一条假通过的断言。
+ */
+export function seedStorage(key: string, value: unknown): void {
+  if (seedStorageInto === undefined) {
+    throw new Error('seedStorage() 必须在 installWxStub() 之后调用。')
+  }
+  seedStorageInto(key, value)
+}
+
+/** 当前桩的内存表写入口 —— `installWxStub()` 逐次装填；`uninstallWxStub()` 清空。 */
+let seedStorageInto: ((key: string, value: unknown) => void) | undefined
 
 /**
  * 当前由本模块装在 `globalThis` 上的桩 —— 靠**引用相等**判断归属。
@@ -209,4 +237,7 @@ export function uninstallWxStub(): void {
   const host = globalThis as unknown as Record<string, unknown>
   if (owned !== undefined && host.wx === owned) delete host.wx
   owned = undefined
+  // ⚠️ 一起清掉预置入口：留着会让**下一个**用例的 `seedStorage()` 悄悄写进
+  // 上一个用例已经废弃的内存表，然后读不到 —— 症状是「预置了 token 却像没预置」。
+  seedStorageInto = undefined
 }
