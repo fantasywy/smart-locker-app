@@ -5,7 +5,7 @@
 //
 // ⚠️ **为什么这两个函数在 `request/` 里，而不在 `api/` 里。**
 //
-// `07` §4 开头写着「请求层是唯一的 HTTP 出口，**也是登录失效处理的唯一场所**」。
+// 请求层是唯一的 HTTP 出口，**也是登录失效处理的唯一场所**。
 // 而登录失效处理必须**自己**去调 `13.1` / `13.2` —— 于是产生一个导入方向的矛盾：
 //
 //     api/auth.ts  ──import──▶  request/index.ts     （端点函数用请求出口，天经地义）
@@ -21,15 +21,15 @@
 // 分成两个文件而不是塞进 `index.ts`：`index.ts` 的主题是「出口 + 失效处理」，
 // 端点的 URL / 方法 / 头是另一件事（`Divergent Change`）。
 //
-// ⚠️ 这里**不是** `api/` 的一部分，也**不违背** `07` §3 硬规则 2：「`api/` 不含业务分支」
-// 约束的是**搬运层的语义**（不判状态、不给文案、不跳转）。本模块与 `api/auth.ts` 一样
+// ⚠️ 这里**不是** `api/` 的一部分，也**不违背**「`api/` 不含业务分支」——
+// 这条规则约束的是**搬运层的语义**（不判状态、不给文案、不跳转）。本模块与 `api/auth.ts` 一样
 // 只做搬运，一个业务分支都没有 —— 它只是**被请求层自己消费**的那一份。
 
 import type { LoginRequest, LoginResponse, RefreshResponse } from '../types/auth'
 import type { RequestResult } from './types'
 import { requestWithoutAuth } from './index'
 // ⚠️ 路径从 `config.ts` import，**不在这里再写一遍字面量**：同一个字符串存在两处
-// 就有漂移空间，而「豁免名单对不上真实请求路径」就是鉴权缺口（`07` §4.3 硬约束 5）。
+// 就有漂移空间，而「豁免名单对不上真实请求路径」就是鉴权缺口。
 import { LOGIN_PATH, REFRESH_PATH } from './config'
 
 /**
@@ -42,13 +42,13 @@ import { LOGIN_PATH, REFRESH_PATH } from './config'
  *
  * ⚠️ **黑名单用户允许登录** —— 响应里的 `user.status` 可能是 `BLACKLISTED` 而**登录照样成功**
  * （§13.1 :939）。⚠️ 上面引的「黑名单」是**后端契约原文**，照引不误；但**用户可见文案里不出
- * 这个词**，一律说「受限」（`09` §8 禁用词表、`GLOSSARY.md`「受限」）。
- * 本函数**不做任何基于 `status` 的阻断**（`04` §5「拦截权只能属于服务端」）
+ * 这个词**，一律说「受限」（`GLOSSARY.md`「受限」）。
+ * 本函数**不做任何基于 `status` 的阻断**（「拦截权只能属于服务端」）
  * —— 它把 `status` 作为字段原样交给调用方，「只读、不判断」（见 `types/auth.ts` 的说明）。
  *
  * ⚠️ `code` 无效 / 微信侧错误 → `8001`（**HTTP 200**、业务错误，§15 :1307），
- * 归一化成 `kind: 'business'`，**不是** `unauthorized`。调用方据此走全局失败出口
- * （`01` §4），而不是去刷新 token。
+ * 归一化成 `kind: 'business'`，**不是** `unauthorized`。调用方据此走全局失败出口，
+ * 而不是去刷新 token。
  *
  * @returns 成功时 `{ ok: true, data }`，`data` 即 `LoginResponse`（`accessToken` /
  *          `refreshToken` / `expiresIn` / `user`）；失败时统一异常对象。
@@ -64,7 +64,7 @@ export function login(payload: LoginRequest): Promise<RequestResult<LoginRespons
  *
  * 契约：API设计文档.md §13.2 (:941-943)
  *
- * ⚠️⚠️ **用 `X-Refresh-Token` 头，不是 Bearer access**（§13.2 :943、`R1` §13.2）。
+ * ⚠️⚠️ **用 `X-Refresh-Token` 头，不是 Bearer access**（§13.2 :943）。
  * refresh 的入参是请求头，请求体为空。
  *
  * ⚠️ 响应**只有** `{ accessToken, expiresIn }` —— **没有 `refreshToken`**（§13.2 :943）。

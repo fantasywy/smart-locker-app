@@ -1,17 +1,17 @@
-// 归一化 —— 把「一份原始响应」翻成 `07` §4.2 的统一异常对象。
+// 归一化 —— 把「一份原始响应」翻成统一异常对象。
 //
 // ⚠️ 本模块是**纯函数**：不碰 `wx.*`、不碰 storage、不弹窗、不抛异常。
 // 它是请求层里唯一「有分支」的地方，因此也是唯一值得单独测的地方 ——
 // 出口 `request/index.ts` 只负责「附加 token + 调 wx.request + 把结果交给这里」。
 //
-// 判断同时落在**两个**地方上（`07` §4.2 的硬要求）：
+// 判断同时落在**两个**地方上：
 //   • HTTP 状态码 —— 认证/权限用真 `401/403`（`API:44`）
 //   • body `code`  —— 业务错误走 `HTTP 200 + code ≠ 0`（`API:1319`）
 // 只看任一边都是错的：只看状态码会漏掉全部业务错误；只看 `code` 会把 `403` 当业务错误。
 
 import type { RequestResult, UnifiedError } from './types'
 
-/** `5004` —— 受限。`07` §4.2 的**唯一特判**（走 `04` §4 受限卡，不展示服务端 message）。 */
+/** `5004` —— 受限。**唯一特判**（走受限卡，不展示服务端 message）。 */
 const CODE_RESTRICTED = 5004
 
 /** 成功码。契约里 `code === 0` 表示成功（`API:1319` 的同一套响应包封）。 */
@@ -31,7 +31,7 @@ export function classifyResponse<T>(statusCode: number, body: unknown): RequestR
   //
   // 1. **「读不出 code」最优先**：网关回了 `<html>502</html>` 时状态码可能是 200，也可能是
   //    502 —— 但无论哪个，我们手里的事实只有「这不是契约响应」，归 `network` 才对
-  //    （`07` §4.2「非 JSON 响应」）。若先按状态码分支，`200 + HTML` 会掉进「成功」分支，
+  //    （「非 JSON 响应」）。若先按状态码分支，`200 + HTML` 会掉进「成功」分支，
   //    把一段 HTML 当成 DTO 交给调用方 —— 那是最坏的结果。
   // 2. **`5004` 其次**：它只看 `code`，不看状态码，所以必须先于状态码分支。详见下面那段注释。
   // 3. **认证/权限再次**：`401` / `403` 是契约里唯二用真 HTTP 状态码承载的错误（`API:44`）。
@@ -42,8 +42,8 @@ export function classifyResponse<T>(statusCode: number, body: unknown): RequestR
 
   // ⚠️⚠️ **`5004` 的判定只看 `code`，不看状态码 —— 所以它必须排在状态码分支之前。**
   //
-  // `07` §4.2 的触发行写的就是「`code === 5004`」，没有附带任何状态码前提。而 `5004` 的
-  // 语义是**账号级受限**（`04` §3），与「HTTP 状态码是多少」无关：后端若在鉴权层就把受限
+  // 判定条件就是「`code === 5004`」，没有附带任何状态码前提。而 `5004` 的
+  // 语义是**账号级受限**，与「HTTP 状态码是多少」无关：后端若在鉴权层就把受限
   // 用户的动作挡掉，返回的是 `403 + 5004`，而不是 `200 + 5004`。
   //
   // 若把这条放在 401/403 之后，`403 + 5004` 会归成 `forbidden` 并把服务端 message
@@ -63,7 +63,7 @@ export function classifyResponse<T>(statusCode: number, body: unknown): RequestR
   }
 
   if (statusCode === 403) {
-    // ⚠️ `403` 的 message 照常透传：`07` §4.2 的**特判只有 `5004` 一个**，
+    // ⚠️ `403` 的 message 照常透传：**特判只有 `5004` 一个**，
     // 不要顺手在这里也吞掉文案 —— 那会让「只有 5004 特判」这条口径名存实亡。
     // （`403 + 5004` 已在上面被拦走，到这里的是别的 `403`，message 该照常带。）
     return forbiddenFailure(envelope)
@@ -81,7 +81,7 @@ export function classifyResponse<T>(statusCode: number, body: unknown): RequestR
   // （用户以为一切正常，实际什么都没做成）。
   //
   // 归 `network` 而不是 `business`：`business` 的语义是「服务端按契约解释了一个业务原因，
-  // 按 `message` 直出」（`07` §4.2）。5xx 上的 message 是框架/网关话术，没有业务语义 ——
+  // 按 `message` 直出」。5xx 上的 message 是框架/网关话术，没有业务语义 ——
   // 拿它去解释给用户，等于替后端编了一个它没说的原因。`network` 的口径是
   // 「按该动作自身的重试口径处理」，正是 5xx 该有的待遇。
   if (statusCode < 200 || statusCode >= 300) {
@@ -89,12 +89,12 @@ export function classifyResponse<T>(statusCode: number, body: unknown): RequestR
   }
 
   if (envelope.code === CODE_SUCCESS) {
-    // `data` 原样交给调用方，请求层**不加工**（`07` §4.1：只搬运，不含业务分支）。
+    // `data` 原样交给调用方，请求层**不加工**（只搬运，不含业务分支）。
     return { ok: true, data: envelope.data as T }
   }
 
-  // 其余 `200 + code ≠ 0` —— **按 message 直出**，在动作点就地解释（`07` §4.2）。
-  // ⚠️ 服务端 message 原样携带，**不硬编码、不改写、不兜底成通用文案**（`R1:435`）。
+  // 其余 `200 + code ≠ 0` —— **按 message 直出**，在动作点就地解释。
+  // ⚠️ 服务端 message 原样携带，**不硬编码、不改写、不兜底成通用文案**。
   return businessFailure(statusCode, envelope.code, envelope.message)
 }
 
@@ -103,7 +103,7 @@ export function classifyResponse<T>(statusCode: number, body: unknown): RequestR
  *
  * ⚠️ `code` 与 `httpStatus` 都是 `null`：请求根本没有走完一个 HTTP 往返，
  * 没有任何业务码或状态码可言。`message` 用微信侧的 `errMsg` 原样承载 ——
- * 它是**诊断信息**，不会被直接展示给用户（`09` §7 的全局失败出口有自己的文案）。
+ * 它是**诊断信息**，不会被直接展示给用户（全局失败出口有自己的文案）。
  */
 export function classifyFailure(errMsg: string): RequestResult<never> {
   // 没有 HTTP 往返 ⇒ 没有状态码、没有业务码；`errMsg` 作为诊断信息承载（不会被直接展示）。
@@ -160,12 +160,12 @@ function unauthorizedFailure(envelope: Envelope): { ok: false; error: UnifiedErr
 }
 
 function forbiddenFailure(envelope: Envelope): { ok: false; error: UnifiedError } {
-  // ⚠️ 403 的 message 照常透传：`07` §4.2 的特判**只有 `5004` 一个**。
+  // ⚠️ 403 的 message 照常透传：特判**只有 `5004` 一个**。
   return { ok: false, error: { httpStatus: 403, code: envelope.code, message: envelope.message, kind: 'forbidden' } }
 }
 
 function restrictedFailure(httpStatus: number, code: number): { ok: false; error: UnifiedError } {
-  // ⚠️⚠️ `message: null` 是**唯一特判**的全部内容（`07` §4.2 / `04` §3 / `09` §3）。
+  // ⚠️⚠️ `message: null` 是**唯一特判**的全部内容。
   // 刻意**不接** message 参数：调用点无从「顺手把服务端原文传进来」——
   // 这是本票最容易在后续重构中被悄悄推翻的一条。
   return { ok: false, error: { httpStatus, code, message: null, kind: 'restricted' } }
@@ -176,7 +176,7 @@ function businessFailure(
   code: number,
   message: string | null,
 ): { ok: false; error: UnifiedError } {
-  // ⚠️ message **原样**携带（`R1:435` 不硬编码文案）。允许为 `null`：后端不给就如实为 `null`，
+  // ⚠️ message **原样**携带（不硬编码文案）。允许为 `null`：后端不给就如实为 `null`，
   // 由动作点决定兜底怎么说 —— 请求层不替它编一句。
   return { ok: false, error: { httpStatus, code, message, kind: 'business' } }
 }

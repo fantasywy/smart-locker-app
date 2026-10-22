@@ -17,7 +17,7 @@ import { installFakeTimers } from './helpers/timers'
 import { requestsTo, respondInOrder, sentRequests, urlsOf } from './helpers/http'
 
 // ---------- 演示用的最小归一化（不是业务逻辑，只服务本文件的断言） ----------
-// 形状承 `07` §4.2 的统一异常对象四字段。刻意只写演示所需的分支。
+// 形状承统一异常对象的四字段。刻意只写演示所需的分支。
 interface NormalizedError {
   httpStatus: number | null
   code: number | null
@@ -32,7 +32,7 @@ function normalize(result: WxRequestSuccessResult | { errMsg: string }): Normali
     return { ok: false, error: { httpStatus: null, code: null, message: null, kind: 'network' } }
   }
   const body = result.data
-  // 非 JSON 响应 = 连 code 都读不出来 —— 这是 `network` 的第三个触发（`07` §4.2）。
+  // 非 JSON 响应 = 连 code 都读不出来 —— 这是 `network` 的第三个触发。
   if (typeof body !== 'object' || body === null || !('code' in body)) {
     return { ok: false, error: { httpStatus: result.statusCode, code: null, message: null, kind: 'network' } }
   }

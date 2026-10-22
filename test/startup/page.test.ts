@@ -106,7 +106,7 @@ describe('#20 首页：闸门接线（重试真的到达闸门、状态真的画
     const page = instantiate(def)
     ;(page.attached as () => void)()
 
-    // 首帧必须是 loading —— 否则骨架屏永远不会出现（01 §3.2「结构先出现」）。
+    // 首帧必须是 loading —— 否则骨架屏永远不会出现（「结构先出现」）。
     // ⚠️ 这条也顺带钉住「先读 state 再订阅」的顺序：写反了这里就是 undefined/旧值。
     expect(page.data.phase).toBe('loading')
 
@@ -117,7 +117,7 @@ describe('#20 首页：闸门接线（重试真的到达闸门、状态真的画
   it('⚠️ 登录失败 → 画 failed（失败出口由启动态驱动）', async () => {
     const wx = installWxStub()
     wx.login.mockImplementation(reply({ code: 'WX-CODE', errMsg: 'login:ok' }))
-    // 后端 5xx —— `01` §4 穷举的成因之一。
+    // 后端 5xx —— 四类失败成因之一。
     wx.request.mockImplementation(respondInOrder([{ errMsg: 'request:fail timeout' }]))
 
     const { definition: def } = await loadPage()
@@ -128,7 +128,7 @@ describe('#20 首页：闸门接线（重试真的到达闸门、状态真的画
     expect(page.data.phase).toBe('failed')
   })
 
-  it('⚠️ 点重试 → 重新走一遍登录链并成功渲染（01 §4 / 09 §6 第 33 条）', async () => {
+  it('⚠️ 点重试 → 重新走一遍登录链并成功渲染', async () => {
     const wx = installWxStub()
     // `wx.login` 只有第一次失败，第二次成功 —— 模拟「网络恢复后重试」。
     wx.login.mockImplementationOnce(reply({ code: '', errMsg: 'login:fail' }, false))
@@ -180,11 +180,11 @@ describe('#20 首页：闸门接线（重试真的到达闸门、状态真的画
     release()
   })
 
-  it('⚠️ 登录成功且 status 为 BLACKLISTED → 照样画 ready（不阻断，04 §5）', async () => {
+  it('⚠️ 登录成功且 status 为 BLACKLISTED → 照样画 ready（不阻断）', async () => {
     const wx = installWxStub()
     wx.login.mockImplementation(reply({ code: 'WX-CODE', errMsg: 'login:ok' }))
     const body = loginBody()
-    // 把 user.status 改成 BLACKLISTED —— 登录**照样成功**（01 §1.4）。
+    // 把 user.status 改成 BLACKLISTED —— 登录**照样成功**。
     const data = body['data'] as Record<string, unknown>
     ;(data['user'] as Record<string, unknown>)['status'] = 'BLACKLISTED'
     wx.request.mockImplementation(respondInOrder([jsonResponse(body)]))
@@ -194,7 +194,7 @@ describe('#20 首页：闸门接线（重试真的到达闸门、状态真的画
     ;(page.attached as () => void)()
 
     await vi_wait()
-    // ⚠️ 页面**不得**因受限状态而画失败出口 —— 拦截权只能属于服务端（04 §5）。
+    // ⚠️ 页面**不得**因受限状态而画失败出口 —— 拦截权只能属于服务端。
     expect(page.data.phase).toBe('ready')
   })
 

@@ -6,7 +6,7 @@ page {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  // ⚠️ 显式设一次主文字色 —— `10` §6 禁令 4：页面根节点不得依赖继承。
+  // ⚠️ 显式设一次主文字色 —— 页面根节点不得依赖继承。
   color: v.$color-text-main;
   background: v.$color-bg-page;
   font-family: v.$font-family;

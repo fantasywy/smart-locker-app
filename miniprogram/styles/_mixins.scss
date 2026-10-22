@@ -35,7 +35,7 @@ $all-tones: (ok, info, warn, danger, muted);
   @return $tones;
 }
 
-/// **左缘那条 3px 语义色条**（`03` §5）—— 给「列表行 / 卡片要标状态」的场合。
+/// **左缘那条 3px 语义色条** —— 给「列表行 / 卡片要标状态」的场合。
 /// 语义色**原值**在这里只做装饰，一个字都不染；文字一律走 `tone-text`。
 /// 不写任何 `.is-*` 时是中性灰 `$color-info`。
 @mixin tone-bar(
@@ -88,7 +88,7 @@ $all-tones: (ok, info, warn, danger, muted);
 ///      **怎么调都过不了 AA**；只有琥珀在恰好 8% 时勉强 4.50（10% 就掉到 4.44）。
 ///   ② **浅灰面**：连 `$color-bg-page`（#f5f7fa）都不够 —— 三个 ink 掉到 4.44 / 4.22 / 4.31，
 ///      **全部破线**；浅到 `#fcfcfd` 仍救不回危险档（4.42）。
-/// ⇒ **只有纯白同时满足三个 ink**。详见 spec §4.1 的实测表。
+/// ⇒ **只有纯白同时满足三个 ink**。详见上面的实测数据。
 ///
 /// 这是**唯一**同时输出「原值做边框 + ink 做字」的 mixin —— 标签是唯一一个
 /// 两种用法叠在一起的地方。实现者**不得**手写标签样式绕过它。
@@ -144,7 +144,7 @@ $all-tones: (ok, info, warn, danger, muted);
   @if list.index($tones, muted) {
     &.is-muted {
       color: v.$color-text-sub;
-      border-color: v.$color-border; // 中性档的边框是普通边框，不是语义色（spec §4 读法 4）
+      border-color: v.$color-border; // 中性档的边框是普通边框，不是语义色
     }
   }
 }

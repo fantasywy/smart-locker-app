@@ -4,7 +4,7 @@
 // 「`pages/` 之外不得出现 `wx.request`」「`api/` 不含业务分支」「不引 store」。
 // 行为测试测不到它们（一个页面自己拼 URL 发请求，功能上照样能通），所以只能读源码。
 //
-// 断言风格同 `test/types/auth.test.ts` 的源码守卫：**把 spec 里的一条事实落成一条断言、
+// 断言风格同 `test/types/auth.test.ts` 的源码守卫：**把一条约束落成一条断言、
 // 失败时打印出违反的是哪一条**。判据一律取**剥离注释后**的源码 —— 注释里提 `wx.request`
 // 是必要的契约说明（本文件的主题就是它），不该被当成违规。
 
@@ -50,9 +50,9 @@ function rel(path: string): string {
   return relative(repoRoot, path)
 }
 
-describe('#18 工程约束：唯一 HTTP 出口（07 §3 硬规则 1）', () => {
+describe('#18 工程约束：唯一 HTTP 出口（硬规则 1）', () => {
   it('⚠️ `wx.request` 只出现在 `miniprogram/request/` 里 —— 别处零出现', () => {
-    // `07` §3 硬规则 1：「`pages/` 之外不得出现 `wx.request` —— 一切 HTTP 走 `request/`。
+    // 硬规则 1：「`pages/` 之外不得出现 `wx.request` —— 一切 HTTP 走 `request/`。
     // 页面调 `api/` 的函数，不拼 URL、不拼 header。」
     // 本守卫比那句更严一点：**整个 miniprogram/ 里只有 request/ 能出现它**。
     // 严格是刻意的 —— 规则的原话是「pages/ 之外不得」，但把 `api/` 也算进去没有任何代价，
@@ -66,7 +66,7 @@ describe('#18 工程约束：唯一 HTTP 出口（07 §3 硬规则 1）', () => 
 
     expect(
       offenders,
-      `以下文件在 request/ 之外出现了 wx.request —— 违反 07 §3 硬规则 1（唯一 HTTP 出口）：\n` +
+      `以下文件在 request/ 之外出现了 wx.request —— 违反唯一 HTTP 出口约束（硬规则 1）：\n` +
         offenders.map((f) => `  • ${f}`).join('\n'),
     ).toEqual([])
   })
@@ -83,10 +83,10 @@ describe('#18 工程约束：唯一 HTTP 出口（07 §3 硬规则 1）', () => 
   })
 })
 
-describe('#18 工程约束：`api/` 只做搬运（07 §3 硬规则 2）', () => {
+describe('#18 工程约束：`api/` 只做搬运（硬规则 2）', () => {
   it('`api/` 不含 UI 副作用 —— 没有 toast / modal / 跳转', () => {
-    // `07` §3 硬规则 2：「`api/` 不含业务分支 —— 状态判断、文案、跳转全在页面。」
-    // 请求层自己也不弹窗（§4.1 只归一化），这条把同一约束继续压到端点搬运层。
+    // 硬规则 2：「`api/` 不含业务分支 —— 状态判断、文案、跳转全在页面。」
+    // 请求层自己也不弹窗（只做归一化），这条把同一约束继续压到端点搬运层。
     const banned = ['showToast', 'showModal', 'navigateTo', 'redirectTo', 'switchTab', 'reLaunch']
     const offenders: string[] = []
     for (const file of collectSources(apiDir)) {
@@ -98,30 +98,30 @@ describe('#18 工程约束：`api/` 只做搬运（07 §3 硬规则 2）', () =>
 
     expect(
       offenders,
-      `api/ 里出现了 UI 副作用 —— 违反 07 §3 硬规则 2（api/ 只做搬运）：\n` +
+      `api/ 里出现了 UI 副作用 —— 违反 api/ 只做搬运的规则（硬规则 2）：\n` +
         offenders.map((f) => `  • ${f}`).join('\n'),
     ).toEqual([])
   })
 
-  it('`api/` 里的中文字面量只出现在注释里（文案属 09，不进搬运层）', () => {
-    // 与 `types/` 同一条纪律（`07` §7 规则 4）：代码里的中文只可能是硬编码文案，
-    // 而文案的唯一事实源是 `09` 文案层。api/ 需要说人话时，把异常交给页面。
+  it('`api/` 里的中文字面量只出现在注释里（文案属文案层，不进搬运层）', () => {
+    // 与 `types/` 同一条纪律：代码里的中文只可能是硬编码文案，
+    // 而文案的唯一事实源是文案层。api/ 需要说人话时，把异常交给页面。
     for (const file of collectSources(apiDir)) {
       const code = stripComments(readFileSync(file, 'utf8'))
       expect(
         code,
-        `${rel(file)} 的代码里出现了中文字面量 —— 文案属 09 文案层，不进 api/`,
+        `${rel(file)} 的代码里出现了中文字面量 —— 文案属文案层，不进 api/`,
       ).not.toMatch(/['"`][^'"`]*[\u4e00-\u9fa5][^'"`]*['"`]/)
     }
   })
 })
 
-describe('#18 工程约束：不引 store，App.globalData 不放业务数据（07 §6）', () => {
+describe('#18 工程约束：不引 store，App.globalData 不放业务数据', () => {
   it('请求层与 api/ 不读写 `App.globalData`', () => {
-    // `07` §6 的裁决：不引任何 store；`App.globalData` **仅限请求层自身需要的少量值**
+    // 既定裁决：不引任何 store；`App.globalData` **仅限请求层自身需要的少量值**
     // （token 句柄、单一飞行队列状态），**不放业务数据**。
     //
-    // ⚠️ 本票更进一步：**根本不用 `globalData`** —— token 走 `storage`（§4.4 定案），
+    // ⚠️ 本票更进一步：**根本不用 `globalData`** —— token 走 `storage`（已定案），
     // 单一飞行队列属 #19。所以「零出现」才是当前正确状态；将来 #19 真的需要队列状态时，
     // 这条守卫应当被**有意识地**放宽到「只允许 globalData 持有队列状态」，而不是无声忽略。
     const offenders: string[] = []
@@ -133,24 +133,24 @@ describe('#18 工程约束：不引 store，App.globalData 不放业务数据（
     expect(
       offenders,
       `以下文件碰了 globalData —— 本票（#18）不需要它（token 走 storage）；` +
-        `若有新增需求须显式裁决（07 §6）：\n${offenders.map((f) => `  • ${f}`).join('\n')}`,
+        `若有新增需求须显式裁决：\n${offenders.map((f) => `  • ${f}`).join('\n')}`,
     ).toEqual([])
   })
 
   it('不引任何状态管理库 —— 依赖里没有 store', () => {
-    // `07` §6：「不引任何 store（不引 pinia、不引轻量库）」。一期连运行时依赖都是零
-    // （`07` §2「能不加依赖就不加」），所以这条断言在 package.json 上是全空的。
+    // 既定口径：「不引任何 store（不引 pinia、不引轻量库）」。一期连运行时依赖都是零
+    // （「能不加依赖就不加」），所以这条断言在 package.json 上是全空的。
     const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
     }
-    expect(pkg.dependencies ?? {}, '一期不引任何运行时依赖（07 §2）').toEqual({})
+    expect(pkg.dependencies ?? {}, '一期不引任何运行时依赖').toEqual({})
   })
 })
 
-describe('#18 工程约束：token 读写集中在一个模块（07 §4.4）', () => {
+describe('#18 工程约束：token 读写集中在一个模块', () => {
   it('token 的 storage 键只在 request/token.ts 里出现', () => {
-    // `07` §4.4 的口径是「token 读写集中在**一个模块**」（验收标准 25：将来若要加退出登录
-    // 只需改一处）。若 api/ 或页面自己拼这两个 key，这句话就不成立了。
+    // 既定口径是「token 读写集中在**一个模块**」：将来若要加退出登录
+    // 只需改一处。若 api/ 或页面自己拼这两个 key，这句话就不成立了。
     //
     // ⚠️ 判据是**键名**而不是「有没有调 setStorageSync」：storage 是通用设施，
     // 别的模块写自己的键（如骨架页的调试日志）与 token 无关，不该被这条拦下。
@@ -165,12 +165,12 @@ describe('#18 工程约束：token 读写集中在一个模块（07 §4.4）', (
 
     expect(
       offenders,
-      `以下文件自己拼了 token 的 storage 键 —— token 读写应集中在 request/token.ts（07 §4.4）：\n` +
+      `以下文件自己拼了 token 的 storage 键 —— token 读写应集中在 request/token.ts：\n` +
         offenders.map((f) => `  • ${f}`).join('\n'),
     ).toEqual([])
   })
 
-  it('⚠️ `pages/` 只走 `api/`，**不直接引 `request/`** —— 分层单向（07 §3）', () => {
+  it('⚠️ `pages/` 只走 `api/`，**不直接引 `request/`** —— 分层单向', () => {
     // ⚠️⚠️ **这条断言的前身与本条相反，而且那是刻意的。** #18 落地时它断言的是
     // 「`pages/` 里没有任何 `request` / `api` 的 import」—— 因为那时页面还是
     // quickstart 骨架，而 #18 的验收标准包含「本票不含任何页面 UI」。
@@ -183,9 +183,9 @@ describe('#18 工程约束：token 读写集中在一个模块（07 §4.4）', (
     // `13.6` / `13.7`」），于是旧断言必然要退场 —— 但**不能只是删掉**：
     // 它守的那件事（页面不自己发请求）现在有了一个更准确的形态。
     //
-    // ⇒ 换成的判据是 `07` §3 的分层本身：**`pages/ → api/ → request/`**。
+    // ⇒ 换成的判据是分层本身：**`pages/ → api/ → request/`**。
     //   页面调 `api/` 的函数是对的；页面**直接**引请求层意味着它绕过了 `api/`
-    //   这层搬运，开始自己拼 URL、自己判异常形状 —— 而那正是 `07` §3 硬规则 2
+    //   这层搬运，开始自己拼 URL、自己判异常形状 —— 而那正是硬规则 2
     //   要把「端点搬运」集中到 `api/` 的理由（同一个端点出现在两个页面时不会长出两套语义）。
     //
     // ⚠️ 判据必须**只认 request、放行 api**。写成「引了 request 或 api 就违规」
@@ -200,12 +200,12 @@ describe('#18 工程约束：token 读写集中在一个模块（07 §4.4）', (
 
     expect(
       offenders,
-      `以下页面直接 import 了请求层 —— 页面应调 api/ 的函数，不绕过分层（07 §3）：\n` +
+      `以下页面直接 import 了请求层 —— 页面应调 api/ 的函数，不绕过分层：\n` +
         offenders.map((f) => `  • ${f}`).join('\n'),
     ).toEqual([])
   })
 
-  it('⚠️ `pages/` 不出现裸 URL —— 端点路径只在 `api/` 里拼（07 §3 硬规则 2）', () => {
+  it('⚠️ `pages/` 不出现裸 URL —— 端点路径只在 `api/` 里拼（硬规则 2）', () => {
     // 上一条挡的是「引了 request 模块」，这一条挡的是**另一半**：
     // 页面自己拼一个 `/api/app/v1/...` 的字面量。它即使不 import 请求层也做不到 ——
     // 但一旦有人把请求层从 `api/` 重新导出给页面，这条路就通了。
@@ -220,15 +220,15 @@ describe('#18 工程约束：token 读写集中在一个模块（07 §4.4）', (
 
     expect(
       offenders,
-      `以下页面里出现了裸的 API 前缀 —— 端点路径只在 api/ 里拼（07 §3 硬规则 2）：\n` +
+      `以下页面里出现了裸的 API 前缀 —— 端点路径只在 api/ 里拼（硬规则 2）：\n` +
         offenders.map((f) => `  • ${f}`).join('\n'),
     ).toEqual([])
   })
 })
 
-describe('#19 工程约束：依赖方向单向 —— request/ 不得依赖 api/（07 §3 / §4）', () => {
+describe('#19 工程约束：依赖方向单向 —— request/ 不得依赖 api/', () => {
   it('⚠️ `request/` 里没有任何 `../api/...` 的 import', () => {
-    // `07` §3 的分层是 `pages/ → api/ → request/`：**页面调 `api/` 的函数**，而请求层被
+    // 分层是 `pages/ → api/ → request/`：**页面调 `api/` 的函数**，而请求层被
     // 所有人依赖、自己不被任何上层依赖。
     //
     // ⚠️ 这条守卫是 #19 逼出来的。登录失效处理必须自己去调 `13.1` / `13.2`，最自然的写法是
@@ -249,14 +249,14 @@ describe('#19 工程约束：依赖方向单向 —— request/ 不得依赖 api
 
     expect(
       offenders,
-      `request/ 里的文件 import 了 api/ —— 这构成模块循环，破坏单向依赖（07 §3）：\n` +
+      `request/ 里的文件 import 了 api/ —— 这构成模块循环，破坏单向依赖：\n` +
         offenders.map((f) => `  • ${f}`).join('\n'),
     ).toEqual([])
   })
 
   it('端点的 URL 字面量仍然只有一份（重导出没有制造第二份路径）', () => {
     // 重导出 `13.1` / `13.2` 时最容易的退化是「顺手把路径字符串也抄一份」——
-    // 而 `07` §4.3 硬约束 5 的豁免名单就是拿这个字符串比对的，
+    // 而免鉴权豁免名单正是拿这个字符串比对的，
     // 两处字面量之间的漂移**就是鉴权缺口**。`config.ts` 是它唯一的家。
     const offenders: string[] = []
     for (const file of [...collectSources(requestDir), ...collectSources(apiDir)]) {
@@ -267,7 +267,7 @@ describe('#19 工程约束：依赖方向单向 —— request/ 不得依赖 api
 
     expect(
       offenders,
-      `以下文件自己写了 auth 端点路径字面量 —— 路径只有 config.ts 一个家（07 §4.3 硬约束 5）：\n` +
+      `以下文件自己写了 auth 端点路径字面量 —— 路径只有 config.ts 一个家（硬约束 5）：\n` +
         offenders.map((f) => `  • ${f}`).join('\n'),
     ).toEqual([])
   })

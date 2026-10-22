@@ -1,11 +1,11 @@
-// 全局失败出口的样式 —— 全部走 `10` 的 token，**零裸 hex**（`10` §6 禁令 5 / §8 第 6 条）。
+// 全局失败出口的样式 —— 全部走全局 token，**零裸 hex**。
 //
-// ⚠️ 三条硬规则（`10`）：
-//   1. **页面/组件根节点显式设一次 `$color-text-main`** —— 不得依赖继承（`10` §6 禁令 4）。
+// ⚠️ 三条硬规则：
+//   1. **页面/组件根节点显式设一次 `$color-text-main`** —— 不得依赖继承。
 //   2. **语义色不做文字色** —— 需要「警示」语义时走 `mixin` 的 ink 变体，不写 `$color-danger`。
 //      本出口**一个语义色都不用**：它不是「出错了」的红，而是「暂时连不上」的中性说明
-//      （`09` §7.2 的措辞是「暂时连不上」，不是「失败」）。
-//   3. **布局几何用 `rpx`，字号与 1px 级细节用 `px`**（`10` §7.2）。
+//      （文案用的是「暂时连不上」，不是「失败」）。
+//   3. **布局几何用 `rpx`，字号与 1px 级细节用 `px`**。
 
 @use '../../styles/variables' as v;
 
@@ -13,7 +13,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  // ⚠️ 显式设一次主文字色 —— `10` §6 禁令 4：不得依赖继承。
+  // ⚠️ 显式设一次主文字色 —— 不得依赖继承。
   // device 曾因继承深色主题的文字色导致白底对比度只有 1.23、整片看不见（2026-09-17）。
   color: v.$color-text-main;
   padding: 0 v.$spacing-xxl;
@@ -35,7 +35,7 @@
 
 .failure-exit__detail {
   // ⚠️ 承载信息的辅助文字走 `$color-text-sub`（5.45 ✅），不是 `$color-text-weak`（3.02 ❌）。
-  // weak 只给占位符与禁用态（`10` §3.3）。
+  // weak 只给占位符与禁用态。
   color: v.$color-text-sub;
   font-size: v.$font-size-body;
   line-height: 1.5;
@@ -43,7 +43,7 @@
 }
 
 .failure-exit__retry {
-  // 主按钮：白字压主色底（`10` §3.1：`$color-primary` 作底色，绿不新增颜色）。
+  // 主按钮：白字压主色底（`$color-primary` 作底色，绿不新增颜色）。
   background: v.$color-primary;
   color: v.$color-bg-card;
   font-size: v.$font-size-body;
@@ -56,7 +56,7 @@
   line-height: 44px;
   height: 44px;
 
-  // 小程序里 button 自带边框与背景，按下态用 `-hover` 值（`10` §3.1：小程序无 hover，
+  // 小程序里 button 自带边框与背景，按下态用 `-hover` 值（小程序无 hover，
   // 这个值留给「按下」反馈）。
   &::after {
     border: none;

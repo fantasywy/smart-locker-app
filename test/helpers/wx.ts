@@ -5,8 +5,8 @@
 //
 // ⚠️ 四条设计约束，都是被后续票的用法逼出来的：
 //
-// 1. **逐次编排，不是静态返回值。** `wx.login` 第二次调用必须能返回失败（`01` §3.4 的
-//    「重登一次，失败则丢弃原动作」）。所以每个方法都按「调用序」取下一个编排值，
+// 1. **逐次编排，不是静态返回值。** `wx.login` 第二次调用必须能返回失败（「重登一次，
+//    失败则丢弃原动作」）。所以每个方法都按「调用序」取下一个编排值，
 //    而不是一个可改的属性。
 //
 // 2. **未编排的调用 = 立刻失败，不是静默成功。** 桩的默认行为是抛一个说人话的错误。
@@ -19,7 +19,7 @@
 //    **回话要用 `reply()`（或整组用的 `respondInOrder()`）配合 `mockImplementationOnce`。**
 //
 // 4. **每个 stub 都是标准 vitest mock。** 因此 `toHaveBeenCalledTimes()` / `mock.calls`
-//    直接可用 —— `07` §4.3 硬约束 1「单一飞行」的核心断言就是「`13.2` 只被调用一次」。
+//    直接可用 —— 请求层硬约束「单一飞行」的核心断言就是「`13.2` 只被调用一次」。
 //
 // 用法：
 //   const wxStub = installWxStub()
@@ -38,9 +38,9 @@ import type { Mock } from 'vitest'
 
 /** `wx.request` 的 success 回调参数形状（只列本仓库会用到的字段）。 */
 export interface WxRequestSuccessResult {
-  /** HTTP 状态码。⚠️ 业务错误走 `200 + code ≠ 0`，认证错误才用真 `401/403`（`07` §4.2）。 */
+  /** HTTP 状态码。⚠️ 业务错误走 `200 + code ≠ 0`，认证错误才用真 `401/403`。 */
   statusCode: number
-  /** ⚠️ 故意标成 `unknown`：契约说「非 JSON 响应」也是一条真实分支（`07` §4.2 的 `network`），
+  /** ⚠️ 故意标成 `unknown`：契约说「非 JSON 响应」也是一条真实分支（`network` 分类），
    *  所以测试必须能编排一个**不是对象**的 `data`（如 `'<html>502</html>'`）。
    *  请求层负责把它归一化成 `kind: 'network'`。 */
   data: unknown
@@ -79,7 +79,7 @@ export interface WxLoginOptions {
   complete?: () => void
 }
 
-/** `wx.switchTab` 的 options —— 柜机页的「我的订单」出口用它（`01` §2.4）。 */
+/** `wx.switchTab` 的 options —— 柜机页的「我的订单」出口用它。 */
 export interface WxSwitchTabOptions {
   /** ⚠️ 必须以 `/` 开头的页面路径，且**必须**是 `app.json` 的 `tabBar.list[].pagePath` 之一。 */
   url: string
@@ -100,7 +100,7 @@ export interface WxNavigateToOptions {
   complete?: () => void
 }
 
-/** `wx.scanCode` 的 options —— 通道 B（`01` §2.2）。 */
+/** `wx.scanCode` 的 options —— 通道 B。 */
 export interface WxScanCodeOptions {
   onlyFromCamera?: boolean
   scanType?: string[]
@@ -113,7 +113,7 @@ export interface WxScanCodeOptions {
  * `wx.showModal` / `wx.showToast` 的 options。
  *
  * ⚠️ 它们出现在桩里的**唯一**理由是让「**不该弹窗**」这条断言写得出来 ——
- * `01` §6.1 把 `online = false` 与余位 0 定为**正常响应**，而「做成错误弹窗」
+ * 契约把 `online = false` 与余位 0 定为**正常响应**，而「做成错误弹窗」
  * 恰恰是最像「功能正常」的那种退化（弹窗真的弹出来了，手测不会觉得有问题）。
  * 有了这两个桩，「一次都没弹过」就是一条可执行的事实。
  */
@@ -175,7 +175,7 @@ function unstubbed<TArgs extends unknown[]>(method: string): Mock<(...args: TArg
   })
 }
 
-/** 造一份 `wx.request` 的成功响应。默认 `200` —— 业务错误也走 200（`07` §4.2）。 */
+/** 造一份 `wx.request` 的成功响应。默认 `200` —— 业务错误也走 200。 */
 export function jsonResponse(
   body: unknown,
   statusCode = 200,
@@ -251,7 +251,7 @@ export function installWxStub(): InstalledWxStub {
     // 若改回死按钮，这里会**抛错**而不是静默什么都不发生 —— 静默正是那个缺陷的症状。
     switchTab: unstubbed<[WxSwitchTabOptions]>('switchTab'),
     // ⚠️ 三个跳转 API **同一条纪律**，理由在柜机页上尤其硬：
-    //   • `navigateTo` / `redirectTo` —— 等待态的移交**必须**是 `redirectTo`（`08` §2）。
+    //   • `navigateTo` / `redirectTo` —— 等待态的移交**必须**是 `redirectTo`。
     //     一个静默返回的桩会让「用了 navigateTo」与「用了 redirectTo」都绿，
     //     而那个差别是「返回键能不能退回柜机页再开一次门」。
     //   • `scanCode` —— 入口失效页的「重新扫码」是用户唯一的出路；静默成功等于死按钮。
@@ -259,7 +259,7 @@ export function installWxStub(): InstalledWxStub {
     redirectTo: unstubbed<[WxNavigateToOptions]>('redirectTo'),
     scanCode: unstubbed<[WxScanCodeOptions]>('scanCode'),
     // ⚠️ 这两个是**故意**未编排即失败的，与上面几个的方向相反：
-    // 它们的正确用量是**零次**（`01` §6.1 把柜机不可用与余位 0 定为**正常响应**，
+    // 它们的正确用量是**零次**（柜机不可用与余位 0 是**正常响应**，
     // 而通用错误弹窗正是最像「功能正常」的退化）。未编排即抛错让
     // 「一次都不该弹」这件事在**任何**用例里都自动成立 —— 而不必每个用例都写一遍断言。
     showModal: unstubbed<[WxShowModalOptions]>('showModal'),

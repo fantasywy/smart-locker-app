@@ -74,8 +74,8 @@ describe('#23 navigation-bar · home() 不再是死按钮', () => {
     expect(typeof methods.home).toBe('function')
   })
 
-  it('⚠️ 点击后**真的 `wx.switchTab` 到订单 tab**（01 §2.4:57 逐字）', async () => {
-    // `01` §2.4 逐字：「柜机页**顶部固定一个「我的订单」出口**（`wx.switchTab` 到订单 tab）」。
+  it('⚠️ 点击后**真的 `wx.switchTab` 到订单 tab**', async () => {
+    // 柜机页**顶部固定一个「我的订单」出口**（`wx.switchTab` 到订单 tab）。
     const wxStub = installWxStub()
     wxStub.switchTab.mockImplementation(reply({ errMsg: 'switchTab:ok' }))
 
@@ -89,7 +89,7 @@ describe('#23 navigation-bar · home() 不再是死按钮', () => {
   })
 
   it('⚠️ 必须是 `switchTab`，**不是** `navigateTo` / `redirectTo`', async () => {
-    // 订单列表是 tabBar 页（01 §2.3），而 `navigateTo` 对 tabBar 页会**静默失败** ——
+    // 订单列表是 tabBar 页，而 `navigateTo` 对 tabBar 页会**静默失败** ——
     // 照样不跳转、不报错。那就等于没修这个死按钮，只是把「没实现」换成了「调错了 API」。
     //
     // 判据取**源码**而不是行为：一个调错 API 的实现照样能通过上面那条「调了 switchTab」
@@ -161,7 +161,7 @@ describe('#23 navigation-bar · home 按钮**看得见**（真机走查抓出来
     //
     // ⇒ 教训：`methods.home` 存在 + `wx.switchTab` 被调 = **只证明了「点了会跳」**，
     //   完全没证明「用户找得到这个按钮」。这件事只有**真机/模拟器**能验
-    //   （`10` §11 已登记过「未实测」类问题，#23 的票面也正是这么要求的）。
+    //   （这类「未实测」问题此前已有登记，#23 的票面也正是这么要求的）。
     //   这条断言就是把那次走查的结论固化下来，防止后来的重构把它删掉。
     const scss = readFileSync(join(navBarDir, 'navigation-bar.scss'), 'utf8').replace(
       /\/\*[\s\S]*?\*\//g,
@@ -187,8 +187,8 @@ describe('#23 navigation-bar · home 按钮**看得见**（真机走查抓出来
     expect(homeBlock).toMatch(/mask:\s*url\("data:image\/svg\+xml/);
   })
 
-  it('⚠️ home 图标**不引任何图片文件**（07 §5:126 的「无本地图片资源」仍是事实）', () => {
-    // `07` §5 把「本期没有任何本地图片或图标资源」当作已核实事实，并据此裁决不分包。
+  it('⚠️ home 图标**不引任何图片文件**（「无本地图片资源」仍是事实）', () => {
+    // 「本期没有任何本地图片或图标资源」是一条已核实的事实，不分包的裁决正建立在它之上。
     // 补一个图标时最容易的做法就是塞一张 png —— 那句话会**静默变假**。
     // 本文件与 `skeleton.test.ts` 的「miniprogram/ 下无图片文件」互为佐证。
     const scss = readFileSync(join(navBarDir, 'navigation-bar.scss'), 'utf8')

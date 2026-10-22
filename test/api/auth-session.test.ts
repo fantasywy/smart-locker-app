@@ -87,7 +87,7 @@ describe('#18 api/auth：13.1 登录只做搬运，不含业务分支', () => {
     expect(result.data.user.id).toBe(88)
   })
 
-  it('⚠️ api/auth 自身不写 storage —— 落盘是登录链的决定（07 §3 硬规则 2）', async () => {
+  it('⚠️ api/auth 自身不写 storage —— 落盘是登录链的决定', async () => {
     // `api/` 只做「入参 → 请求 → 出参 DTO」的搬运。若它顺手落盘，两个调用点就会各自
     // 落一次，或者页面只调 `login()` 却以为 token 已经存好了。
     const wx = stubLoginFlow([jsonResponse(loginBody())])
@@ -113,7 +113,7 @@ describe('#18 api/auth：13.1 登录只做搬运，不含业务分支', () => {
 
 describe('#18 api/auth：13.2 用 X-Refresh-Token 头，且响应不轮换 refresh', () => {
   it('发出的请求：POST /api/app/v1/auth/refresh，头带 X-Refresh-Token，无 body', async () => {
-    // ⚠️ `13.2` 用 `X-Refresh-Token` 头，**不是** Bearer access（`R1` §13.2、`API:943`）。
+    // ⚠️ `13.2` 用 `X-Refresh-Token` 头，**不是** Bearer access（`API:943`）。
     const wx = stubLoginFlow([
       jsonResponse({ code: 0, message: 'ok', data: { accessToken: 'A2', expiresIn: 7200 } }),
     ])
@@ -153,7 +153,7 @@ describe('#18 冷启动登录链：无 refresh token → wx.login → 13.1 → �
     expect(sent.data).toEqual({ code: 'WX-CODE-FRESH' })
   })
 
-  it('双 token 落 storage —— access 与 refresh 都持久化（07 §4.4 定案）', async () => {
+  it('双 token 落 storage —— access 与 refresh 都持久化', async () => {
     stubLoginFlow([jsonResponse(loginBody())])
 
     await ensureLoggedIn()
@@ -163,7 +163,7 @@ describe('#18 冷启动登录链：无 refresh token → wx.login → 13.1 → �
   })
 
   it('⚠️ 冷启动有 refresh token 时：**直接**放行，不发任何请求、不因本地时间预判过期', async () => {
-    // `01` §3.4 状态机的另一个分叉，也是 `07` §4.4「不预判」最容易被违反的地方：
+    // 状态机的另一个分叉，也是「不预判」最容易被违反的地方：
     // 后来者很容易在这里加一句「access 快过期了，先刷一下」或「没有 access 就先登录」。
     // 两者都是错的 —— 刷新只由 401 驱动（#19），本地时间不可信。
     const wx = installWxStub()
@@ -180,8 +180,8 @@ describe('#18 冷启动登录链：无 refresh token → wx.login → 13.1 → �
     expect(result.data).toBeNull()
   })
 
-  it('⚠️ 13.1 返回 user.status = BLACKLISTED → 登录成功、不阻断（承 02 带住的陷阱）', async () => {
-    // `01` §1.4 / `13.1` :939：**黑名单用户允许登录**。`04` §5 明令客户端不得据此做任何
+  it('⚠️ 13.1 返回 user.status = BLACKLISTED → 登录成功、不阻断', async () => {
+    // `13.1` :939：**黑名单用户允许登录**。既定裁决明令客户端不得据此做任何
     // 事前阻断 —— 拦截权只能属于服务端（本地快照会造出双源真相，还会把已解禁用户挡在门外）。
     stubLoginFlow([
       jsonResponse(

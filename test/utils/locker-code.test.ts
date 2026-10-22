@@ -4,15 +4,15 @@
 //
 // 票面逐字：「收敛逻辑是**纯函数**，应可独立测试（不需 `wx.*` 桩）」。
 // 它的三个来源（`q` / `options.code` / `scanCode.result`）**全部是字符串**，
-// 而「从哪个来源进来的」这件事在收敛之后从产品里消失（`01` §2.2）——
+// 而「从哪个来源进来的」这件事在收敛之后从产品里消失 ——
 // 所以本文件**不装 `wx` 桩**，也不该装：装了就说明这个函数碰到了它不该碰的东西。
 
 import { describe, expect, it } from 'vitest'
 import { resolveLockerCode } from '../../miniprogram/utils/locker-code'
 
-describe('#26 resolveLockerCode · 通道 A：微信「扫一扫」直达（01 §2.2）', () => {
+describe('#26 resolveLockerCode · 通道 A：微信「扫一扫」直达', () => {
   it('⚠️ `q` 是**完整链接的 URL 编码** —— 必须 `decodeURIComponent` 一次', () => {
-    // `01` §2.2 原文：「`onLoad(q)`，`q` = **完整链接的 URL 编码**，需 `decodeURIComponent` 一次」。
+    // 通道约定原文：「`onLoad(q)`，`q` = **完整链接的 URL 编码**，需 `decodeURIComponent` 一次」。
     // 微信给了两处编码：整个 URL 被编码一次，URL 里的 `:` 与 `/` 也各被编了一次
     // （`https%3A%2F%2F...`）—— 这正是真机上真实拿到的形态。
     const q = 'https%3A%2F%2Flocker.example.com%2Fl%2FWD-01'
@@ -36,7 +36,7 @@ describe('#26 resolveLockerCode · 通道 A：微信「扫一扫」直达（01 �
     expect(resolveLockerCode({ q: 'https://locker.example.com/l/WD-01' })).toBe('WD-01')
   })
 
-  it('⚠️ `scancode_time` **不参与任何业务判断**（01 §2.2:38）', () => {
+  it('⚠️ `scancode_time` **不参与任何业务判断**', () => {
     // 票面逐字：「柜机二维码是静态贴纸，时间戳没有语义」。
     // 落成断言的方式：**同一个 `q`，时间戳天差地别，结果必须逐字相同**。
     // 若实现里冒出一个「太旧就作废」的分支，这一条会红。
@@ -47,9 +47,9 @@ describe('#26 resolveLockerCode · 通道 A：微信「扫一扫」直达（01 �
   })
 })
 
-describe('#26 resolveLockerCode · 通道 B：小程序内 `wx.scanCode`（01 §2.2）', () => {
+describe('#26 resolveLockerCode · 通道 B：小程序内 `wx.scanCode`', () => {
   it('⚠️ `scanCode.result` 是完整链接 —— 与通道 A 收敛到同一个 code', () => {
-    // `01` §2.2 的「**两条通道表现必须一致**」在收敛层就是这一条：
+    // 「**两条通道表现必须一致**」在收敛层就是这一条：
     // 两个来源给出**同一个字符串输入**，因此必须给出同一个输出。
     // 一旦实现按来源分叉（「通道 B 直接当码用」），这里会红。
     expect(resolveLockerCode({ scanResult: 'https://locker.example.com/l/WD-01' })).toBe('WD-01')
@@ -63,11 +63,11 @@ describe('#26 resolveLockerCode · 通道 B：小程序内 `wx.scanCode`（01 §
   })
 })
 
-describe('#26 resolveLockerCode · 第三个来源 `options.code`（01 §2.2 表）', () => {
+describe('#26 resolveLockerCode · 第三个来源 `options.code`', () => {
   it('⚠️ `options.code` 是**裸柜机码**，原样收敛（不解析 URL）', () => {
-    // 票面：「`options.code`（spec 定义的第三个来源，本票须一并覆盖）」。
-    // ⚠️ 它与另外两个**形状不同**：`q` / `scanResult` 是完整链接（`01` §2.1 的载荷格式），
-    // 而 `code` 按名字与 spec 的用法（柜机页入参 `code`）就是那个编号本身。
+    // 票面：「`options.code`（第三个来源，本票须一并覆盖）」。
+    // ⚠️ 它与另外两个**形状不同**：`q` / `scanResult` 是完整链接（载荷格式），
+    // 而 `code` 按名字与柜机页入参的用法就是那个编号本身。
     // ⇒ 实现**不得**对 `code` 施加 URL 解析：解析一个裸码只会把它解坏或解空。
     expect(resolveLockerCode({ code: 'WD-01' })).toBe('WD-01')
   })
@@ -85,16 +85,16 @@ describe('#26 resolveLockerCode · 第三个来源 `options.code`（01 §2.2 表
   })
 })
 
-describe('#26 resolveLockerCode · 解析不出 code（01 §6.1 第一行）', () => {
+describe('#26 resolveLockerCode · 解析不出 code（入口失效）', () => {
   it('⚠️ 三个来源都没有 → `null`（不是空串、不是抛异常）', () => {
-    // `01` §6.1 第一行：「解析不出 `code`｜入口失效」。
+    // 入口失效的判定：「解析不出 `code`｜入口失效」。
     // 返回 `null` 而不是空串：空串是一个**合法的字符串**（`if (code)` 之外的写法
     // 会把它当成「有值」一路带下去），而 `null` 在 strict TS 下强迫调用方处理这个分支。
     expect(resolveLockerCode({})).toBeNull()
   })
 
   it('⚠️ 认不出的链接形态 → `null`，不猜', () => {
-    // 柜机二维码的载荷格式是 `01` §2.1 定死的 `https://<域名>/l/{lockerCode}`。
+    // 柜机二维码的载荷格式是定死的 `https://<域名>/l/{lockerCode}`。
     // 一个不匹配这个形状的串（别的网站、别的路径、别的深度的 URL）**不是柜机码** ——
     // 从中截一段当码用，等于替用户猜他扫了什么，最坏的结果是拿一个不存在的码去查柜机，
     // 而用户以为「扫到了」。⇒ 认不出就是认不出。
@@ -113,7 +113,7 @@ describe('#26 resolveLockerCode · 解析不出 code（01 §6.1 第一行）', (
 
   it('⚠️ 畸形的 URL 编码 → `null`，**不抛异常**', () => {
     // `decodeURIComponent('%')` 会**抛 `URIError`**。冷启动通道 A 上抛出一个未捕获异常
-    // 等于白屏 —— 而用户拿到的码坏了时，正确表现是 `01` §6.1 的「这个码没用」页。
+    // 等于白屏 —— 而用户拿到的码坏了时，正确表现是「这个码没用」页。
     // ⇒ 解码失败必须收敛成「解析不出」，与「码是空的」同一条路。
     expect(() => resolveLockerCode({ q: '%' })).not.toThrow()
     expect(resolveLockerCode({ q: '%' })).toBeNull()

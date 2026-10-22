@@ -15,7 +15,7 @@ import type { StartupState } from '../../miniprogram/startup/gate'
 import type { UnifiedError } from '../../miniprogram/request/types'
 
 /**
- * `01` §4 穷举的**四类登录失败成因** —— 逐条对应一个真实的统一异常对象。
+ * 登录链**四类失败成因** —— 逐条对应一个真实的统一异常对象。
  *
  * ⚠️ 这四条的 `kind` / `code` / `httpStatus` 各不相同，正是「表现必须一致」这条的
  * 试金石：若闸门按 `kind` 或 `code` 分叉，四条里必然有某几条画出不同的东西。
@@ -23,12 +23,12 @@ import type { UnifiedError } from '../../miniprogram/request/types'
 const FAILURE_CAUSES: readonly { name: string; error: UnifiedError }[] = [
   {
     name: '网络不通',
-    // `07` §4.2：网络失败 / 超时时**没有** HTTP 往返 ⇒ 状态码与业务码都是 null。
+    // 网络失败 / 超时时**没有** HTTP 往返 ⇒ 状态码与业务码都是 null。
     error: { httpStatus: null, code: null, message: 'request:fail timeout', kind: 'network' },
   },
   {
     name: 'wx.login 失败',
-    // `01` §4 的成因穷举里有它；`api/session.ts` 把 `wx.login` 的失败也归成 `network`。
+    // 四类失败成因里有它；`api/session.ts` 把 `wx.login` 的失败也归成 `network`。
     error: { httpStatus: null, code: null, message: 'login:fail', kind: 'network' },
   },
   {
@@ -44,12 +44,12 @@ const FAILURE_CAUSES: readonly { name: string; error: UnifiedError }[] = [
   },
 ]
 
-describe('#20 启动闸门：三个状态（01 §3.2 / §3.4）', () => {
+describe('#20 启动闸门：三个状态', () => {
   it('冷启动初始态是 loading（骨架屏那一帧）', () => {
     const gate = createStartupGate(() => Promise.resolve({ ok: true, data: null }))
 
     // ⚠️ 还没调 `start()` 就必须是 loading —— 页面 `onLoad` 先读 `state` 画首帧，
-    // 若初始态是别的，骨架屏那一帧就永远不会出现（`01` §3.2「结构先出现」）。
+    // 若初始态是别的，骨架屏那一帧就永远不会出现（「结构先出现」）。
     expect(gate.state.phase).toBe('loading')
   })
 
@@ -82,9 +82,9 @@ describe('#20 启动闸门：三个状态（01 §3.2 / §3.4）', () => {
     expect(gate.state.phase).toBe('ready')
   })
 
-  it('⚠️ ready 不携带业务数据 —— 闸门只管「登录好了没」，不管数据（01 §3.2 不缓存）', async () => {
+  it('⚠️ ready 不携带业务数据 —— 闸门只管「登录好了没」，不管数据（登录结果不缓存）', async () => {
     // 登录响应里塞了一份看起来很诱人的用户信息；闸门**不得**把它挂到状态上。
-    // 挂上去就等于开了「把登录时刻的快照当业务数据用」的口子（`04` §5 禁本地快照）。
+    // 挂上去就等于开了「把登录时刻的快照当业务数据用」的口子（本地快照是明令禁止的）。
     const gate = createStartupGate(() =>
       Promise.resolve({
         ok: true,
@@ -98,8 +98,8 @@ describe('#20 启动闸门：三个状态（01 §3.2 / §3.4）', () => {
     expect(state).toEqual({ phase: 'ready' })
   })
 
-  it('⚠️ 登录成功且 user.status 为 BLACKLISTED → 照样 ready（01 §1.4 登录不被拒）', async () => {
-    // 承 `02` 带住的陷阱、`04` §5「拦截权只能属于服务端」：受限用户**允许登录**。
+  it('⚠️ 登录成功且 user.status 为 BLACKLISTED → 照样 ready（登录不被拒）', async () => {
+    // 这里有一个必须带住的陷阱：「拦截权只能属于服务端」，受限用户**允许登录**。
     // 闸门放行；是否受限 由动作点的 `5004`（`kind: 'restricted'`）说了算。
     // ⚠️ 本地若据此拦截，最坏的结果是**把已经解禁的用户挡在门外**。
     const gate = createStartupGate(() =>
@@ -115,7 +115,7 @@ describe('#20 启动闸门：三个状态（01 §3.2 / §3.4）', () => {
   })
 })
 
-describe('#20 启动闸门：四类失败成因表现一致（01 §4）', () => {
+describe('#20 启动闸门：四类失败成因表现一致', () => {
   for (const cause of FAILURE_CAUSES) {
     it(`登录失败（${cause.name}）→ failed，且 error 原样带住以便诊断`, async () => {
       const gate = createStartupGate(() => Promise.resolve({ ok: false, error: cause.error }))
@@ -124,7 +124,7 @@ describe('#20 启动闸门：四类失败成因表现一致（01 §4）', () => 
 
       expect(state.phase).toBe('failed')
       // ⚠️ `error` 是给**诊断与测试**看的，不是给界面看的 —— 失败出口的文案是
-      // `09` §7.2 的定稿，不含错误码。它的存在正是「四类成因确实都落到了这里」的证据。
+      // 失败出口的文案是定稿，不含错误码。它的存在正是「四类成因确实都落到了这里」的证据。
       expect(state).toEqual({ phase: 'failed', error: cause.error })
     })
   }
@@ -153,7 +153,7 @@ describe('#20 启动闸门：四类失败成因表现一致（01 §4）', () => 
   })
 })
 
-describe('#20 启动闸门：重试（01 §4 / 09 §6 第 33 条）', () => {
+describe('#20 启动闸门：重试', () => {
   it('⚠️ 失败后重试 → 重新走完整登录链并成功渲染', async () => {
     const ensureLogin = vi
       .fn<() => Promise<{ ok: false; error: UnifiedError } | { ok: true; data: null }>>()
@@ -253,7 +253,7 @@ describe('#20 启动闸门：重试（01 §4 / 09 §6 第 33 条）', () => {
   })
 
   it('⚠️ 但 `failed` 时 start() **必须**重跑 —— 重试不能也被短路掉', async () => {
-    // 上一条的短路**只对 ready 成立**：失败态必须能重试（`01` §4）。
+    // 上一条的短路**只对 ready 成立**：失败态必须能重试。
     // 若把短路写成「只要不是 loading 就返回」，重试会静默失效 ——
     // 按钮点了没反应，而用户看到的是一个永远不会好的失败页。
     const ensureLogin = vi
@@ -269,7 +269,7 @@ describe('#20 启动闸门：重试（01 §4 / 09 §6 第 33 条）', () => {
     expect(ensureLogin).toHaveBeenCalledTimes(2)
   })
 
-  it('⚠️ 并发 start() 共用同一次飞行 —— 不会打出两条登录链（承 07 §4.3 单一飞行）', async () => {
+  it('⚠️ 并发 start() 共用同一次飞行 —— 不会打出两条登录链（单一飞行）', async () => {
     // 冷启动与用户手速极快的重试、或将来多个部分同时触发启动时，不该各跑一条链。
     // ⚠️ 这条与请求层 `inFlightRecovery` 是同一取向：**全局恰好一次**。
     let release!: (result: { ok: true; data: null }) => void

@@ -1,14 +1,14 @@
 // 请求层的**归一化**验收 —— issue #18 的第一组 Acceptance criteria。
 //
 // 断言风格承 `scripts/verify-visual-tokens.mjs` 与 `test/types/auth.test.ts`：
-// **把 spec 里的每条事实落成一条可执行断言、失败时打印出违反的是哪一条**。
+// **把每条契约事实落成一条可执行断言、失败时打印出违反的是哪一条**。
 //
 // 本文件测的是**外部行为**（#15 Testing Decisions 原文）：
 //   「发出了什么请求（URL / 方法 / 头 / body）」与「调用方拿到了什么（DTO 或异常对象的 kind/code）」。
 // **不测**内部实现 —— 不测归一化函数的分支结构、不测私有函数的调用次数。
 // 因此请求层内部重写时本文件不该碎。
 //
-// ⚠️ 归一化分类表的每条边都单独成断言，因为 `07` §4.2 的这张表**只看一边都是错的**：
+// ⚠️ 归一化分类表的每条边都单独成断言，因为这张表**只看一边都是错的**：
 // 契约是 `HTTP 200 + code ≠ 0` 承载业务错误（`API:1319`），只有认证/权限用真 `401/403`
 // （`API:44`）。只判 HTTP 状态码会漏掉全部业务错误；只判 `code` 会把 403 误当业务错误。
 
@@ -42,8 +42,8 @@ async function callWith(
  * 与 `callWith` 相同，但走**免鉴权出口** —— 用它来观察请求层对一份原始响应的**归一化分类**。
  *
  * ⚠️ 为什么 401 的用例必须走这条路（#19 之后）：`request()` 会把 `401 + 2001 / 2005`
- * 在**内部消费掉**（刷新 / 清态重登 + 重放，`07` §4.3），调用方看到的已经不是那个 401 了。
- * 而归一化分类本身（`07` §4.2 的表）仍然要逐条锁住 —— 它是刷新分支的**判据**：
+ * 在**内部消费掉**（刷新 / 清态重登 + 重放），调用方看到的已经不是那个 401 了。
+ * 而归一化分类本身仍然要逐条锁住 —— 它是刷新分支的**判据**：
  * `recoveryTriggerFor()` 读的就是这里归出来的 `code`。
  * `13.1` / `13.2` 这两个豁免端点不挂恢复逻辑（硬约束 4），因此这里看到的是**原始分类**。
  *
@@ -82,12 +82,12 @@ describe('#18 请求层归一化：业务错误走 HTTP 200 + code ≠ 0', () =>
     ])) as { ok: boolean; data?: unknown }
 
     expect(result.ok).toBe(true)
-    // `data` 是契约响应体里 `data` 字段的**原样** DTO —— 请求层不加工它（`07` §4.1）。
+    // `data` 是契约响应体里 `data` 字段的**原样** DTO —— 请求层不加工它。
     expect(result.data).toEqual({ id: 7, code: 'WD-01' })
   })
 
   it('HTTP 200 + code !== 0（非 5004）→ kind 为 business，message 按服务端原文携带', async () => {
-    // 服务端 message 刻意用一句**不像任何模板**的话：请求层若硬编码文案（`R1:435` 禁止），
+    // 服务端 message 刻意用一句**不像任何模板**的话：请求层若硬编码文案（契约明令禁止），
     // 这条会立刻红。
     const serverMessage = '该规格格口已满，请换一台柜机'
     const result = await callWith([jsonResponse({ code: 8002, message: serverMessage, data: null })])
@@ -100,9 +100,9 @@ describe('#18 请求层归一化：业务错误走 HTTP 200 + code ≠ 0', () =>
   })
 
   it('HTTP 200 + code === 5004 → kind 为 restricted，且服务端 message 不透出', async () => {
-    // `07` §4.2 的**唯一特判**：`5004` 走 `04` §4 受限卡，**不展示服务端 message**
+    // **唯一特判**：`5004` 走受限卡，**不展示服务端 message**
     // （它既不解释原因也不给出路）。本票只负责归成 `restricted` 并**不透出** message；
-    // 卡片形态归 `04` §4 与后续「我的」页票。
+    // 卡片形态归后续「我的」页票。
     const result = await callWith([
       jsonResponse({ code: 5004, message: '账号已被限制，原因：违规占用', data: null }),
     ])
@@ -114,7 +114,7 @@ describe('#18 请求层归一化：业务错误走 HTTP 200 + code ≠ 0', () =>
   })
 
   it('HTTP 200 + 非 JSON 响应 → kind 为 network，code 为 null', async () => {
-    // 「非 JSON 响应」是 `network` 的第三个触发（`07` §4.2）—— 网关回了 HTML 错误页时
+    // 「非 JSON 响应」是 `network` 的第三个触发 —— 网关回了 HTML 错误页时
     // 连 `code` 都读不出来，必须归 `network` 而不是 `business`。
     const result = await callWith([jsonResponse('<html>502 Bad Gateway</html>')])
     const error = errorOf(result)
@@ -232,14 +232,14 @@ describe('#18 请求层归一化：非 2xx 的失败不得被当成成功', () =
   })
 })
 
-describe('#18 请求层归一化：5004 的判定只看 code（07 §4.2 原表）', () => {
+describe('#18 请求层归一化：5004 的判定只看 code', () => {
   it('⚠️ 401 上带 code 5004 → 仍归 restricted，且不透出 message', async () => {
-    // `07` §4.2 的触发行写的是「`code === 5004`」—— **只看业务码**，不附带状态码前提。
-    // 而 `5004` 的语义是**账号级受限**（`04` §3），与「HTTP 状态码是多少」无关：
+    // 分类表的触发行写的是「`code === 5004`」—— **只看业务码**，不附带状态码前提。
+    // 而 `5004` 的语义是**账号级受限**，与「HTTP 状态码是多少」无关：
     // 后端若把受限用户的动作在鉴权层就挡掉，返回的是 403 + `5004`，而不是 200 + `5004`。
     //
     // 若 401/403 分支先返回，这种组合会归成 `forbidden` 并**把服务端 message 透传出去** ——
-    // 而 5004 的 message 恰恰是唯一不许透传的那条（`04` §3：它既不解释原因也不给出路）。
+    // 而 5004 的 message 恰恰是唯一不许透传的那条（它既不解释原因也不给出路）。
     // 「只有 5004 特判」这句话因此必须在**任何状态码上**都成立。
     const result = await callWith([jsonResponse({ code: 5004, message: '账号已被限制', data: null }, 403)])
     const error = errorOf(result)

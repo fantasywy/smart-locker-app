@@ -64,7 +64,7 @@ describe('#18 鉴权头：需鉴权的请求携带 Authorization: Bearer <access
 describe('#18 免鉴权豁免：13.1 与 13.2 不被附加 access 头', () => {
   it('13.1 /auth/login 即使 storage 里有 access 也不带头', async () => {
     // 唯二豁免端点的硬编码依据：`WebMvcConfig.java:46-47` 的 `excludePathPatterns`
-    // （`/api/app/v1/auth/login`、`/api/app/v1/auth/refresh`）—— **只有这两个**（`07` §4.3 硬约束 5）。
+    // （`/api/app/v1/auth/login`、`/api/app/v1/auth/refresh`）—— **只有这两个**（硬约束 5）。
     const wx = stubOk()
     seedStorage('auth.accessToken', 'ACCESS-EXISTS')
 

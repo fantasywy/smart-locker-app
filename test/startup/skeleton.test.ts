@@ -38,7 +38,7 @@ const appJson = JSON.parse(readFileSync(join(miniprogramDir, 'app.json'), 'utf8'
   window_navigationStyle?: string
 }
 
-describe('#22 BASE_URL 指向可联调后端（07 §4.3）', () => {
+describe('#22 BASE_URL 指向可联调后端', () => {
   it('⚠️ BASE_URL 是**具体地址**，不是占位符 —— 占位符等于任何页面都连不上', async () => {
     // 本票的起点事实：`config.ts` 里写着 `https://api.example.com`，
     // 于是**任何页面都发不出一次成功的请求** —— 而这是全部 9 张页面票的前置。
@@ -60,11 +60,11 @@ describe('#22 BASE_URL 指向可联调后端（07 §4.3）', () => {
   })
 })
 
-describe('#22 tabBar：订单 + 我的，纯文字（01 §2.3）', () => {
+describe('#22 tabBar：订单 + 我的，纯文字', () => {
   it('⚠️ tabBar 存在，且恰好两项：订单（index 0）+ 我的（index 1）', () => {
     const tabBar = appJson.tabBar
     expect(tabBar, 'app.json 必须有 tabBar').toBeDefined()
-    // ⚠️ 顺序是**语义**不是排版：`01` §2.3 与 §2.4 都依赖「订单是 index 0」——
+    // ⚠️ 顺序是**语义**不是排版：tabBar 与「我的订单」出口都依赖「订单是 index 0」——
     // 柜机页的「我的订单」出口要走 `wx.switchTab` 回到它。
     expect(tabBar?.list.map((item) => item.text)).toEqual(['订单', '我的'])
     expect(tabBar?.list.map((item) => item.pagePath)).toEqual([
@@ -73,15 +73,15 @@ describe('#22 tabBar：订单 + 我的，纯文字（01 §2.3）', () => {
     ])
   })
 
-  it('⚠️ tabBar **不引入任何图片/图标资源**（07 §5:126 的「无本地图片资源」仍是事实）', () => {
-    // `07` §5 把「本期页面没有任何本地图片或图标资源」当成**已核实的事实**写进
-    // 「一期不分包」的理由。tabBar 的图标需求与它直接冲突，本票的裁决是：
+  it('⚠️ tabBar **不引入任何图片/图标资源**（「无本地图片资源」仍是事实）', () => {
+    // 「本期页面没有任何本地图片或图标资源」是一条**已核实的事实**，也是
+    // 「一期不分包」的理由之一。tabBar 的图标需求与它直接冲突，本票的裁决是：
     // **接受纯文字 tabBar**（微信原生支持省略 `iconPath`），不去动那句事实。
     //
-    // ⇒ 一旦有人补了 `iconPath`，`07` §5:126 那句话就变假了。
+    // ⇒ 一旦有人补了 `iconPath`，那句话就变假了。
     //    那一天必须**同时**更正文档，而不是让文档悄悄说谎 —— 这条断言就是那个提醒。
     for (const item of appJson.tabBar?.list ?? []) {
-      expect(item.iconPath, `${item.text} 不得带图标 —— 要么保持纯文字，要么同步更正 07 §5:126`).toBeUndefined()
+      expect(item.iconPath, `${item.text} 不得带图标 —— 要么保持纯文字，要么同步更正文档`).toBeUndefined()
       expect(item.selectedIconPath, `${item.text} 不得带选中图标`).toBeUndefined()
     }
   })
@@ -101,7 +101,7 @@ describe('#22 tabBar：订单 + 我的，纯文字（01 §2.3）', () => {
       }
     }
     walk(miniprogramDir)
-    expect(found, 'miniprogram/ 下出现了图片资源 —— 请同步更正 07 §5:126').toEqual([])
+    expect(found, 'miniprogram/ 下出现了图片资源 —— 请同步更正「无本地图片资源」的记载').toEqual([])
   })
 
   it('⚠️ tabBar 的三个颜色**对齐色调层 token**，不是随手挑的色值', () => {
@@ -127,9 +127,9 @@ describe('#22 tabBar：订单 + 我的，纯文字（01 §2.3）', () => {
   })
 })
 
-describe('#22 导航形态：自绘导航栏 + 不分包（07 §5）', () => {
+describe('#22 导航形态：自绘导航栏 + 不分包', () => {
   it('⚠️ navigationStyle 仍是 custom —— 柜机页的「我的订单」出口依赖它', () => {
-    // `07` §5:138 原文：柜机页是**冷启动、栈深 1 的非 tab 页**，系统返回 = 直接退回微信、
+    // 柜机页是**冷启动、栈深 1 的非 tab 页**：系统返回 = 直接退回微信、
     // 底部 tabBar 不显示 ⇒ 屏幕上没有任何通往订单列表的可见路径，
     // 必须在页面顶部固定一个「我的订单」出口。**只有自绘导航栏能承载它。**
     //
@@ -137,16 +137,16 @@ describe('#22 导航形态：自绘导航栏 + 不分包（07 §5）', () => {
     expect(appJson.window.navigationStyle).toBe('custom')
   })
 
-  it('⚠️ 未引入分包（07 §5:128「一期不分包」）', () => {
-    // `07` §5 的裁决：主包上限 2MB，而本期页面全是原生 wxml/wxss + 数据全走接口，
+  it('⚠️ 未引入分包（一期不分包）', () => {
+    // 既定裁决：主包上限 2MB，而本期页面全是原生 wxml/wxss + 数据全走接口，
     // **没有可减的大物**，且分包**并不能加快首屏**（它只减体积）。
     expect(appJson.subPackages).toBeUndefined()
     expect(appJson.subpackages).toBeUndefined()
   })
 })
 
-describe('#22 页面注册：10 个页面一次配齐（07 §5 页表）', () => {
-  /** `07` §5 页表 + §8 命名裁决收敛出的 10 个页面。 */
+describe('#22 页面注册：10 个页面一次配齐', () => {
+  /** 页面与命名裁决收敛出的 10 个页面。 */
   const EXPECTED_PAGES = [
     'pages/index/index',
     'pages/profile/profile',
@@ -161,7 +161,7 @@ describe('#22 页面注册：10 个页面一次配齐（07 §5 页表）', () =>
   ]
 
   it('⚠️ pages 恰好注册这 10 个，且顺序与页表一致', () => {
-    // ⚠️ 顺序有意义：`pages` 的**第一项是启动页**。首页 = 订单列表（`01` §2.3），
+    // ⚠️ 顺序有意义：`pages` 的**第一项是启动页**。首页 = 订单列表，
     // 所以它必须排第一 —— 否则冷启动会落到别的页上。
     expect(appJson.pages).toEqual(EXPECTED_PAGES)
   })
@@ -179,7 +179,7 @@ describe('#22 页面注册：10 个页面一次配齐（07 §5 页表）', () =>
     expect(missing, `以下页面文件缺失：\n${missing.map((f) => `  • ${f}`).join('\n')}`).toEqual([])
   })
 
-  it('⚠️ 每个页面的标题都在文案层 PAGE_TITLES 里有一份（09 §0 硬规则 1）', () => {
+  it('⚠️ 每个页面的标题都在文案层 PAGE_TITLES 里有一份', () => {
     // 标题是**用户可见的字**，归文案层。空壳页的 wxml 只写 `{{ title }}`，
     // 值从 `startup/copy.ts` 取 —— 这条挡住「某个页面漏了标题」或「标题写死在模板里」。
     const registered = new Set(appJson.pages)
@@ -201,11 +201,11 @@ describe('#22 页面注册：10 个页面一次配齐（07 §5 页表）', () =>
     // 但「订单」这个 tab 的页面标题恰好也是「我的订单」、`我的` tab 对应
     // `PAGE_TITLES['pages/profile/profile']` —— **同一个词，两处写**。
     //
-    // ⇒ 判据取**包含关系**而不是相等：`01` §2.3 的 tabBar 项是短词「订单」，
-    //   而页面标题是「我的订单」（`01` §2.4 的柜机页出口也用它），两者**有意不同**。
+    // ⇒ 判据取**包含关系**而不是相等：tabBar 项是短词「订单」，
+    //   而页面标题是「我的订单」（柜机页的出口也用它），两者**有意不同**。
     //   钉住「标题里含得住 tabBar 的短词」既挡住漂移（比如把页面标题改成「历史订单」
     //   而 tabBar 还写「订单」→ 仍是包含，不报；但改成「我的柜子」就会报），
-    //   又不去要求两个位置必须逐字相同（那会与 §2.3 / §2.4 的措辞冲突）。
+    //   又不去要求两个位置必须逐字相同（那会与两处各自的措辞冲突）。
     const titles = PAGE_TITLES as Record<string, string>
     for (const item of appJson.tabBar?.list ?? []) {
       const pageTitle = titles[item.pagePath]
@@ -218,7 +218,7 @@ describe('#22 页面注册：10 个页面一次配齐（07 §5 页表）', () =>
   })
 })
 
-describe('#22 删除 quickstart 死代码 pages/logs（无 spec 出处、无端点）', () => {
+describe('#22 删除 quickstart 死代码 pages/logs（无设计出处、无端点）', () => {
   it('⚠️ pages/logs 目录已删除', () => {
     expect(existsSync(join(miniprogramDir, 'pages', 'logs'))).toBe(false)
   })
@@ -257,7 +257,7 @@ describe('#22 删除 quickstart 死代码 pages/logs（无 spec 出处、无端�
 
   it('⚠️ utils/util.ts **保留** —— 日期工具的正经实现归本批第 2 张票（#23）', () => {
     // 本票的票面明确写了这条禁令：`formatTime` 的唯一消费者确实是 `logs.ts`，
-    // 但 `09` §5.4 定义了 7 种时间格式，日期工具的正经实现归 #23。
+    // 但文案层定义了 7 种时间格式，日期工具的正经实现归 #23。
     // 顺手删掉它会把这件工作**提前**做掉一半、且做在一个错误的形状上。
     expect(existsSync(join(miniprogramDir, 'utils', 'util.ts'))).toBe(true)
   })

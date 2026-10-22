@@ -131,7 +131,7 @@ check('$color-text-main 压白底对比度', mainRatio, 15.78)
 
 // ---------- 第 2b 条：ink 压「标签底」也 ≥ AA ----------
 // ⚠️ 这条正是逼出「标签底必须纯白」的那条断言。两条歧路都会在这里失败：
-//   ① 把标签底改成语义色浅调底 —— 红/绿在物理上就过不了 AA（spec §4.1 有实测表）；
+//   ① 把标签底改成语义色浅调底 —— 红/绿在物理上就过不了 AA；
 //   ② 改成一个「浅灰面」（比如 $color-bg-page = #f5f7fa）—— 三个 ink 掉到 4.44/4.22/4.31，全破线。
 // 只有纯白同时满足三个 ink。
 const LABEL_BG = token('color-bg-card')
@@ -227,7 +227,7 @@ for (const [name, expected] of Object.entries({
   'status-bar-width': '3px',
 })) check(`$${name}`, token(name), expected)
 
-// 色条刻意是 px（不是 rpx）—— 文档级一致，见 spec §7.2
+// 色条刻意是 px（不是 rpx）—— 固定物理尺寸，不随屏宽缩放
 checkTrue(
   '$status-bar-width 用 px（不是 rpx）',
   token('status-bar-width').endsWith('px'),
