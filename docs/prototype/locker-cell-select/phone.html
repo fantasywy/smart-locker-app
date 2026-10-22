@@ -1,0 +1,424 @@
+<!doctype html>
+<!--
+  PROTOTYPE（throwaway）—— 柜机页「四档格口选择 + 立即存件底部条」。
+  三个结构不同的变体，用 ?view=grid|scroll|list 切换；状态用 ?state= 切换。
+  例如：phone.html?view=grid&state=ready&selected=medium&chrome=0
+  截图时加 chrome=0 隐藏底部原型切换条。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390, initial-scale=1, viewport-fit=cover">
+<title>柜机页原型 · 四档格口</title>
+<style>
+  :root{
+    --green:#00b578;
+    --green-ink:#008655;
+    --green-soft:#e8f8f2;
+    --ink:#1f2329;
+    --sub:#646a73;
+    --weak:#8f959e;
+    --bg:#f5f7fa;
+    --card:#ffffff;
+    --line:#e9edf2;
+    --border:#dcdfe6;
+    --warn:#e6a23c;
+    --warn-ink:#976a27;
+    --danger:#f56c6c;
+    --danger-ink:#c05454;
+    --r-card:16px;
+    --r-comp:12px;
+    --shadow:0 1px 2px rgba(16,24,40,.04), 0 10px 28px rgba(16,24,40,.05);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;width:390px;height:844px;overflow:hidden;background:var(--bg)}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Source Han Sans CN","Microsoft YaHei",sans-serif;
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+  .screen{position:relative;width:390px;height:844px;background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
+
+  /* ---------- 系统栏 + 导航 ---------- */
+  .statusbar{height:47px;flex:0 0 47px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 8px;font-size:13px;font-weight:600;letter-spacing:.2px}
+  .status-icons{display:flex;align-items:center;gap:6px;color:var(--ink)}
+  .status-icons svg{display:block}
+
+  .navbar{height:44px;flex:0 0 44px;display:flex;align-items:center;justify-content:space-between;padding:0 8px}
+  .nav-btn{width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--ink)}
+  .nav-title{font-size:17px;font-weight:600;letter-spacing:.2px}
+
+  /* ---------- 主内容 ---------- */
+  .content{flex:1 1 auto;min-height:0;overflow:hidden;padding:2px 16px 0;display:flex;flex-direction:column}
+  .site{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:6px 2px 0}
+  .site h1{margin:0;font-size:21px;line-height:1.25;font-weight:600;letter-spacing:-.2px}
+  .site p{margin:5px 0 0;font-size:13px;line-height:1.35;color:var(--sub)}
+  .pill{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:1px solid var(--border);border-radius:999px;background:var(--card);font-size:11px;color:var(--sub);margin-top:2px}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+  .pill.is-off .dot{background:var(--weak)}
+
+  .section-head{display:flex;align-items:baseline;justify-content:space-between;padding:22px 2px 12px}
+  .section-head h2{margin:0;font-size:15px;font-weight:600;letter-spacing:.1px}
+  .section-head span{font-size:11px;color:var(--weak)}
+
+  /* ---------- 卡片通用 ---------- */
+  .cells{display:grid;gap:12px}
+  .cell{position:relative;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--shadow);transition:none}
+  .cell.is-selected{border:1.5px solid var(--green-ink);box-shadow:0 2px 6px rgba(0,133,85,.10), 0 12px 30px rgba(16,24,40,.06)}
+  .cell.is-disabled{box-shadow:none;background:#fbfcfd}
+  .cell.is-busy{opacity:.72;box-shadow:none}
+  .cell__top{display:flex;align-items:flex-start;justify-content:space-between}
+  .cell__icon{display:inline-flex;align-items:center;justify-content:center;background:var(--bg);border-radius:12px;color:var(--sub)}
+  .is-selected .cell__icon{background:var(--green-soft);color:var(--green-ink)}
+  .cell__mark{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;border:1.5px solid #d5dae1;background:#fff;color:transparent;flex:0 0 auto}
+  .is-selected .cell__mark{background:var(--green-ink);border-color:var(--green-ink);color:#fff}
+  .is-disabled .cell__mark{border-color:#e3e7ec;background:#f5f7fa}
+  .cell__name{display:block;font-size:17px;font-weight:600;line-height:1.2}
+  .cell__meta{display:block;font-size:12px;line-height:1.3;color:var(--sub)}
+  .cell__meta b{font-size:15px;font-weight:600;color:var(--ink);margin-right:2px}
+  .is-disabled .cell__name{color:var(--sub)}
+  .is-disabled .cell__meta{color:var(--sub)}
+  .tag{display:inline-flex;align-items:center;height:20px;padding:0 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-size:11px;color:var(--sub)}
+
+  /* A. 2×2 网格 */
+  .cells--grid{grid-template-columns:1fr 1fr}
+  .cell--grid{height:152px;padding:13px 14px 14px;display:flex;flex-direction:column}
+  .cell--grid .cell__icon{width:38px;height:38px;border-radius:11px}
+  .cell--grid .cell__name{margin-top:12px}
+  .cell--grid .cell__meta{margin-top:auto;padding-top:8px}
+
+  /* B. 横向滑动 */
+  .scroll-wrap{position:relative;margin:0 -16px}
+  .cells--scroll{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 24px 0;scrollbar-width:none}
+  .cells--scroll::-webkit-scrollbar{display:none}
+  .cell--scroll{flex:0 0 286px;height:330px;padding:20px;display:flex;flex-direction:column;align-items:center;text-align:center;scroll-snap-align:center}
+  .cell--scroll .cell__mark{position:absolute;top:18px;right:18px}
+  .cell--scroll .cell__icon{width:92px;height:92px;border-radius:26px;margin-top:6px}
+  .cell--scroll .cell__name{font-size:23px;margin-top:18px;letter-spacing:-.2px}
+  .cell__big{display:flex;align-items:baseline;justify-content:center;gap:7px;margin-top:8px}
+  .cell__big strong{font-size:44px;line-height:1;font-weight:600;letter-spacing:-1px}
+  .cell__big span{font-size:12px;color:var(--sub)}
+  .cell__ladder{display:flex;align-items:flex-end;gap:14px;margin-top:auto}
+  .ladder__item{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .ladder__item i{display:block;width:20px;border-radius:3px;background:#e9edf2}
+  .ladder__item:nth-child(1) i{height:7px}.ladder__item:nth-child(2) i{height:11px}
+  .ladder__item:nth-child(3) i{height:15px}.ladder__item:nth-child(4) i{height:19px}
+  .ladder__item.on i{background:var(--green)}
+  .ladder__item em{font-style:normal;font-size:10px;line-height:1;color:var(--weak)}
+  .ladder__item.on em{color:var(--green-ink);font-weight:600}
+  .pager{display:flex;align-items:center;justify-content:center;gap:6px;padding:16px 0 0;font-size:11px;color:var(--weak)}
+  .pager i{width:6px;height:6px;border-radius:50%;background:#dde2e8}
+  .pager i.on{width:16px;border-radius:999px;background:var(--green-ink)}
+  .pager span{margin-left:6px;font-variant-numeric:tabular-nums}
+
+  /* C. 纵向列表 */
+  .cells--list{gap:10px}
+  .cell--list{height:80px;padding:0 15px;display:flex;align-items:center;gap:13px}
+  .cell--list .cell__icon{width:44px;height:44px;border-radius:12px;flex:0 0 auto}
+  .cell--list .cell__text{flex:1 1 auto;min-width:0}
+  .cell--list .cell__name{font-size:16px}
+  .cell--list .cell__meta{margin-top:4px}
+
+  /* ---------- 存件说明 ---------- */
+  .facts{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);padding:6px 14px;box-shadow:var(--shadow)}
+  .facts__row{display:flex;align-items:center;gap:9px;height:37px;font-size:12px;color:var(--sub)}
+  .facts__row + .facts__row{border-top:1px solid #f0f2f5}
+  .facts__row svg{flex:0 0 auto;color:var(--weak)}
+
+  /* ---------- 页内提示 ---------- */
+  .notice{display:flex;align-items:flex-start;gap:8px;margin:14px 0;padding:10px 12px;background:var(--card);border:1px solid #f2dfc2;border-left:3px solid var(--warn);border-radius:10px;font-size:12px;line-height:1.45;color:var(--warn-ink)}
+  .notice svg{flex:0 0 auto;margin-top:1px}
+
+  /* 骨架屏 */
+  .sk{background:linear-gradient(100deg,#eef1f5 20%,#f6f8fa 38%,#eef1f5 56%);background-size:200% 100%;animation:shimmer 1.4s linear infinite}
+  @keyframes shimmer{from{background-position:120% 0}to{background-position:-80% 0}}
+  .sk-site{height:52px;border-radius:12px;margin-top:6px}
+  .sk-card{height:152px;border-radius:var(--r-card)}
+
+  /* 加载失败 */
+  .load-failed{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:40px;text-align:center}
+  .load-failed__icon{width:56px;height:56px;border-radius:18px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--weak)}
+  .load-failed__title{margin-top:14px;font-size:16px;font-weight:600}
+  .load-failed__detail{margin-top:6px;font-size:12px;color:var(--sub);line-height:1.5}
+  .btn-ghost{height:40px;padding:0 20px;border-radius:10px;border:1px solid var(--border);background:#fff;font-size:14px;font-weight:500;margin-top:16px}
+
+  /* 入口失效 */
+  .entry{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 32px 80px;text-align:center}
+  .entry__icon{width:64px;height:64px;border-radius:20px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--weak)}
+  .entry__title{margin-top:18px;font-size:20px;font-weight:600;letter-spacing:-.2px}
+  .entry__detail{margin-top:8px;font-size:13px;line-height:1.6;color:var(--sub)}
+  .entry__actions{display:flex;gap:10px;margin-top:26px}
+  .btn-primary,.btn-secondary{height:46px;padding:0 22px;border-radius:12px;font-size:15px;font-weight:600}
+  .btn-primary{background:var(--green-ink);color:#fff}
+  .btn-secondary{background:#fff;border:1px solid var(--border);color:var(--ink);font-weight:500}
+
+  /* ---------- 底部条 ---------- */
+  .bar-wrap{flex:0 0 auto;background:#fff;border-top:1px solid var(--line);box-shadow:0 -8px 24px rgba(16,24,40,.06);padding:12px 16px 26px}
+  .bar-error{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--danger-ink);padding:0 2px 10px}
+  .bar{display:flex;align-items:center;gap:16px}
+  .bar__info{flex:1 1 auto;min-width:0}
+  .bar__line1{font-size:15px;font-weight:600;line-height:1.25;display:flex;align-items:baseline;gap:5px;white-space:nowrap}
+  .bar__kicker{font-size:11px;font-weight:500;color:var(--sub)}
+  .bar__line2{margin-top:3px;font-size:11px;color:var(--sub);white-space:nowrap}
+  .bar__line1.is-empty,.bar__line2.is-empty{color:var(--sub);font-weight:500}
+  .bar__cta{flex:0 0 auto;width:150px;height:48px;border-radius:12px;background:var(--green-ink);color:#fff;font-size:16px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+  .bar__cta:disabled{background:#e8ebef;color:var(--weak)}
+  .bar__cta.is-busy:disabled{background:var(--green-ink);color:#fff;opacity:1}
+  .spinner{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- 二次确认 ---------- */
+  .dim{position:absolute;inset:0;background:rgba(17,24,39,.42);z-index:20}
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:21;background:#fff;border-radius:24px 24px 0 0;padding:8px 20px 34px;box-shadow:0 -12px 40px rgba(16,24,40,.18)}
+  .sheet__handle{width:36px;height:4px;border-radius:999px;background:#e3e7ec;margin:0 auto 16px}
+  .sheet h3{margin:0;font-size:18px;font-weight:600}
+  .sheet__rows{margin-top:16px;background:var(--bg);border-radius:14px;padding:4px 14px}
+  .sheet__row{display:flex;align-items:center;justify-content:space-between;height:46px;font-size:14px;border-bottom:1px solid #eceff3}
+  .sheet__row:last-child{border-bottom:0}
+  .sheet__row span{color:var(--sub)}
+  .sheet__row b{font-weight:600}
+  .sheet__hint{margin:12px 2px 0;font-size:12px;line-height:1.5;color:var(--sub)}
+  .sheet__actions{display:flex;gap:10px;margin-top:18px}
+  .sheet__actions button{flex:1 1 0;height:48px;border-radius:12px;font-size:15px;font-weight:600}
+  .sheet__cancel{background:var(--bg);color:var(--ink)}
+  .sheet__ok{background:var(--green-ink);color:#fff}
+
+  /* ---------- 原型切换条（不是设计的一部分，截图时用 chrome=0 隐藏） ---------- */
+  .proto-switch[hidden]{display:none}
+  .proto-switch{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:40;display:flex;align-items:center;gap:2px;background:rgba(17,24,39,.92);color:#fff;border-radius:999px;padding:5px 6px;box-shadow:0 8px 24px rgba(0,0,0,.24);font-size:12px;letter-spacing:.1px}
+  .proto-switch button{width:30px;height:30px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1}
+  .proto-switch button:active{background:rgba(255,255,255,.14)}
+  .proto-switch span{min-width:118px;text-align:center;font-weight:500}
+</style>
+</head>
+<body>
+<div class="screen" id="screen"></div>
+<div class="proto-switch" id="switcher" hidden><button data-step="-1" aria-label="上一个变体">‹</button><span id="switcher-label"></span><button data-step="1" aria-label="下一个变体">›</button></div>
+
+<script>
+const ICONS = {
+  back:'<path d="m15 18-6-6 6-6"/>',
+  home:'<path d="M3 10.6 12 3l9 7.6"/><path d="M5 9.8V21h14V9.8"/><path d="M9.5 21v-6h5v6"/>',
+  package:'<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  alert:'<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/>',
+  retry:'<path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"/><path d="M3 21v-5h5"/>',
+  scan:'<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
+  linkoff:'<path d="M9 17H7A5 5 0 0 1 7 7"/><path d="M15 7h2a5 5 0 0 1 4 8"/><path d="M8 12h4"/><path d="m2 2 20 20"/>',
+  wallet:'<path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v3"/><path d="M3 5v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3"/><path d="M16 12h5v4h-5a2 2 0 0 1 0-4Z"/>'
+};
+const icon=(name,size=20,stroke=1.8)=>`<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+
+const TIERS=[
+  {id:'small', name:'小格口', icon:17, tiers:1},
+  {id:'medium',name:'中格口', icon:21, tiers:2},
+  {id:'large', name:'大格口', icon:26, tiers:3},
+  {id:'xlarge',name:'特大格口',icon:31, tiers:4}
+];
+const COUNTS={small:6, medium:3, large:1, xlarge:2};
+const DEFAULTS={small:0, medium:0, large:0, xlarge:0};
+
+const params=new URLSearchParams(location.search);
+const view=params.get('view')||'grid';
+const state=params.get('state')||'ready';
+let selected=params.has('selected')?params.get('selected'):'medium';
+if(state==='nosel') selected=null;
+
+function statusbar(){
+  return `<div class="statusbar"><span>9:41</span><div class="status-icons">
+      <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor" aria-hidden="true"><rect x="0" y="7.5" width="3" height="3.5" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></svg>
+      <svg width="15" height="11" viewBox="0 0 15 11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M1.2 3.9a9.4 9.4 0 0 1 12.6 0"/><path d="M3.7 6.6a5.8 5.8 0 0 1 7.6 0"/><path d="M6.2 9.2a2.2 2.2 0 0 1 2.6 0"/></svg>
+      <svg width="23" height="11" viewBox="0 0 23 11" fill="none" aria-hidden="true"><rect x="0.7" y="0.7" width="19.6" height="9.6" rx="2.6" stroke="currentColor" stroke-width="1.2"/><rect x="2.4" y="2.4" width="13.4" height="6.2" rx="1.4" fill="currentColor"/><path d="M22 4v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </div></div>`;
+}
+function navbar(){
+  return `<header class="navbar"><button class="nav-btn" aria-label="返回">${icon('back',22,2)}</button><div class="nav-title">储物柜</div><button class="nav-btn" aria-label="我的订单">${icon('home',21,1.8)}</button></header>`;
+}
+function siteHeader(opts={}){
+  if(opts.skeleton) return `<div class="site"><div style="width:100%"><div class="sk sk-site" style="width:70%"></div></div></div>`;
+  const offline=state==='offline';
+  return `<section class="site">
+    <div><h1>望京 SOHO T1</h1><p>B1 层 3 号电梯口</p></div>
+    <span class="pill ${offline?'is-off':''}"><i class="dot"></i>${offline?'离线':'在线'}</span>
+  </section>`;
+}
+function cardGrid(t,{disabled,soldout,busy}){
+  const count=COUNTS[t.id];
+  const isSel=selected===t.id && (!disabled || state==='submitting');
+  let meta;
+  if(disabled&&state==='offline') meta=`<span class="cell__meta">不可用</span>`;
+  else if(soldout) meta=`<span class="cell__meta"><span class="tag">已满</span></span>`;
+  else meta=`<span class="cell__meta"><b>${count}</b>个可用</span>`;
+  return `<button class="cell cell--grid ${isSel?'is-selected':''} ${disabled?'is-disabled':''} ${busy?'is-busy':''}" ${disabled?'disabled':''} data-id="${t.id}">
+    <span class="cell__top"><span class="cell__icon">${icon('package',t.icon,1.7)}</span><span class="cell__mark">${isSel?icon('check',13,2.4):''}</span></span>
+    <span class="cell__name">${t.name}</span>
+    ${meta}
+  </button>`;
+}
+function cardScroll(t,{disabled,soldout,busy}){
+  const count=COUNTS[t.id];
+  const isSel=selected===t.id && (!disabled || state==='submitting');
+  let meta;
+  if(disabled&&state==='offline') meta=`<span class="cell__big"><span>不可用</span></span>`;
+  else if(soldout) meta=`<span class="cell__big"><span class="tag">已满</span></span>`;
+  else meta=`<span class="cell__big"><strong>${count}</strong><span>个可用</span></span>`;
+  return `<button class="cell cell--scroll ${isSel?'is-selected':''} ${disabled?'is-disabled':''} ${busy?'is-busy':''}" ${disabled?'disabled':''} data-id="${t.id}">
+    <span class="cell__mark">${isSel?icon('check',13,2.4):''}</span>
+    <span class="cell__icon">${icon('package',Math.round(t.icon*1.55),1.5)}</span>
+    <span class="cell__name">${t.name}</span>
+    ${meta}
+    <span class="cell__ladder">${['小','中','大','特大'].map((label,i)=>`<span class="ladder__item ${i<t.tiers?'on':''}"><i></i><em>${label}</em></span>`).join('')}</span>
+  </button>`;
+}
+function cardList(t,{disabled,soldout,busy}){
+  const count=COUNTS[t.id];
+  const isSel=selected===t.id && (!disabled || state==='submitting');
+  let meta;
+  if(disabled&&state==='offline') meta='不可用';
+  else if(soldout) meta='<span class="tag">已满</span>';
+  else meta=`余 ${count} 个`;
+  return `<button class="cell cell--list ${isSel?'is-selected':''} ${disabled?'is-disabled':''} ${busy?'is-busy':''}" ${disabled?'disabled':''} data-id="${t.id}">
+    <span class="cell__icon">${icon('package',Math.round(t.icon*1.15),1.7)}</span>
+    <span class="cell__text"><span class="cell__name">${t.name}</span><span class="cell__meta">${meta}</span></span>
+    <span class="cell__mark">${isSel?icon('check',13,2.4):''}</span>
+  </button>`;
+}
+function cards(){
+  const soldout=state==='soldout';
+  const disabled=state==='offline'||soldout;
+  const opts={disabled,soldout,busy:state==='submitting'};
+  if(view==='scroll'){
+    return `<div class="scroll-wrap"><div class="cells cells--scroll">${TIERS.map(t=>cardScroll(t,opts)).join('')}</div></div>
+      <div class="pager">${TIERS.map((t,i)=>`<i class="${t.id===selected?'on':''}"></i>`).join('')}<span>${selected?TIERS.findIndex(t=>t.id===selected)+1:0} / 4</span></div>`;
+  }
+  if(view==='list') return `<section class="cells cells--list">${TIERS.map(t=>cardList(t,opts)).join('')}</section>`;
+  return `<section class="cells cells--grid">${TIERS.map(t=>cardGrid(t,opts)).join('')}</section>`;
+}
+function notice(){
+  if(state!=='offline') return '';
+  return `<div class="notice">${icon('alert',15,1.8)}<span>这台柜机暂时不可用，可以换一台或稍后再试</span></div>`;
+}
+function loadingBody(){
+  return `${siteHeader({skeleton:true})}
+    <div class="section-head"><h2>选择格口</h2></div>
+    <section class="cells cells--grid">${[0,1,2,3].map(()=>`<div class="sk sk-card"></div>`).join('')}</section>`;
+}
+function failBody(){
+  return `<div class="load-failed">
+      <div class="load-failed__icon">${icon('alert',28,1.6)}</div>
+      <div class="load-failed__title">加载失败，请重试</div>
+      <div class="load-failed__detail">没能拿到这台柜机的信息</div>
+      <button class="btn-ghost">重试</button>
+    </div>`;
+}
+function entryBody(){
+  return `<div class="entry">
+    <div class="entry__icon">${icon('linkoff',30,1.5)}</div>
+    <div class="entry__title">这个码没用</div>
+    <div class="entry__detail">请用微信扫柜机上的二维码</div>
+    <div class="entry__actions"><button class="btn-primary">重新扫码</button><button class="btn-secondary">我的订单</button></div>
+  </div>`;
+}
+function barInfo(){
+  const t=TIERS.find(x=>x.id===selected);
+  if(state==='loading') return {l1:'正在获取柜机信息',l2:'请稍候',empty:true,cta:'立即存件',disabled:true};
+  if(state==='loadfail') return {l1:'柜机信息未加载',l2:'重试后再选择格口',empty:true,cta:'立即存件',disabled:true};
+  if(state==='entry') return null;
+  if(state==='offline') return {l1:'柜机暂不可用',l2:'可以换一台或稍后再试',empty:true,cta:'立即存件',disabled:true};
+  if(state==='soldout') return {l1:'暂无可存格口',l2:'可以换一台柜机',empty:true,cta:'立即存件',disabled:true};
+  if(!t) return {l1:'请选择格口',l2:'四档均可存',empty:true,cta:'立即存件',disabled:true};
+  return {l1:`已选 ${t.name}`,l2:`余 ${COUNTS[t.id]} 个`,empty:false,cta:state==='submitting'?'正在下单…':'立即存件',disabled:state==='submitting'};
+}
+function bottombar(){
+  const info=barInfo();
+  if(!info) return '';
+  const err=state==='submitfail'?`<div class="bar-error">${icon('alert',14,1.8)}下单失败，请重试</div>`:'';
+  return `<div class="bar-wrap">${err}<div class="bar">
+    <div class="bar__info"><div class="bar__line1 ${info.empty?'is-empty':''}">${info.l1}</div><div class="bar__line2 ${info.empty?'is-empty':''}">${info.l2}</div></div>
+    <button class="bar__cta ${state==='submitting'?'is-busy':''}" ${info.disabled?'disabled':''}>${state==='submitting'?'<span class="spinner"></span>':''}${info.cta}</button>
+  </div></div>`;
+}
+function sheet(){
+  if(state!=='confirm') return '';
+  const t=TIERS.find(x=>x.id===selected);
+  return `<div class="dim"></div><div class="sheet">
+    <div class="sheet__handle"></div><h3>确认存件</h3>
+    <div class="sheet__rows">
+      <div class="sheet__row"><span>柜机</span><b>望京 SOHO T1</b></div>
+      <div class="sheet__row"><span>格口</span><b>${t.name}</b></div>
+      <div class="sheet__row"><span>余位</span><b>${COUNTS[t.id]} 个</b></div>
+    </div>
+    <p class="sheet__hint">确认后会创建存件订单，请按柜机屏幕提示操作。</p>
+    <div class="sheet__actions"><button class="sheet__cancel">取消</button><button class="sheet__ok">确认存件</button></div>
+  </div>`;
+}
+
+let content='';
+if(state==='loading') content=loadingBody();
+else if(state==='loadfail') content=failBody();
+else if(state==='entry') content=entryBody();
+else content=`${siteHeader()}<div class="section-head"><h2>选择格口</h2><span>四档 · 按容量</span></div>${notice()}${cards()}<div class="facts">
+  <div class="facts__row">${icon('package',16,1.7)}<span>具体格口由柜机分配</span></div>
+  <div class="facts__row">${icon('wallet',16,1.7)}<span>费用在取件时结算，现在不用付款</span></div>
+</div>`;
+
+document.getElementById('screen').innerHTML=`${statusbar()}${navbar()}<main class="content">${content}</main>${bottombar()}${sheet()}`;
+
+// 横向滑动：把选中卡滚到视口中央（截图用）
+if(view==='scroll'&&state!=='loading'&&state!=='loadfail'&&state!=='entry'){
+  const wrap=document.querySelector('.cells--scroll');
+  const el=wrap?.querySelector('.is-selected')||wrap?.children[0];
+  if(wrap&&el){wrap.scrollLeft=el.offsetLeft-(390-282)/2;}
+}
+// 原型切换条：← → 循环切换三个布局变体
+const VARIANTS=[['grid','A · 2×2 网格'],['scroll','B · 横向滑动'],['list','C · 纵向列表']];
+const chrome=params.get('chrome')!=='0';
+if(chrome){
+  const bar=document.getElementById('switcher');
+  bar.hidden=false;
+  const draw=()=>{document.getElementById('switcher-label').textContent=VARIANTS.find(v=>v[0]===view)?.[1]||view;};
+  draw();
+  const go=(step)=>{
+    const i=Math.max(0,VARIANTS.findIndex(v=>v[0]===view));
+    const next=VARIANTS[(i+step+VARIANTS.length)%VARIANTS.length][0];
+    const q=new URLSearchParams({view:next,state,selected:selected||''});
+    location.search=q.toString();
+  };
+  bar.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>go(Number(b.dataset.step))));
+  document.addEventListener('keydown',e=>{
+    if(['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)) return;
+    if(e.key==='ArrowLeft') go(-1);
+    if(e.key==='ArrowRight') go(1);
+  });
+}
+
+// 主行动 → 二次确认 → 提交中（原型可交互）
+const cta=document.querySelector('.bar__cta');
+if(cta&&!cta.disabled){
+  cta.addEventListener('click',()=>{
+    const q=new URLSearchParams({view,state:'confirm',selected:selected||''});
+    location.search=q.toString();
+  });
+}
+document.querySelector('.sheet__ok')?.addEventListener('click',()=>{
+  const q=new URLSearchParams({view,state:'submitting',selected:selected||''});
+  location.search=q.toString();
+});
+document.querySelector('.sheet__cancel')?.addEventListener('click',()=>{
+  const q=new URLSearchParams({view,state:'ready',selected:selected||''});
+  location.search=q.toString();
+});
+
+// 点击选择（原型可交互）
+document.querySelectorAll('.cell').forEach(el=>{
+  el.addEventListener('click',()=>{
+    if(el.disabled||el.classList.contains('is-busy')) return;
+    selected=el.dataset.id;
+    const nextState=state==='nosel'?'ready':state;
+    location.search=new URLSearchParams({view,state:nextState,selected}).toString();
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>原型 · 柜机页四档格口选择</title>
+<style>
+  :root{--ink:#1f2329;--sub:#646a73;--weak:#8f959e;--line:#e6e9ee;--bg:#f6f7f9;--green:#008655;--green-soft:#e8f8f2}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Source Han Sans CN",sans-serif;line-height:1.6}
+  .wrap{max-width:1280px;margin:0 auto;padding:44px 28px 80px}
+  .tag{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:#111827;color:#fff;font-size:11px;letter-spacing:.6px}
+  h1{margin:16px 0 8px;font-size:32px;line-height:1.25;letter-spacing:-.4px}
+  .lede{margin:0;max-width:760px;color:var(--sub);font-size:15px}
+  .frames{display:flex;gap:24px;overflow-x:auto;padding:32px 0 8px;align-items:flex-start}
+  figure{margin:0;flex:0 0 390px}
+  figcaption{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;font-size:14px;font-weight:600}
+  figcaption a{font-size:12px;font-weight:500;color:var(--green);text-decoration:none}
+  iframe{width:390px;height:844px;border:1px solid var(--line);border-radius:28px;background:#fff;box-shadow:0 18px 50px rgba(16,24,40,.10)}
+  h2{margin:56px 0 6px;font-size:20px;letter-spacing:-.2px}
+  .section-lede{margin:0 0 22px;color:var(--sub);font-size:13px}
+  .shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:18px}
+  .shot{margin:0;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .shot img{display:block;width:100%;height:auto}
+  .shot figcaption{display:block;margin:0;padding:10px 12px;font-size:12px;font-weight:500;color:var(--sub);border-top:1px solid var(--line)}
+  .notes{margin-top:48px;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .note{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px 22px}
+  .note h3{margin:0 0 8px;font-size:14px}
+  .note p,.note li{margin:0;color:var(--sub);font-size:13px}
+  .note ul{margin:0;padding-left:18px}
+  code{background:#f1f3f6;border-radius:5px;padding:1px 5px;font-size:12px}
+  @media (max-width:900px){.notes{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="tag">PROTOTYPE · THROWAWAY</span>
+  <h1>柜机页：四档格口选择 +「立即存件」底部条</h1>
+  <p class="lede">
+    三个结构不同的变体，共用同一份数据与状态模型。画面可直接点击：选卡、切变体（手机页面底部黑色胶囊）、打开二次确认。
+    真实入口：<code>phone.html?view=grid|scroll|list&amp;state=…</code>。
+  </p>
+
+  <div class="frames">
+    <figure>
+      <figcaption><span>A · 2×2 网格</span><a href="phone.html?view=grid&amp;state=ready&amp;selected=medium">打开</a></figcaption>
+      <iframe src="phone.html?view=grid&amp;state=ready&amp;selected=medium&amp;chrome=0" title="A 2×2 网格"></iframe>
+    </figure>
+    <figure>
+      <figcaption><span>B · 横向滑动</span><a href="phone.html?view=scroll&amp;state=ready&amp;selected=medium">打开</a></figcaption>
+      <iframe src="phone.html?view=scroll&amp;state=ready&amp;selected=medium&amp;chrome=0" title="B 横向滑动"></iframe>
+    </figure>
+    <figure>
+      <figcaption><span>C · 纵向列表</span><a href="phone.html?view=list&amp;state=ready&amp;selected=medium">打开</a></figcaption>
+      <iframe src="phone.html?view=list&amp;state=ready&amp;selected=medium&amp;chrome=0" title="C 纵向列表"></iframe>
+    </figure>
+  </div>
+
+  <h2>状态</h2>
+  <p class="section-lede">同一套卡片在不同响应下的样子。状态由 <code>?state=</code> 切换，截图均为 390×844。</p>
+  <div class="shots">
+    <figure class="shot"><img src="shots/state-nosel.jpg" alt="未选择"><figcaption>未选择 · CTA 置灰</figcaption></figure>
+    <figure class="shot"><img src="shots/state-soldout.jpg" alt="四档已满"><figcaption>四档已满 · 正常响应</figcaption></figure>
+    <figure class="shot"><img src="shots/state-offline.jpg" alt="柜机离线"><figcaption>柜机离线 · 页内说明</figcaption></figure>
+    <figure class="shot"><img src="shots/state-loading.jpg" alt="加载中"><figcaption>加载中 · 骨架屏</figcaption></figure>
+    <figure class="shot"><img src="shots/state-loadfail.jpg" alt="加载失败"><figcaption>加载失败 · 重试</figcaption></figure>
+    <figure class="shot"><img src="shots/state-submitting.jpg" alt="提交中"><figcaption>提交中 · 防重复</figcaption></figure>
+    <figure class="shot"><img src="shots/state-submitfail.jpg" alt="下单失败"><figcaption>下单失败 · 底部条内提示</figcaption></figure>
+    <figure class="shot"><img src="shots/state-confirm.jpg" alt="二次确认"><figcaption>二次确认 · 可选路径</figcaption></figure>
+    <figure class="shot"><img src="shots/state-entry.jpg" alt="入口失效"><figcaption>入口失效 · 沿用既有页面</figcaption></figure>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h3>本原型回答</h3>
+      <ul>
+        <li>四档卡用哪种布局（网格 / 横滑 / 列表）</li>
+        <li>选中、售罄、离线、加载、失败时卡片与底部条怎么变</li>
+        <li>底部条左侧能说什么（不能是金额）</li>
+        <li>点「立即存件」是直接下单还是二次确认</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h3>本原型不回答</h3>
+      <ul>
+        <li>容量文案的最终来源：没有尺寸字段，卡片只写档名与余位</li>
+        <li>具体格口位置：<code>cellNo</code> 下单前拿不到，页面不承诺</li>
+        <li>预约入口的落位：现有页面有「预约」，本票未覆盖</li>
+        <li>视觉 token 最终值：沿用 #49 建议，等该票定稿</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>
