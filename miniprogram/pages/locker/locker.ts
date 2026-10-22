@@ -52,7 +52,7 @@ import { LOCKER_PAGE_COPY, ORDER_LIST_PATH, PAGE_TITLES, RETRY_LABEL } from '../
 import { RESERVATION_CREATE_PATH, WAITING_PATH } from '../../utils/routes'
 
 /**
- * `1002` —— **柜机不存在 / 已软删**（契约 `:975`）。
+ * `1002` —— **柜机不存在 / 已软删**（契约 `:1101`）。
  *
  * ⚠️ 它是 `13.6` **唯一**可预期的业务失败码，也是本页唯一据业务码分叉的地方。
  * 单独提成常量（而不是在 `loadLocker` 里写 `1002` 字面量）：这个数字的含义

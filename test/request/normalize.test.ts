@@ -9,8 +9,8 @@
 // 因此请求层内部重写时本文件不该碎。
 //
 // ⚠️ 归一化分类表的每条边都单独成断言，因为这张表**只看一边都是错的**：
-// 契约是 `HTTP 200 + code ≠ 0` 承载业务错误（`API:1319`），只有认证/权限用真 `401/403`
-// （`API:44`）。只判 HTTP 状态码会漏掉全部业务错误；只判 `code` 会把 403 误当业务错误。
+// 契约是 `HTTP 200 + code ≠ 0` 承载业务错误（`API:28-33`），只有认证/权限用真 `401/403`
+// （`API:45-46`）。只判 HTTP 状态码会漏掉全部业务错误；只判 `code` 会把 403 误当业务错误。
 
 import { describe, expect, it } from 'vitest'
 import { installWxStub, jsonResponse, networkFailure, seedStorage } from '../helpers/wx'
@@ -222,7 +222,7 @@ describe('#18 请求层归一化：非 2xx 的失败不得被当成成功', () =
   })
 
   it('HTTP 500 + code ≠ 0 → 归 network 而不是 business（那不是契约的业务错误形态）', async () => {
-    // 契约的业务错误形态是 `200 + code ≠ 0`（`API:1319`）。500 上的 code 不是那套语义 ——
+    // 契约的业务错误形态是 `200 + code ≠ 0`（`API:28-33`）。500 上的 code 不是那套语义 ——
     // 它多半是框架的兜底错误对象，把它当 business 会让页面按「业务原因」解释一句框架话术。
     const result = await callWith([jsonResponse({ code: 8001, message: '内部错误', data: null }, 500)])
     const error = errorOf(result)

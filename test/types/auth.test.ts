@@ -146,7 +146,7 @@ void [minimal, full, nulled, filled, refreshed, normal, blacklisted]
   it('13.1 的 code 是必填 —— 缺了必须编译不过', () => {
     const diagnostics = compileProbe(`
 import type { LoginRequest } from '${dtoPath.replace(/\.ts$/, '')}'
-// @ts-expect-error 契约 §13.1 (:924)：code 必填，缺了不该编译过
+// @ts-expect-error 契约 §13.1 (:1050)：code 必填，缺了不该编译过
 const missingCode: LoginRequest = { nickname: '小明' }
 void missingCode
 `)
@@ -158,7 +158,7 @@ void missingCode
     // ② 可空是 `| null`，**不是**可选 —— `undefined` 不是契约里的形状。
     const diagnostics = compileProbe(`
 import type { LoginUser } from '${dtoPath.replace(/\.ts$/, '')}'
-// @ts-expect-error 可空字段仍须显式给出（契约 §13.1 :934 里它们是 null，不是缺失）
+// @ts-expect-error 可空字段仍须显式给出（契约 §13.1 :1060 里它们是 null，不是缺失）
 const omitted: LoginUser = { id: 88, score: 100, status: 'NORMAL' }
 // @ts-expect-error 可空是 | null，undefined 不在契约形状里
 const undef: LoginUser = { id: 88, nickname: undefined, avatar: null, phone: null, score: 100, status: 'NORMAL' }
@@ -172,7 +172,7 @@ void [omitted, undef]
     // 「整个 data 覆盖回 token 结构」的写法，把 refresh 覆盖成 undefined。
     const diagnostics = compileProbe(`
 import type { RefreshResponse } from '${dtoPath.replace(/\.ts$/, '')}'
-// @ts-expect-error 契约 §13.2 (:943)：响应只有 { accessToken, expiresIn }
+// @ts-expect-error 契约 §13.2 (:1069)：响应只有 { accessToken, expiresIn }
 const invented: RefreshResponse = { accessToken: 'a', expiresIn: 7200, refreshToken: 'r' }
 void invented
 `)
@@ -182,7 +182,7 @@ void invented
   it('user.status 只认 NORMAL / BLACKLISTED —— 别的字符串必须编译不过', () => {
     const diagnostics = compileProbe(`
 import type { UserStatus } from '${dtoPath.replace(/\.ts$/, '')}'
-// @ts-expect-error 枚举与后端逐字一致（§13.1 :939）；类型层不做任何别的取值
+// @ts-expect-error 枚举与后端逐字一致（§13.1 :1065）；类型层不做任何别的取值
 const invented: UserStatus = 'BANNED'
 void invented
 `)
@@ -208,13 +208,13 @@ describe('#17 类型层：只写契约有的东西（规则落在源码上）', 
       expect(
         contractAnnotation.test(doc),
         `${shape} 的文档注释缺少带 §章节与 (:行号) 的契约出处 —— 期望形如 ` +
-          `「契约：API设计文档.md §13.1 (:929-939)」，实际注释为:\n${doc.trim()}`,
+          `「契约：API设计文档.md §13.1 (:1055-1065)」，实际注释为:\n${doc.trim()}`,
       ).toBe(true)
     }
   })
 
   it('契约出处的行号真的指得准 —— 打开被引文档逐条核对（「可回查」不是形状匹配就算数）', () => {
-    // ⚠️ 上一条只校验注释的**形状**（有没有 `§…(:行号)`），一条把 `(:929-939)` 改成 `(:1-2)`
+    // ⚠️ 上一条只校验注释的**形状**（有没有 `§…(:行号)`），一条把 `(:1055-1065)` 改成 `(:1-2)`
     // 的注释照样能过 —— 那样「出处可回查」就退化成了装饰。
     // 这条把行号**真的打开来读**：每个引用必须在契约源里命中它声称的那节。
     //
@@ -233,14 +233,14 @@ describe('#17 类型层：只写契约有的东西（规则落在源码上）', 
     // 左列是注释里的引用写法，右列是「该区间里必须出现的关键词」。
     const citations: readonly { label: string; from: number; to: number; mustContain: string }[] = [
       { label: '§1.4.2 access 2h / refresh 30 天', from: 60, to: 64, mustContain: 'refreshToken 默认 **30 天**' },
-      { label: '§13 认证总则', from: 917, to: 917, mustContain: '除 13.1/13.2 外均需' },
-      { label: '§13.1 请求体', from: 922, to: 927, mustContain: 'nickname/avatar/phone` 可选' },
-      { label: '§13.1 响应 data', from: 929, to: 939, mustContain: '"refreshToken": "yyyy"' },
-      { label: '§13.1 user 行（nickname/avatar/phone 可空）', from: 934, to: 934, mustContain: '"nickname"' },
-      { label: '§13.1 规则（黑名单允许登录）', from: 939, to: 939, mustContain: '黑名单用户允许登录' },
-      { label: '§13.2 刷新', from: 941, to: 943, mustContain: 'X-Refresh-Token' },
-      { label: '§13.2 响应形状（无 refreshToken）', from: 943, to: 943, mustContain: '"expiresIn": 7200' },
-      { label: '§15 错误码 8001', from: 1307, to: 1307, mustContain: '8001' },
+      { label: '§13 认证总则', from: 1043, to: 1043, mustContain: '除 13.1/13.2 外均需' },
+      { label: '§13.1 请求体', from: 1047, to: 1053, mustContain: 'nickname/avatar/phone` 可选' },
+      { label: '§13.1 响应 data', from: 1055, to: 1065, mustContain: '"refreshToken": "yyyy"' },
+      { label: '§13.1 user 行（nickname/avatar/phone 可空）', from: 1060, to: 1060, mustContain: '"nickname"' },
+      { label: '§13.1 规则（黑名单允许登录）', from: 1065, to: 1065, mustContain: '黑名单用户允许登录' },
+      { label: '§13.2 刷新', from: 1069, to: 1069, mustContain: 'X-Refresh-Token' },
+      { label: '§13.2 响应形状（无 refreshToken）', from: 1069, to: 1069, mustContain: '"expiresIn": 7200' },
+      { label: '§15 错误码 8001', from: 1435, to: 1435, mustContain: '8001' },
     ]
 
     for (const { label, from, to, mustContain } of citations) {
@@ -256,7 +256,7 @@ describe('#17 类型层：只写契约有的东西（规则落在源码上）', 
     // ⚠️ 不能直接对整行取反：那一行同时描述**请求头** `X-Refresh-Token: <refreshToken>`
     // （是 refresh 的**入参**，必须出现）和**响应** `{ accessToken, expiresIn }`。
     // 取反必须只落在响应那段上，否则这条守卫会因为请求头里的同名变量误报。
-    const refreshLine = slice(943, 943)
+    const refreshLine = slice(1069, 1069)
     const responseShape = refreshLine.slice(refreshLine.indexOf('响应 `data`'))
     expect(responseShape, '§13.2 的响应描述没找到 —— 契约源结构变了，本守卫需重新对齐').not.toBe('')
     expect(

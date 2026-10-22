@@ -5,8 +5,8 @@
 // 出口 `request/index.ts` 只负责「附加 token + 调 wx.request + 把结果交给这里」。
 //
 // 判断同时落在**两个**地方上：
-//   • HTTP 状态码 —— 认证/权限用真 `401/403`（`API:44`）
-//   • body `code`  —— 业务错误走 `HTTP 200 + code ≠ 0`（`API:1319`）
+//   • HTTP 状态码 —— 认证/权限用真 `401/403`（`API:45-46`）
+//   • body `code`  —— 业务错误走 `HTTP 200 + code ≠ 0`（`API:28-33`）
 // 只看任一边都是错的：只看状态码会漏掉全部业务错误；只看 `code` 会把 `403` 当业务错误。
 
 import type { RequestResult, UnifiedError } from './types'
@@ -14,7 +14,7 @@ import type { RequestResult, UnifiedError } from './types'
 /** `5004` —— 受限。**唯一特判**（走受限卡，不展示服务端 message）。 */
 const CODE_RESTRICTED = 5004
 
-/** 成功码。契约里 `code === 0` 表示成功（`API:1319` 的同一套响应包封）。 */
+/** 成功码。契约里 `code === 0` 表示成功（`API:28-33` 的同一套响应包封）。 */
 const CODE_SUCCESS = 0
 
 /**
@@ -34,7 +34,7 @@ export function classifyResponse<T>(statusCode: number, body: unknown): RequestR
   //    （「非 JSON 响应」）。若先按状态码分支，`200 + HTML` 会掉进「成功」分支，
   //    把一段 HTML 当成 DTO 交给调用方 —— 那是最坏的结果。
   // 2. **`5004` 其次**：它只看 `code`，不看状态码，所以必须先于状态码分支。详见下面那段注释。
-  // 3. **认证/权限再次**：`401` / `403` 是契约里唯二用真 HTTP 状态码承载的错误（`API:44`）。
+  // 3. **认证/权限再次**：`401` / `403` 是契约里唯二用真 HTTP 状态码承载的错误（`API:45-46`）。
   // 4. **其余**：非 2xx 归 `network`；`200 + code ≠ 0` 归 `business`。
   if (envelope === null) {
     return networkFailure(statusCode, null, null)
@@ -71,7 +71,7 @@ export function classifyResponse<T>(statusCode: number, body: unknown): RequestR
 
   // ⚠️⚠️ **非 2xx 的失败不得被 body 的 `code` 洗白。**
   //
-  // 契约说业务错误走 `200 + code ≠ 0`（`API:1319`），认证/权限走真 `401/403`（`API:44`）。
+  // 契约说业务错误走 `200 + code ≠ 0`（`API:28-33`），认证/权限走真 `401/403`（`API:45-46`）。
   // 但**这两种之外**的失败是真实存在的：网关 5xx、后端未捕获异常、反向代理改写的响应 ——
   // 它们**也带 body**，而那个 body 可能挂着 `code: 0`（框架兜底、或网关原样转发了一个
   // 别处的响应包封）。

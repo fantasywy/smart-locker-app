@@ -1,6 +1,6 @@
 // `13.7` 创建存件订单 —— 手写 DTO + 请求函数，**只做搬运**。
 //
-// 契约：API设计文档.md §13.7 `POST /api/app/v1/orders` (:979-998)
+// 契约：API设计文档.md §13.7 `POST /api/app/v1/orders` (:1105-1124)
 //
 // ⚠️ **`api/` 不含业务分支**。「`4004` 该说什么」「`8002` 该说什么」
 // 是文案层的裁决，落在页面；本模块只把异常对象交出去。
@@ -16,7 +16,7 @@ import type { RequestResult } from '../request/types'
 import { API_PREFIX } from '../request/config'
 import { request } from '../request/index'
 
-/** `13.7` 的路径 —— `POST /api/app/v1/orders`（契约 §13.7 :979）。 */
+/** `13.7` 的路径 —— `POST /api/app/v1/orders`（契约 §13.7 :1105）。 */
 export const CREATE_ORDER_PATH = `${API_PREFIX}/orders`
 
 // ⚠️ **DTO 在 `../types/orders.ts`**，不在本文件（「`types/` 与 `api/`

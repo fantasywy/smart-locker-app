@@ -1,6 +1,6 @@
 // `13.7` 创建存件订单的**手写 DTO** —— 只做形状，没有行为。
 //
-// 契约：API设计文档.md §13.7 `POST /api/app/v1/orders` (:979-998)
+// 契约：API设计文档.md §13.7 `POST /api/app/v1/orders` (:1105-1124)
 //
 // ⚠️ 本模块遵守**类型层与请求层分离**的硬规则（「`types/` 与 `api/` 一一对应 ——
 // 一个端点模块配一个 DTO」）。对应的端点函数在同名的
@@ -22,10 +22,10 @@
 /**
  * 格口类型枚举 —— **值与后端逐字一致**，不做任何中文映射。
  *
- * 契约：API设计文档.md §13.7 (:984)
+ * 契约：API设计文档.md §13.7 (:1110)
  *
  * ⚠️⚠️ **它是大写的，而 `13.6` 的 `cellAvailability` 阶名是小写的**
- * （`{ small, medium, large }`，`:972`）。两者**不是同一套写法**，
+ * （`{ small, medium, large }`，`:1098`）。两者**不是同一套写法**，
  * 不能互相 `[]` 取用（`availability['SMALL']` 会静默取到 `undefined`）。
  * 这个转换由页面的一处档位表负责 —— 类型层在这里如实保留契约的两种写法，
  * 不做「顺手归一」：归一了就看不出契约本身是不一致的。
@@ -37,7 +37,7 @@ export type CellType = 'SMALL' | 'MEDIUM' | 'LARGE'
 /**
  * `13.7` 请求体 —— `POST /api/app/v1/orders`。
  *
- * 契约：API设计文档.md §13.7 (:982-984)
+ * 契约：API设计文档.md §13.7 (:1107-1111)
  *
  * ```json
  * { "lockerId": 11, "cellType": "MEDIUM" }
@@ -45,7 +45,7 @@ export type CellType = 'SMALL' | 'MEDIUM' | 'LARGE'
  *
  * ⚠️ 只有两个字段，**一个都不多**：契约里没有「备注」「数量」「预约时长」之类。
  * 柜机页的三档入口各发一次这个请求，用户选的是**规格**，不是格口 ——
- * 具体分配哪个格口由服务端在事务里做（`FREE → RESERVED`，`:995`）。
+ * 具体分配哪个格口由服务端在事务里做（`FREE → RESERVED`，`:1121`）。
  */
 export interface CreateOrderRequest {
   /**
@@ -67,7 +67,7 @@ export interface CreateOrderRequest {
 /**
  * `13.7` 响应 `data` —— 建单成功后的订单摘要。
  *
- * 契约：API设计文档.md §13.7 (:986-990)
+ * 契约：API设计文档.md §13.7 (:1113-1117)
  *
  * ```json
  * { "orderId": 1001, "orderNo": "20250401001", "cellNo": "M05", "openTimeoutMinutes": 10 }
@@ -82,7 +82,7 @@ export interface CreateOrderResponse {
   orderId: number
 
   /**
-   * 订单号（如 `20250401001`）。契约 §13.7 (:990)。
+   * 订单号（如 `20250401001`）。契约 §13.7 (:1116)。
    *
    * ⚠️ **本页不用它**，等待态也不用（等待态不倒计时、不展示单号）。
    * 契约里有就带住，文案口径明令 `orderNo` 不展示给用户。
@@ -90,7 +90,7 @@ export interface CreateOrderResponse {
   orderNo: string
 
   /**
-   * 服务端分配的格口号（如 `M05`）。契约 §13.7 (:990)。
+   * 服务端分配的格口号（如 `M05`）。契约 §13.7 (:1116)。
    *
    * ⚠️ **本页与等待态都不展示它**：文案口径明令「`cellNo` 仅作行内定位辅助」
    * （订单列表行的用法），**不给它中文名**，也不在等待态出现 ——
@@ -102,7 +102,7 @@ export interface CreateOrderResponse {
    * 开门超时分钟数 —— **`openTimeoutMinutes` 唯一的合法来源**（契约逐字：
    * 「只在 `13.7` 建单响应里」；转单与支付路径都拿不到它）。
    *
-   * 契约：API设计文档.md §13.7 (:990)：取 `order.openTimeoutMinutes`（缺省 10）。
+   * 契约：API设计文档.md §13.7 (:1116)：取 `order.openTimeoutMinutes`（缺省 10）。
    *
    * ⚠️⚠️ **两条硬约束同时落在这个字段上**（票面逐字：本字段「唯一的合法来源与
    * 唯一合法使用位置」）：

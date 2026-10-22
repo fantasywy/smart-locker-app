@@ -2,10 +2,10 @@
 //
 // 契约源：`java/smart-locker/docs/API设计文档.md` v1.0
 //   • §1.4.2 用户端微信登录 + 双 token（:60-64）
-//   • §13.1 登录 `POST /api/app/v1/auth/login`（:919-939）
-//   • §13.2 刷新 `POST /api/app/v1/auth/refresh`（:941-943）
-//   • §1 认证总则「除 13.1/13.2 外均需 Authorization: Bearer <accessToken>」（:917）
-//   • §15 错误码表（:1307-1308）
+//   • §13.1 登录 `POST /api/app/v1/auth/login`（:1045-1065）
+//   • §13.2 刷新 `POST /api/app/v1/auth/refresh`（:1067-1069）
+//   • §1 认证总则「除 13.1/13.2 外均需 Authorization: Bearer <accessToken>」（:1043）
+//   • §15 错误码表（:1435-1436）
 // 本模块按类型层的既定规则落地：
 //   1. **不发明字段、不改字段名、不合并语义不同的字段** —— 后端叫 `accessToken` 就叫 `accessToken`。
 //   2. **可空字段显式标 `| null`** —— strict 模式因此强迫调用方处理这些分支。
@@ -20,7 +20,7 @@
 /**
  * `13.1` 请求体 —— `POST /api/app/v1/auth/login`。
  *
- * 契约：API设计文档.md §13.1 (:922-927)
+ * 契约：API设计文档.md §13.1 (:1047-1053)
  *
  * 请求体的字段与默认取值：`code` 必填，其余三项一期不填（见各字段注释）。
  */
@@ -29,7 +29,7 @@ export interface LoginRequest {
    * 微信侧登录凭证（`wx.login` 取得的临时 `code`）—— **必填**，也是本请求唯一的必需字段。
    *
    * ⚠️ 它不是「校验失败就 `1001`」的普通参数：`code` 为空或无效由**换取通道**判为 `8001`
-   * （HTTP 200、业务错误，见 §15 :1307），**不是** `1001` 参数校验错
+   * （HTTP 200、业务错误，见 §15 :1435），**不是** `1001` 参数校验错
    * （后端源码口径：`AppLoginRequest` 的 Javadoc「空值/无效由换取通道判为 8001（不是 1001）」）。
    * 后果：登录失败在统一异常对象里长成 `kind: 'business'`，**不是** `unauthorized` —— 这一条
    * 由 `#18` 的归一化测试锁住。
@@ -37,24 +37,24 @@ export interface LoginRequest {
   code: string
 
   /**
-   * 微信授权昵称 —— **可选**，仅首次自动注册时落库（§13.1 :927）。
+   * 微信授权昵称 —— **可选**，仅首次自动注册时落库（§13.1 :1053）。
    *
    * ⚠️ 一期**不填**这三项：资料填写留给「我的」页的头像昵称填写能力。本字段存在
    * 只是为了让类型与契约逐字一致，「类型上有」不等于「一期要传」。
    */
   nickname?: string
 
-  /** 微信授权头像 URL —— **可选**，同上（§13.1 :927）。 */
+  /** 微信授权头像 URL —— **可选**，同上（§13.1 :1053）。 */
   avatar?: string
 
-  /** 微信授权手机号 —— **可选**，同上（§13.1 :927）。⚠️ 设计口径明确「不展示手机号」。 */
+  /** 微信授权手机号 —— **可选**，同上（§13.1 :1053）。⚠️ 设计口径明确「不展示手机号」。 */
   phone?: string
 }
 
 /**
  * 用户状态枚举 —— **值与后端逐字一致**，不做任何中文映射。
  *
- * 契约：API设计文档.md §13.1 (:934, :939)
+ * 契约：API设计文档.md §13.1 (:1060, :1065)
  * 后端真源：`UserStatus`（`NORMAL` / `BLACKLISTED`）；信用分的档位语义
  * （`NORMAL` → 中性档；`BLACKLISTED` → 警示档）**是文案层的映射，不在此处**。
  */
@@ -63,7 +63,7 @@ export type UserStatus = 'NORMAL' | 'BLACKLISTED'
 /**
  * `13.1` 响应 `data.user` —— 登录时刻的用户简要信息。
  *
- * 契约：API设计文档.md §13.1 (:934-935)
+ * 契约：API设计文档.md §13.1 (:1060-1061)
  */
 export interface LoginUser {
   /**
@@ -78,7 +78,7 @@ export interface LoginUser {
    */
   id: number
 
-  /** 昵称。**可空** —— 未授权资料时为空（§13.1 :934）。 */
+  /** 昵称。**可空** —— 未授权资料时为空（§13.1 :1060）。 */
   nickname: string | null
 
   /** 头像 URL。**可空** —— 同上。 */
@@ -88,7 +88,7 @@ export interface LoginUser {
   phone: string | null
 
   /**
-   * 信用分（后端字段 `score`）。不可空 —— 首次自动注册时取系统参数 `score.max`（默认 100，§13.1 :939）。
+   * 信用分（后端字段 `score`）。不可空 —— 首次自动注册时取系统参数 `score.max`（默认 100，§13.1 :1065）。
    *
    * ⚠️ 术语纪律：它是**信用分**，**不叫「积分」** —— 它不是可兑换的消费积分，而是扣减型的
    * 行为约束分（`GLOSSARY.md`「信用分」：`_Avoid_: 积分、评分、分值`）。
@@ -101,7 +101,7 @@ export interface LoginUser {
    * ⚠️⚠️ **登录成功时它也可能是 `BLACKLISTED`。**
    *
    * 契约原文：`13.1`「**黑名单用户允许登录**（`status` 返回 `BLACKLISTED`，下单等操作另行拦截）」
-   * （§13.1 :939）⇒ **不存在「登录被拒」的业务分支**。也就是说 `status` 与「这次登录成不成功」
+   * （§13.1 :1065）⇒ **不存在「登录被拒」的业务分支**。也就是说 `status` 与「这次登录成不成功」
    * **完全正交** —— 它描述的是这个账号当前的受限状态，不是登录的结果。
    *
    * ⚠️ 上面引的「黑名单」是**后端契约原文**，照引不误；但**用户可见文案里不出这个词**，
@@ -126,7 +126,7 @@ export interface LoginUser {
 /**
  * `13.1` 响应 `data` —— `POST /api/app/v1/auth/login`。
  *
- * 契约：API设计文档.md §13.1 (:929-939)
+ * 契约：API设计文档.md §13.1 (:1055-1065)
  *
  * ```json
  * { "accessToken": "xxxx", "refreshToken": "yyyy", "expiresIn": 7200,
@@ -136,14 +136,14 @@ export interface LoginUser {
  */
 export interface LoginResponse {
   /**
-   * 访问令牌。随业务请求走 `Authorization: Bearer <accessToken>`（§13 总则 :917）。
+   * 访问令牌。随业务请求走 `Authorization: Bearer <accessToken>`（§13 总则 :1043）。
    * 有效期 2h（§1.4.2 :63）。不可空。
    */
   accessToken: string
 
   /**
    * 刷新令牌。仅在调用 `13.2` 时以 **`X-Refresh-Token` 头**送出
-   * （§13.2 :943）—— **不是** Bearer access。有效期 30 天（§1.4.2 :63）。
+   * （§13.2 :1069）—— **不是** Bearer access。有效期 30 天（§1.4.2 :63）。
    *
    * ⚠️ 它**只在 `13.1` 的响应里出现**。`13.2` 的响应**没有**这个字段（见 `RefreshResponse`）。
    */
@@ -165,7 +165,7 @@ export interface LoginResponse {
 /**
  * `13.2` 响应 `data` —— `POST /api/app/v1/auth/refresh`。
  *
- * 契约：API设计文档.md §13.2 (:941-943)
+ * 契约：API设计文档.md §13.2 (:1067-1069)
  *
  * ```json
  * { "accessToken": "xxxx", "expiresIn": 7200 }

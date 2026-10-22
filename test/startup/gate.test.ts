@@ -34,7 +34,7 @@ const FAILURE_CAUSES: readonly { name: string; error: UnifiedError }[] = [
   {
     name: '13.1 返回 8001',
     // `8001` 走 HTTP 200 + 业务码 ⇒ `kind: 'business'`，**不是** unauthorized
-    // （`types/auth.ts` 的 `LoginRequest.code` 注释、§15 :1307）。
+    // （`types/auth.ts` 的 `LoginRequest.code` 注释、§15 :1435）。
     error: { httpStatus: 200, code: 8001, message: '微信登录失败', kind: 'business' },
   },
   {

@@ -1,7 +1,7 @@
 // `13.1` / `13.2` 的**请求形状** —— 登录失效处理自己的两个调用口。
 //
-// 契约出处：API设计文档.md §13.1 `POST /api/app/v1/auth/login` (:919-939)、
-// §13.2 `POST /api/app/v1/auth/refresh` (:941-943)。
+// 契约出处：API设计文档.md §13.1 `POST /api/app/v1/auth/login` (:1045-1065)、
+// §13.2 `POST /api/app/v1/auth/refresh` (:1067-1069)。
 //
 // ⚠️ **为什么这两个函数在 `request/` 里，而不在 `api/` 里。**
 //
@@ -35,18 +35,18 @@ import { LOGIN_PATH, REFRESH_PATH } from './config'
 /**
  * `13.1` 登录 / 首登自动注册 —— `POST /api/app/v1/auth/login`。
  *
- * 契约：API设计文档.md §13.1 (:919-939)
+ * 契约：API设计文档.md §13.1 (:1045-1065)
  *
  * 用 `wx.login` 拿到的临时 `code` 换双 token。openid **首次出现自动注册**
- * （初始信用分 `score.max`、状态 `NORMAL`，§13.1 :939）。
+ * （初始信用分 `score.max`、状态 `NORMAL`，§13.1 :1065）。
  *
  * ⚠️ **黑名单用户允许登录** —— 响应里的 `user.status` 可能是 `BLACKLISTED` 而**登录照样成功**
- * （§13.1 :939）。⚠️ 上面引的「黑名单」是**后端契约原文**，照引不误；但**用户可见文案里不出
+ * （§13.1 :1065）。⚠️ 上面引的「黑名单」是**后端契约原文**，照引不误；但**用户可见文案里不出
  * 这个词**，一律说「受限」（`GLOSSARY.md`「受限」）。
  * 本函数**不做任何基于 `status` 的阻断**（「拦截权只能属于服务端」）
  * —— 它把 `status` 作为字段原样交给调用方，「只读、不判断」（见 `types/auth.ts` 的说明）。
  *
- * ⚠️ `code` 无效 / 微信侧错误 → `8001`（**HTTP 200**、业务错误，§15 :1307），
+ * ⚠️ `code` 无效 / 微信侧错误 → `8001`（**HTTP 200**、业务错误，§15 :1435），
  * 归一化成 `kind: 'business'`，**不是** `unauthorized`。调用方据此走全局失败出口，
  * 而不是去刷新 token。
  *
@@ -62,12 +62,12 @@ export function login(payload: LoginRequest): Promise<RequestResult<LoginRespons
 /**
  * `13.2` 刷新 access —— `POST /api/app/v1/auth/refresh`。
  *
- * 契约：API设计文档.md §13.2 (:941-943)
+ * 契约：API设计文档.md §13.2 (:1067-1069)
  *
- * ⚠️⚠️ **用 `X-Refresh-Token` 头，不是 Bearer access**（§13.2 :943）。
+ * ⚠️⚠️ **用 `X-Refresh-Token` 头，不是 Bearer access**（§13.2 :1069）。
  * refresh 的入参是请求头，请求体为空。
  *
- * ⚠️ 响应**只有** `{ accessToken, expiresIn }` —— **没有 `refreshToken`**（§13.2 :943）。
+ * ⚠️ 响应**只有** `{ accessToken, expiresIn }` —— **没有 `refreshToken`**（§13.2 :1069）。
  * 调用方**只更新 access、refresh 原值保留**：`13.2` 是续期 access、**不轮换 refresh**。
  * 若写成「整个响应覆盖回 token 结构」，refresh 会变成 `undefined`，下一次请求提前撞上
  * `401 + 2005` 而被迫重登 —— 把一个 30 天的会话缩成一次刷新。

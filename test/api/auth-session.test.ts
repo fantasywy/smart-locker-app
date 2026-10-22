@@ -113,7 +113,7 @@ describe('#18 api/auth：13.1 登录只做搬运，不含业务分支', () => {
 
 describe('#18 api/auth：13.2 用 X-Refresh-Token 头，且响应不轮换 refresh', () => {
   it('发出的请求：POST /api/app/v1/auth/refresh，头带 X-Refresh-Token，无 body', async () => {
-    // ⚠️ `13.2` 用 `X-Refresh-Token` 头，**不是** Bearer access（`API:943`）。
+    // ⚠️ `13.2` 用 `X-Refresh-Token` 头，**不是** Bearer access（`API:1069`）。
     const wx = stubLoginFlow([
       jsonResponse({ code: 0, message: 'ok', data: { accessToken: 'A2', expiresIn: 7200 } }),
     ])
@@ -181,7 +181,7 @@ describe('#18 冷启动登录链：无 refresh token → wx.login → 13.1 → �
   })
 
   it('⚠️ 13.1 返回 user.status = BLACKLISTED → 登录成功、不阻断', async () => {
-    // `13.1` :939：**黑名单用户允许登录**。既定裁决明令客户端不得据此做任何
+    // `13.1` :1065：**黑名单用户允许登录**。既定裁决明令客户端不得据此做任何
     // 事前阻断 —— 拦截权只能属于服务端（本地快照会造出双源真相，还会把已解禁用户挡在门外）。
     stubLoginFlow([
       jsonResponse(
