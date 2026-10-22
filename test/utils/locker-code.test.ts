@@ -6,9 +6,6 @@
 // 它的三个来源（`q` / `options.code` / `scanCode.result`）**全部是字符串**，
 // 而「从哪个来源进来的」这件事在收敛之后从产品里消失（`01` §2.2）——
 // 所以本文件**不装 `wx` 桩**，也不该装：装了就说明这个函数碰到了它不该碰的东西。
-//
-// 出处：`docs/spec/01-entry-and-identity.md` §2.1（载荷格式 `https://<域名>/l/{lockerCode}`）、
-// §2.2（两条通道 + 三来源收敛 + `scancode_time` 不参与业务判断）、§6.1（解析不出 code）。
 
 import { describe, expect, it } from 'vitest'
 import { resolveLockerCode } from '../../miniprogram/utils/locker-code'

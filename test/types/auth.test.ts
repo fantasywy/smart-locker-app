@@ -25,8 +25,8 @@ const dtoPath = join(repoRoot, 'miniprogram/types/auth.ts')
 const dtoSource = readFileSync(dtoPath, 'utf8')
 
 /**
- * 契约源。它是**兄弟仓库** `java/smart-locker` 的产物，不在本仓库 —— 与 `docs/research/R1`
- * 引用它的方式一致（绝对路径）。缺席时行号核对跳过，见那条测试里的注释。
+ * 契约源。它是**兄弟仓库** `java/smart-locker` 的产物，不在本仓库。
+ * 缺席时行号核对跳过，见那条测试里的注释。
  */
 const contractPath = '/home/fantasywy/codes/java/smart-locker/docs/API设计文档.md'
 

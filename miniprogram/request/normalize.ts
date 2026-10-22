@@ -1,8 +1,5 @@
 // 归一化 —— 把「一份原始响应」翻成 `07` §4.2 的统一异常对象。
 //
-// 契约出处：`docs/spec/07-engineering-form.md` §4.2（含 `kind` 归一化表）、
-// `docs/spec/04-blacklist-and-degradation.md` §3（`5004` 特判）。
-//
 // ⚠️ 本模块是**纯函数**：不碰 `wx.*`、不碰 storage、不弹窗、不抛异常。
 // 它是请求层里唯一「有分支」的地方，因此也是唯一值得单独测的地方 ——
 // 出口 `request/index.ts` 只负责「附加 token + 调 wx.request + 把结果交给这里」。

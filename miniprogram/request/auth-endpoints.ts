@@ -1,8 +1,7 @@
 // `13.1` / `13.2` 的**请求形状** —— 登录失效处理自己的两个调用口。
 //
 // 契约出处：API设计文档.md §13.1 `POST /api/app/v1/auth/login` (:919-939)、
-// §13.2 `POST /api/app/v1/auth/refresh` (:941-943)；`docs/spec/07-engineering-form.md`
-// §4.3（硬约束 4 / 5）、§4.4（token 口径）。
+// §13.2 `POST /api/app/v1/auth/refresh` (:941-943)。
 //
 // ⚠️ **为什么这两个函数在 `request/` 里，而不在 `api/` 里。**
 //

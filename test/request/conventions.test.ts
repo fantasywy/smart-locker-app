@@ -7,8 +7,6 @@
 // 断言风格同 `test/types/auth.test.ts` 的源码守卫：**把 spec 里的一条事实落成一条断言、
 // 失败时打印出违反的是哪一条**。判据一律取**剥离注释后**的源码 —— 注释里提 `wx.request`
 // 是必要的契约说明（本文件的主题就是它），不该被当成违规。
-//
-// 出处：`docs/spec/07-engineering-form.md` §3 目录结构硬规则 1 / 2、§6 状态管理。
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'

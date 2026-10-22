@@ -1,7 +1,5 @@
 // token 的**持久化** —— 全端唯一读写 access / refresh 的地方。
 //
-// 契约出处：`docs/spec/07-engineering-form.md` §4.4「token 存储与过期判定」（已定案）。
-//
 // 三条口径，逐条都是裁决而不是实现细节：
 //
 // 1. **access 与 refresh 都持久化到 `storage`**。理由：access 2h / refresh 30d

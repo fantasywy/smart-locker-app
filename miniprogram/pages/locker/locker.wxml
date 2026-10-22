@@ -1,5 +1,5 @@
 <!--
-  柜机页 —— 扫码落地页（issue #26；出处 `docs/spec/01-entry-and-identity.md` §6 / §6.1）。
+  柜机页 —— 扫码落地页。
 
   ⚠️⚠️ **本文件里没有一句文案字面量。** 用户可见的每一个字都从 `startup/copy.ts` 的
      `LOCKER_PAGE_COPY` 来（`09` §0 硬规则 1），页面的 `data` 只是把它转手。

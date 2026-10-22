@@ -1,9 +1,6 @@
 // `13.6` 扫码查柜机的**手写 DTO** —— 只做形状，没有行为。
 //
 // 契约：API设计文档.md §13.6 `GET /api/app/v1/lockers/by-code` (:965-977)
-// 出处底稿：`docs/research/R1-api-mapping.md` §1「13.6 · 响应 data」
-// 消费方：`docs/spec/01-entry-and-identity.md` §6（柜机页）、
-//         `docs/spec/08-waiting-state.md` §2（移交进等待态的入参来源）。
 //
 // ⚠️ 本模块的位置归 `07` §3 **硬规则 3**（「`types/` 与 `api/` 一一对应 ——
 // 一个端点模块配一个 DTO（§7）」）与 §7（类型来源）。对应的端点函数在同名的

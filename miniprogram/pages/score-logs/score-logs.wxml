@@ -13,8 +13,6 @@
      不写「敬请期待」、不写占位数据、不写开发者台词。
      它渲染的只有自绘导航栏（`07` §5：全端统一自绘）与一个空的页面容器。
      承载它的页面票请**整体替换**本文件，而不是往上叠。
-
-  出处：`docs/spec/04-blacklist-and-degradation.md` §7.3。
 -->
 <navigation-bar title="{{ title }}" back="{{true}}" color="black" background="#FFF"></navigation-bar>
 

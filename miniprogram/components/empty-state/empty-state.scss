@@ -1,7 +1,6 @@
 // 空态 —— 三个列表页共用（09 §7.1）。色值全部走色调层 token，不写裸 hex（10 §6 禁令 5）。
 //
-// 出处：`docs/spec/10-visual-language.md` §6（禁令）/ §7.2（单位）/ §8（验收事实）；
-// `miniprogram/styles/_variables.scss`（取值）。
+// 取值：`miniprogram/styles/_variables.scss`。
 //
 // ⚠️ **单位分工照 `10` §7.2**：**布局几何用 `rpx`**（`750rpx` = 屏宽，不同屏宽下版式一致），
 //    **字号与 1px 级细节用 `px`**。所以尺寸一律 `rpx`，字号一律走 `v.$font-size-*`

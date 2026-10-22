@@ -17,9 +17,7 @@
 // ⇒ 判据全部落在**外部行为**上：`setData` 收到了什么（界面画了什么）、
 // `wx.*` 被调了什么（跳转与请求）、请求体里发了什么。不测页面内部怎么组织方法。
 //
-// 出处：`docs/spec/01-entry-and-identity.md` §2.2 / §2.4 / §6 / §6.1、
-// `docs/spec/09-copy-and-status.md` §6 第 3–6 条 / §7.2、`docs/spec/05-reservation.md` §3.4、
-// `docs/spec/08-waiting-state.md` §2、`docs/adr/0001-c-end-no-locker-browsing.md`。
+// 柜机上下文只能来自扫码：`docs/adr/0001-c-end-no-locker-browsing.md`。
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'

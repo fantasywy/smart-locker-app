@@ -9,8 +9,6 @@
 //
 // ⚠️ 用 `Component()` 而不是 `Page()` —— 与仓库既有页面一致，且 `Component`
 //     的 `lifetimes` 给页面票留了明确的挂载点（订阅在 `attached`、退订在 `detached`）。
-//
-// 出处：`docs/spec/04-blacklist-and-degradation.md` §7.3。
 
 import { PAGE_TITLES } from '../../startup/copy'
 

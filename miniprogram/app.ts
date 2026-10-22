@@ -1,8 +1,5 @@
 // 小程序入口 —— 只做**启动态的承载**，不做登录。
 //
-// 契约出处：`docs/spec/01-entry-and-identity.md` §3（登录链）、§4（全局失败出口）；
-// `docs/spec/07-engineering-form.md` §6（状态管理：不引 store）。
-//
 // ⚠️ **登录链不在这里。** 它在 `api/session.ts` 的 `ensureLoggedIn()` ——
 // 冷启动 `wx.login` → `13.1` → 双 token 落 `storage`（`01` §3.4 状态机）。
 // 本文件**刻意不调它**：启动闸门与「骨架先出现、数据区等 token」的呈现属 #20，

@@ -1,7 +1,5 @@
 // 请求层的**配置** —— 唯二免鉴权端点的硬编码豁免名单，与 baseUrl 解析。
 //
-// 契约出处：`docs/spec/07-engineering-form.md` §4.3 硬约束 5。
-//
 // ⚠️ 豁免名单是**源码核实过的事实**，不是推断：
 // `java/smart-locker/src/main/java/com/zhichu/common/config/WebMvcConfig.java:46-47`：
 //
@@ -45,8 +43,7 @@ export function isAuthExempt(path: string): boolean {
 /**
  * 后端基地址 —— 本机联调的开发后端（`http://localhost:8080`）。
  *
- * 契约出处：`docs/spec/07-engineering-form.md` §4.3；联调事实见 issue #22
- * （charting 实测 `13.1` 返回 `code:0`）。
+ * 联调事实：`13.1` 返回 `code:0`。
  *
  * ⚠️ 一期**没有环境切换机制**（不在 #18 的范围）：地址先落成常量，等真有测试环境时
  * 再引入开关。不预先编造 `env` 参数或取值函数 —— 那会造出一个「看起来能配、其实没人配」

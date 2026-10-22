@@ -7,8 +7,6 @@
 // 分页越界**钳制到末页**，「请求越界页返回空列表」**不会发生**。
 // ⇒ 按空数组判断的实现会**无限重复末页**。
 //
-// 出处：`docs/spec/03-order-list.md` §1.9 + §7、`docs/spec/05-reservation.md` §6.3、
-// `docs/spec/04-blacklist-and-degradation.md` §7.3。
 //
 // ⚠️ 本文件一个 `wx.*` 桩都不用 —— `utils/pagination.ts` 是纯函数。
 

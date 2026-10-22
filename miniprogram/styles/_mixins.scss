@@ -4,7 +4,7 @@
 // 文档里写「文字走 ink」是不够的 —— 实现者照样会敲 `color: v.$color-warning`。
 // 所以：**调用方给的是档名（warn），不是颜色。**
 //
-// 四支 mixin，各有明确适用面（docs/spec/10-visual-language.md §5）：
+// 四支 mixin，各有明确适用面：
 //   tone-bar   左缘 3px 语义色条 —— 列表行 / 卡片
 //   tone-chip  标签：语义色边框 + 中性底 + ink 文字 —— 状态标签
 //   tone-text  只换文字色（ink）—— 已经是别的载体、只想把文字染成该档

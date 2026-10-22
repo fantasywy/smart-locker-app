@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config'
 
-// 测试载体配置 —— 对应 `docs/spec/07-engineering-form.md` §2（工程约束）与 issue #16。
+// 测试载体配置。
 //
 // 为什么几乎没有配置：测试要验的是**异步时序**（单一飞行、排队重放、失败转段），
 // 不需要浏览器环境、不需要 DOM、不需要跨端编译链。`miniprogram/` 下的 TS 直接跑，

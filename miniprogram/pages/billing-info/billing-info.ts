@@ -9,8 +9,6 @@
 //
 // ⚠️ 用 `Component()` 而不是 `Page()` —— 与仓库既有页面一致，且 `Component`
 //     的 `lifetimes` 给页面票留了明确的挂载点（订阅在 `attached`、退订在 `detached`）。
-//
-// 出处：`docs/spec/01-entry-and-identity.md` §4 / §5（静态出口）。
 
 import { PAGE_TITLES } from '../../startup/copy'
 

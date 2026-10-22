@@ -1,8 +1,5 @@
 // **列表分页尾部** —— 三条分页规则只写一次。issue #23 的交付物之一。
 //
-// 契约出处：`docs/spec/03-order-list.md` §1.9 + §7（订单列表）、
-// `docs/spec/05-reservation.md` §6.3（预约列表）、
-// `docs/spec/04-blacklist-and-degradation.md` §7.3（信用分明细）。
 // ⚠️ 三处的规则**逐字相同**，本模块是它们唯一的实现处：
 //
 //   首屏 `pageSize = 20`（`status` 不传）· 上拉触底取下一页

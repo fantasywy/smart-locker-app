@@ -6,8 +6,6 @@
 //   • §13.2 刷新 `POST /api/app/v1/auth/refresh`（:941-943）
 //   • §1 认证总则「除 13.1/13.2 外均需 Authorization: Bearer <accessToken>」（:917）
 //   • §15 错误码表（:1307-1308）
-// 字段级出处的底稿：`docs/research/R1-api-mapping.md` §1「13.1 / 13.2」。
-//
 // 承 `07` §7（类型来源）的规则，本模块是它们的落地：
 //   1. **不发明字段、不改字段名、不合并语义不同的字段** —— 后端叫 `accessToken` 就叫 `accessToken`。
 //   2. **可空字段显式标 `| null`** —— strict 模式因此强迫调用方处理这些分支。
@@ -24,7 +22,6 @@
  * `13.1` 请求体 —— `POST /api/app/v1/auth/login`。
  *
  * 契约：API设计文档.md §13.1 (:922-927)
- * 出处底稿：`R1` §1「13.1 · 请求字段」、`docs/spec/01-entry-and-identity.md` §3.1（隐式前置登录）
  *
  * 请求体的字段与默认取值：`code` 必填，其余三项一期不填（见各字段注释）。
  */

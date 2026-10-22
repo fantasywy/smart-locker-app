@@ -1,11 +1,6 @@
 // **柜机页** —— 扫码落地页，两条扫码通道的汇聚点，也是「存件」这条主链的起点。
 //
-// 契约出处：`docs/spec/01-entry-and-identity.md` §2.1（载荷格式）、§2.2（两条通道 +
-// 三来源收敛）、§2.4（顶部出口）、§6（柜机页全节）、**§6.1（四种非正常进入）**；
-// `docs/spec/05-reservation.md` §2 / §3.4（预约入口与余位 0）；`docs/spec/08-waiting-state.md`
-// §2（`redirectTo` 与入参）；`docs/spec/09-copy-and-status.md` §6 第 3–6 条 / §7.2；
-// `docs/adr/0001-c-end-no-locker-browsing.md`（柜机上下文只能来自扫码）；
-// `docs/research/R1-api-mapping.md` §1「13.6 / 13.7」。
+// 柜机上下文只能来自扫码（`docs/adr/0001-c-end-no-locker-browsing.md`）。
 //
 // ## 这个页面的全部难点在「同一个页面的四种长相」
 //

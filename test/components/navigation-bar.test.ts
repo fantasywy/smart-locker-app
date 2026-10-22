@@ -11,9 +11,6 @@
 // 本仓库的桩在这条上帮了大忙：`switchTab` 是「未编排即**抛错**」的（见 test/helpers/wx.ts），
 // 所以「点了没反应」与「点了真的调了 switchTab」在测试里是**可区分**的两件事 ——
 // 前者会让用例红，而一个静默返回 undefined 的桩会让两者都绿。
-//
-// 出处：`docs/spec/01-entry-and-identity.md` §2.4:55-59（柜机页出口走 `wx.switchTab`
-// 到订单 tab）、`docs/spec/07-engineering-form.md` §5:138（只有自绘导航栏能承载它）。
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'

@@ -7,9 +7,6 @@
 //
 // 判据一律取**剥离注释后**的源码 —— 注释里提「错误码」是必要的契约说明
 // （本文件的主题就是它），不该被当成违规。
-//
-// 出处：`docs/spec/01-entry-and-identity.md` §3.2 / §4、`docs/spec/09-copy-and-status.md`
-// §7.1 / §7.2、`docs/spec/10-visual-language.md` §6 / §8。
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
