@@ -117,7 +117,7 @@ export function formatOrderTime(instant: ServerInstant): string {
  *
  * 契约：`09` §5.4 第 1 行（`03` §5）→ `存入 04-01 09:00`。
  *
- * ⚠️ 前缀「存入」是 `CONTEXT.md` 的 canonical 术语（`09` §5.5 明令不许说「寄件 / 寄存」）。
+ * ⚠️ 前缀「存入」是 `GLOSSARY.md` 的 canonical 术语（`09` §5.5 明令不许说「寄件 / 寄存」）。
  * 它写在本模块里而不是各页面里，理由与整份 `09` 一致：**用户可见的每个字都只有一个家**。
  *
  * @returns 解析不出时返回空串（与 `formatOrderTime` 同一口径）

@@ -29,7 +29,7 @@ describe('#23 09 §5.4 的七种时间写法', () => {
   it('①订单列表 · 在途 → `存入 MM-DD HH:mm`（09 §5.4 第 1 行）', () => {
     // 表里的示例逐字：`存入 04-01 09:00`。
     expect(formatOrderTimeInProgress(SERVER_INSTANT)).toBe('存入 04-01 09:00')
-    // 前缀里的「存入」是 CONTEXT.md 的 canonical 术语（09 §5.5：不许说「寄件」/「寄存」）。
+    // 前缀里的「存入」是 GLOSSARY.md 的 canonical 术语（09 §5.5：不许说「寄件」/「寄存」）。
     expect(formatOrderTimeInProgress(SERVER_INSTANT).startsWith('存入 ')).toBe(true)
   })
 

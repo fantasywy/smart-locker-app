@@ -10,4 +10,4 @@ Issues 和 specs 存放在 GitHub Issues（`fantasywy/smart-locker-app`），所
 
 ### Domain docs
 
-Single-context：repo 根目录一个 `CONTEXT.md` 加 `docs/adr/`。See `docs/agents/domain.md`.
+Single-context：repo 根目录一个 `GLOSSARY.md` 加 `docs/adr/`。See `docs/agents/domain.md`.
