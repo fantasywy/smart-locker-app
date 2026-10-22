@@ -185,7 +185,7 @@ input{font-family:inherit}
 .skel{background:#e9edf1;border-radius:8px;position:relative;overflow:hidden}
 .skel::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);animation:sh 1.4s infinite}
 @keyframes sh{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-.skel-card{flex:0 0 330px;height:212px;border-radius:var(--r-card);background:#fff;padding:16px;display:flex;flex-direction:column;gap:10px}
+.skel-card{flex:0 0 150px;height:150px;border-radius:var(--r-card);background:#fff;padding:14px;display:flex;flex-direction:column;gap:8px}
 
 /* ---------- 原型切换 ---------- */
 .proto-nav{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:10px;background:#111827;color:#fff;border-radius:999px;padding:7px 8px;font-size:11px;box-shadow:0 8px 24px rgba(0,0,0,.28);white-space:nowrap}
@@ -336,7 +336,7 @@ function fmtDist(m){ return m<1000 ? `${m} m` : `${(m/1000).toFixed(1)} km`; }
 
 /* ===== 状态块 ===== */
 function skeleton(extra=''){
-  return `<div class="skel-card"><div class="skel" style="height:18px;width:60%"></div><div class="skel" style="height:12px;width:40%"></div><div class="skel" style="height:12px;width:80%"></div><div class="skel" style="height:44px;width:100%"></div><div class="skel" style="height:36px;width:100%;margin-top:auto"></div></div>${extra}`;
+  return `<div class="skel-card"><div class="skel" style="height:16px;width:55%"></div><div class="skel" style="height:11px;width:35%"></div><div class="skel" style="height:11px;width:75%"></div><div class="skel" style="height:40px;width:100%;margin-top:8px"></div></div>${extra}`;
 }
 function pageState(kind){
   return `<div style="position:absolute;inset:0;display:flex;flex-direction:column;background:#fff">
@@ -412,12 +412,13 @@ function screenB(){
   return `
     <div class="search-row">${searchField()}</div>
     ${fail ? `<div class="b-map-fail">${I.map}<div><b>地图没加载出来</b>站点列表仍可用</div><button class="btn ghost" style="margin-left:auto;height:30px;padding:0 10px;font-size:12px" data-act="retry">重试</button></div>`
-           : `<div class="b-map">${mapSVG()}${markers(SORTED)}${denied?'':userDot()}<button class="expand" data-act="expand">${I.map}全屏地图</button></div>`}
+           : `<div class="b-map">${mapSVG()}${STATE==='loading'?'':markers(SORTED)}${denied?'':userDot()}<button class="expand" data-act="expand">${I.map}全屏地图</button></div>`}
     ${denied?`<div class="banner" style="position:static;margin:8px 12px 0"><span>${I.locate}</span><span><b>未定位</b> · 按站点名排序</span><button class="lnk" data-act="locate">开启定位</button></div>`:''}
     <div class="list-head"><h2>附近 ${SORTED.length} 个站点</h2><span class="sort">${denied?'按可用状态、站点名排序':'按可用状态、距离排序'}</span></div>
-    <div class="b-list">${STATE==='loading'?skeleton():SORTED.map(s=>cardHTML(s,denied,true)).join('')}</div>
+    <div class="b-list">${STATE==='loading'?skeleton()+skeleton()+skeleton():SORTED.map(s=>cardHTML(s,denied,true)).join('')}</div>
     ${STATE==='search'?searchLayer():''}
     ${STATE==='citypick'?cityLayer():''}
+    ${STATE==='map'?mapOverlay():''}
   `;
 }
 
@@ -447,11 +448,19 @@ function mapOverlay(){
   return `<div style="position:absolute;inset:0;z-index:22">
     <div class="mapwrap">${mapSVG()}${markers(SORTED)}${userDot()}</div>
     <div class="overlay-top">${searchField()}<button class="icon-btn" data-act="close-map">${I.x}</button></div>
+    <button class="locate" style="bottom:300px" data-act="locate">${I.locate}</button><div class="counter" style="bottom:258px">1 / ${SORTED.length}</div>
     <div class="carousel">${SORTED.map(s=>cardHTML(s,false)).join('')}</div>
   </div>`;
 }
 
 /* ===== 渲染 ===== */
+function rerender(){
+  const list=document.querySelector('.b-list'); const lTop=list?list.scrollTop:0;
+  const car=document.querySelector('.carousel'); const cLeft=car?car.scrollLeft:0;
+  render();
+  const l2=document.querySelector('.b-list'); if(l2) l2.scrollTop=lTop;
+  const c2=document.querySelector('.carousel'); if(c2) c2.scrollLeft=cLeft;
+}
 function render(){
   const screen = VIEW==='B'?screenB():VIEW==='C'?screenC():screenA();
   const names={A:'地图优先 + 卡片轮播',B:'上下分屏',C:'目录优先'};
@@ -475,7 +484,7 @@ function wire(){
     const act=el.dataset.act;
     if(act==='prev') return go(-1);
     if(act==='next') return go(1);
-    if(act==='marker'){ state.selected=+el.dataset.i; render(); return; }
+    if(act==='marker'){ state.selected=+el.dataset.i; rerender(); return; }
     if(act==='toggle-list'){ state.listOpen=!state.listOpen; render(); return; }
     if(act==='search'||act==='open-search'){ STATE='search'; render(); return; }
     if(act==='cancel'||act==='retry'){ STATE='ready'; render(); return; }
@@ -485,6 +494,13 @@ function wire(){
     if(act==='close-map'){ STATE='ready'; render(); return; }
     if(act==='expand'){ STATE='map'; render(); return; }
   };
+  // 点站点卡 → 高亮对应 marker
+  document.querySelectorAll('.b-list .sitecard, .sheet-body .sitecard').forEach((el,i)=>{
+    el.addEventListener('click',(e)=>{
+      if(e.target.closest('[data-act]')) return;
+      state.selected=i; rerender();
+    });
+  });
   // 搜索入口：点搜索框进搜索层
   document.querySelectorAll('.search-pill').forEach(p=>{
     p.addEventListener('click',(e)=>{ if(e.target.closest('[data-act]')) return; if(STATE==='search') return; STATE='search'; render(); });
