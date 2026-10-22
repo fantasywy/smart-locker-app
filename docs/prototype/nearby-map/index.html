@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>原型 · 附近柜机地图页</title>
+<style>
+  :root{--ink:#1f2329;--sub:#646a73;--weak:#8f959e;--line:#e6e9ee;--bg:#f6f7f9;--green:#008655;--green-soft:#e8f8f2}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Source Han Sans CN",sans-serif;line-height:1.6}
+  .wrap{max-width:1320px;margin:0 auto;padding:44px 28px 80px}
+  .tag{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:#111827;color:#fff;font-size:11px;letter-spacing:.6px}
+  h1{margin:16px 0 8px;font-size:32px;line-height:1.25;letter-spacing:-.4px}
+  .lede{margin:0;max-width:780px;color:var(--sub);font-size:15px}
+  .frames{display:flex;gap:24px;overflow-x:auto;padding:32px 0 8px;align-items:flex-start}
+  figure{margin:0;flex:0 0 390px}
+  figcaption{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;font-size:14px;font-weight:600}
+  figcaption a{font-size:12px;font-weight:500;color:var(--green);text-decoration:none}
+  iframe{width:390px;height:844px;border:1px solid var(--line);border-radius:28px;background:#fff;box-shadow:0 18px 50px rgba(16,24,40,.10)}
+  h2{margin:56px 0 6px;font-size:20px;letter-spacing:-.2px}
+  .section-lede{margin:0 0 22px;color:var(--sub);font-size:13px}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;font-size:13px}
+  th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#fafbfc;font-weight:600;color:var(--sub);font-size:12px}
+  tr:last-child td{border-bottom:0}
+  td b{font-weight:600}
+  .shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:18px}
+  .shot{margin:0;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .shot img{display:block;width:100%;height:auto}
+  .shot figcaption{display:block;margin:0;padding:10px 12px;font-size:12px;font-weight:500;color:var(--sub);border-top:1px solid var(--line)}
+  .notes{margin-top:48px;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .note{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px 22px}
+  .note h3{margin:0 0 8px;font-size:14px}
+  .note p,.note li{color:var(--sub);font-size:13px}
+  .note ul{margin:0;padding-left:18px}
+  code{background:#f1f3f6;border-radius:5px;padding:1px 5px;font-size:12px}
+  @media (max-width:900px){.notes{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="tag">PROTOTYPE · THROWAWAY</span>
+  <p style="margin:14px 0 0;font-size:13px;color:#008655;font-weight:600">待选：A 地图优先 / B 上下分屏 / C 目录优先</p>
+  <h1>附近柜机地图页：三个结构不同的布局</h1>
+  <p class="lede">
+    同一份站点数据、同一套状态（定位拒绝 / 地图渲染失败 / 搜索 / 空态 / 网络失败），三种信息层级。
+    可直接点击：切变体、点 marker、开列表、进搜索、进城市选择。真实入口：
+    <code>phone.html?view=A|B|C&amp;state=ready|denied|maperr|empty|loading|neterr|search|noresult|citypick|map</code>。
+  </p>
+
+  <div class="frames">
+    <figure>
+      <figcaption><span>A · 地图优先 + 卡片轮播</span><a href="phone.html?view=A&amp;state=ready">打开</a></figcaption>
+      <iframe src="phone.html?view=A&amp;state=ready&amp;chrome=0" title="A 地图优先"></iframe>
+    </figure>
+    <figure>
+      <figcaption><span>B · 上下分屏</span><a href="phone.html?view=B&amp;state=ready">打开</a></figcaption>
+      <iframe src="phone.html?view=B&amp;state=ready&amp;chrome=0" title="B 上下分屏"></iframe>
+    </figure>
+    <figure>
+      <figcaption><span>C · 目录优先</span><a href="phone.html?view=C&amp;state=ready">打开</a></figcaption>
+      <iframe src="phone.html?view=C&amp;state=ready&amp;chrome=0" title="C 目录优先"></iframe>
+    </figure>
+  </div>
+
+  <h2>三个变体在争什么</h2>
+  <p class="section-lede">不是配色差异：地图占多少、列表在哪、主操作是什么，三者互相不同意。</p>
+  <table>
+    <tr><th style="width:120px">维度</th><th>A · 地图优先</th><th>B · 上下分屏</th><th>C · 目录优先</th></tr>
+    <tr><td>首屏主角</td><td>地图（几乎满屏）</td><td>地图带 + 列表各占一半</td><td>列表（地图收在页头按钮后）</td></tr>
+    <tr><td>一屏能比较几个站点</td><td>1（轮播）</td><td>约 2.5</td><td>约 3.5，按可用状态分组</td></tr>
+    <tr><td>地图的价值</td><td>找方向、看密度</td><td>空间索引：点列表 → 地图定位</td><td>一次性查看，非主路径</td></tr>
+    <tr><td>iOS 同层渲染失败时</td><td>地图不可用 → 自动切列表抽屉，但首屏是空的</td><td>地图带塌成一行提示，列表原地不变</td><td>主路径本来就不依赖地图</td></tr>
+    <tr><td>定位被拒时</td><td>地图退成城市视图，卡片隐藏距离</td><td>地图带保留，列表隐藏距离</td><td>列表直接按站点名排序，无需改结构</td></tr>
+    <tr><td>主要风险</td><td>卡片压在地图原生组件上；一次只看一个，比较成本高</td><td>地图只有 206px，密度信息有限</td><td>「附近」看起来像普通列表，地图承诺弱</td></tr>
+  </table>
+
+  <h2>状态</h2>
+  <p class="section-lede">状态图取自三个变体里当前最像的那个；完整状态可用 <code>?state=</code> 在任意变体上复现。</p>
+  <div class="shots">
+    <figure class="shot"><img src="shots/state-a-denied.jpg" alt="定位被拒"><figcaption>定位被拒 · 城市 + 列表，隐藏距离</figcaption></figure>
+    <figure class="shot"><img src="shots/state-b-maperr.jpg" alt="地图渲染失败"><figcaption>地图渲染失败 · 塌成一行提示</figcaption></figure>
+    <figure class="shot"><img src="shots/state-a-search.jpg" alt="搜索"><figcaption>搜索 · 城内按站点搜</figcaption></figure>
+    <figure class="shot"><img src="shots/state-empty.jpg" alt="附近无柜机"><figcaption>附近无柜机 · 扩大范围 / 切城市</figcaption></figure>
+    <figure class="shot"><img src="shots/state-a-list.jpg" alt="列表降级"><figcaption>列表降级 · 地图页的列表抽屉</figcaption></figure>
+    <figure class="shot"><img src="shots/state-c-map.jpg" alt="目录页的地图模式"><figcaption>目录页的地图模式 · 全屏覆盖</figcaption></figure>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h3>本原型回答</h3>
+      <ul>
+        <li>地图、列表、搜索三者的层级关系</li>
+        <li>多站点用轮播还是列表、一屏能比较几个</li>
+        <li>定位被拒 / 地图失败时，页面怎么退</li>
+        <li>站点卡上必须出现的事实与不出现的词</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h3>本原型不回答</h3>
+      <ul>
+        <li>视觉 token 最终值（等 #49；这里按建议值画）</li>
+        <li>真实地图与定位（用静态 SVG 模拟，无网络依赖）</li>
+        <li>分页与滚动加载（一期按单城 ≤100 一次取）</li>
+        <li>动效（只保留骨架屏 shimmer）</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>

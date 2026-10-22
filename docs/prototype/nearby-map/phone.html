@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>原型 · 附近柜机地图页</title>
+<!--
+  PROTOTYPE / throwaway —— 回答 ticket「附近柜机地图页设计」的布局问题。
+  三个结构不同的变体（A 地图优先 / B 上下分屏 / C 目录优先），同一份站点数据与状态模型。
+  ?view=A|B|C  &state=ready|denied|maperr|empty|loading|neterr|search|noresult|citypick|map
+  &chrome=0 隐藏底部原型切换胶囊（截图用）。
+-->
+<style>
+:root{
+  --ink:#1f2329; --sub:#646a73; --weak:#8f959e;
+  --line:#e6e9ee; --soft:#f0f2f5;
+  --bg:#f5f7fa; --card:#fff;
+  --brand:#00b578; --action:#008655; --press:#009a68;
+  --warn:#e6a23c; --warn-ink:#976a27; --muted:#909399;
+  --r-card:16px; --r-btn:12px;
+  --shadow:0 2px 10px rgba(16,24,40,.10);
+  --shadow-card:0 1px 2px rgba(16,24,40,.04),0 10px 30px rgba(16,24,40,.08);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:#fff}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Source Han Sans CN",sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+button{font-family:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+input{font-family:inherit}
+
+.phone{position:relative;width:390px;height:844px;background:var(--card);display:flex;flex-direction:column;overflow:hidden}
+
+/* ---------- 微信外壳 ---------- */
+.statusbar{height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 22px 0 28px;font-size:13px;font-weight:600;background:#fff;position:relative;z-index:30}
+.statusbar .icons{display:flex;align-items:center;gap:5px}
+.statusbar svg{display:block}
+.navbar{height:44px;flex:none;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:600;background:#fff;position:relative;z-index:30}
+.tabbar{height:76px;flex:none;display:flex;align-items:flex-start;padding-top:7px;background:#fff;border-top:1px solid rgba(0,0,0,.06);position:relative;z-index:30}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--weak);font-size:10px}
+.tab.on{color:var(--ink);font-weight:600}
+.tab svg{width:23px;height:23px}
+
+.screen{position:relative;flex:1;min-height:0;background:var(--bg);overflow:hidden}
+
+/* ---------- 通用组件 ---------- */
+.search-row{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff}
+.search-pill{flex:1;height:44px;display:flex;align-items:center;gap:8px;padding:0 12px;background:#fff;border:1px solid var(--line);border-radius:var(--r-btn);min-width:0}
+.search-pill.floating{box-shadow:var(--shadow);border-color:transparent}
+.search-pill .city{display:flex;align-items:center;gap:2px;font-size:14px;font-weight:600;white-space:nowrap}
+.search-pill .vr{width:1px;height:16px;background:var(--line);flex:none}
+.search-pill .ph{flex:1;font-size:14px;color:var(--weak);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-pill input{flex:1;min-width:0;border:0;outline:0;font-size:14px;color:var(--ink);background:none}
+.search-pill input::placeholder{color:var(--weak)}
+.icon-btn{width:44px;height:44px;flex:none;display:grid;place-items:center;background:#fff;border-radius:var(--r-btn);box-shadow:var(--shadow);color:var(--ink)}
+.icon-btn.plain{box-shadow:none;border:1px solid var(--line)}
+
+.badge{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:6px;border:1px solid var(--line);background:#fff;font-size:11px;font-weight:600;white-space:nowrap}
+.badge .dot{width:6px;height:6px;border-radius:50%}
+.badge.ok{border-color:var(--brand);color:var(--action)}
+.badge.ok .dot{background:var(--brand)}
+.badge.full{border-color:var(--warn);color:var(--warn-ink)}
+.badge.full .dot{background:var(--warn)}
+.badge.off{border-color:var(--muted);color:var(--sub)}
+.badge.off .dot{background:var(--muted)}
+
+.cells{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.cell{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:5px 0 4px;text-align:center;line-height:1.15}
+.cell b{display:block;font-size:15px;font-weight:700;color:var(--ink)}
+.cell span{display:block;font-size:10px;color:var(--sub)}
+.cell.zero b{color:var(--sub);font-weight:600}
+.cells.mini .cell{padding:4px 0 3px;border-radius:8px}
+.cells.mini .cell b{font-size:13px}
+.cells.mini .cell span{font-size:9px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:36px;padding:0 16px;border-radius:10px;background:var(--action);color:#fff;font-size:14px;font-weight:600}
+.btn.ghost{background:#fff;color:var(--action);border:1px solid var(--brand)}
+.btn.grey{background:var(--bg);color:var(--sub);font-weight:500}
+.btn.block{width:100%;height:48px;border-radius:var(--r-btn)}
+.btn:active{opacity:.92}
+
+.sitecard{background:#fff;border-radius:var(--r-card);box-shadow:var(--shadow-card);padding:14px 14px 12px;display:flex;flex-direction:column;gap:8px}
+.sitecard h3{margin:0;font-size:16px;font-weight:700;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sc-meta{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub)}
+.sc-meta .dist{font-weight:600;color:var(--ink);font-size:13px}
+.sc-meta .sep{width:1px;height:10px;background:var(--line)}
+.sc-addr{margin:0;font-size:12px;color:var(--sub);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical}
+.sc-pos{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--sub);min-width:0}
+.sc-pos span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sc-foot .hint{font-size:11px;color:var(--sub)}
+.nodist{color:var(--sub);font-size:12px}
+
+/* ---------- 地图 ---------- */
+.mapwrap{position:absolute;inset:0;overflow:hidden;background:#eef1f3}
+.mapwrap svg.map{position:absolute;inset:0;width:100%;height:100%}
+.mk{position:absolute;transform:translate(-50%,-100%);z-index:2;display:flex;flex-direction:column;align-items:center}
+.pin{position:relative;display:block;width:26px;height:26px;border-radius:50% 50% 50% 8px;transform:rotate(45deg);background:var(--brand);border:2.5px solid #fff;box-shadow:0 2px 6px rgba(16,24,40,.28)}
+.pin i{position:absolute;inset:6px;border-radius:50%;background:#fff}
+.mk.full .pin{background:var(--warn)}
+.mk.off .pin{background:var(--muted)}
+.mk.sel{z-index:3}
+.mk.sel .pin{width:32px;height:32px;background:var(--action)}
+.callout{margin-bottom:6px;background:#fff;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:600;white-space:nowrap;box-shadow:0 2px 8px rgba(16,24,40,.16)}
+.userdot{position:absolute;width:14px;height:14px;border-radius:50%;background:#2f7fd6;border:2.5px solid #fff;box-shadow:0 0 0 7px rgba(47,127,214,.16);z-index:1;transform:translate(-50%,-50%)}
+.map-fail{position:absolute;inset:0;background:#eef0f2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--sub);font-size:13px}
+.map-fail .t{font-size:14px;font-weight:600;color:var(--ink)}
+
+.overlay-top{position:absolute;top:10px;left:12px;right:12px;display:flex;gap:8px;z-index:8}
+.locate{position:absolute;right:14px;width:44px;height:44px;border-radius:22px;background:#fff;box-shadow:var(--shadow);display:grid;place-items:center;z-index:7;color:var(--ink)}
+.counter{position:absolute;right:20px;z-index:7;background:rgba(255,255,255,.94);border-radius:999px;padding:2px 9px;font-size:11px;font-weight:600;color:var(--sub);box-shadow:0 1px 4px rgba(16,24,40,.10)}
+
+.banner{position:absolute;left:12px;right:12px;z-index:9;background:#fff;border-radius:12px;box-shadow:var(--shadow);padding:9px 12px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub)}
+.banner b{font-size:13px;color:var(--ink);font-weight:600}
+.banner .lnk{margin-left:auto;color:var(--action);font-weight:600;font-size:12px;white-space:nowrap}
+
+.carousel{position:absolute;left:0;right:0;bottom:12px;display:flex;gap:10px;padding:0 20px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;z-index:6}
+.carousel::-webkit-scrollbar{display:none}
+.carousel .sitecard{flex:0 0 330px;scroll-snap-align:center}
+
+/* ---------- A 列表抽屉 ---------- */
+.sheet{position:absolute;inset:0;z-index:20;background:#fff;border-radius:18px 18px 0 0;box-shadow:0 -8px 30px rgba(16,24,40,.16);display:flex;flex-direction:column}
+.sheet-head{display:flex;align-items:center;gap:8px;padding:14px 16px 10px;border-bottom:1px solid var(--soft)}
+.sheet-head h2{margin:0;font-size:16px;font-weight:700}
+.sheet-head .sub{font-size:12px;color:var(--sub)}
+.sheet-body{flex:1;overflow-y:auto;padding:10px 12px 16px;display:flex;flex-direction:column;gap:10px}
+
+/* ---------- B 分屏 ---------- */
+.b-map{position:relative;height:206px;flex:none;overflow:hidden;background:#eef1f3;border-radius:0 0 18px 18px}
+.b-map .mk .pin{width:22px;height:22px}
+.b-map .mk.sel .pin{width:28px;height:28px}
+.b-map .expand{position:absolute;right:10px;bottom:10px;z-index:5;height:28px;padding:0 10px;border-radius:999px;background:rgba(255,255,255,.96);box-shadow:var(--shadow);font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px}
+.b-map-fail{height:64px;flex:none;background:#fff;border-bottom:8px solid var(--bg);display:flex;align-items:center;gap:10px;padding:0 16px;color:var(--sub);font-size:12px}
+.b-map-fail b{display:block;font-size:13px;color:var(--ink)}
+.list-head{display:flex;align-items:baseline;gap:8px;padding:12px 16px 6px}
+.list-head h2{margin:0;font-size:14px;font-weight:700}
+.list-head .sort{font-size:11px;color:var(--sub)}
+.b-list{flex:1;min-height:0;overflow-y:auto;padding:2px 12px 20px;display:flex;flex-direction:column;gap:10px}
+.sitecard.dense{padding:12px 12px 11px;gap:6px}
+.sitecard.dense h3{font-size:15px}
+.sitecard.dense .sc-foot{gap:8px}
+.sitecard.dense .sc-foot .cells{flex:1}
+.sitecard.dense .btn{height:32px;padding:0 12px;font-size:13px;border-radius:9px}
+.sitecard.dense .sc-pos{font-size:11px}
+
+/* ---------- C 目录 ---------- */
+.c-list{flex:1;min-height:0;overflow-y:auto;background:#fff}
+.group-head{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:6px;padding:7px 16px;background:var(--bg);font-size:12px;font-weight:700;color:var(--sub)}
+.group-head .n{font-weight:600;color:var(--weak)}
+.c-row{background:#fff;padding:12px 16px 11px;border-bottom:8px solid var(--bg);display:flex;flex-direction:column;gap:6px}
+.c-row .c-top{display:flex;align-items:baseline;gap:8px}
+.c-row h3{margin:0;font-size:15px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-row .dist{font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap}
+.c-row .c-addr{margin:0;font-size:12px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-row .c-foot{display:flex;align-items:center;gap:8px}
+.c-row .c-foot .cells{flex:1}
+.c-row .c-foot .btn{height:32px;padding:0 12px;font-size:13px;flex:none}
+.c-row .c-pos{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--sub)}
+.view-toggle{margin-left:auto;height:28px;padding:0 10px;border-radius:999px;border:1px solid var(--line);background:#fff;display:flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--ink)}
+
+/* ---------- 搜索层 / 城市层 ---------- */
+.search-layer{position:absolute;inset:0;background:#fff;z-index:25;display:flex;flex-direction:column}
+.search-layer .head{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--soft)}
+.search-layer .head .cancel{font-size:14px;color:var(--sub);white-space:nowrap}
+.search-layer .hint{padding:10px 16px 6px;font-size:12px;color:var(--sub)}
+.results{flex:1;overflow-y:auto;padding:4px 12px 16px;display:flex;flex-direction:column;gap:10px}
+.result-row{display:flex;align-items:flex-start;gap:10px;padding:12px 4px;border-bottom:1px solid var(--soft)}
+.result-row .r-name{font-size:14px;font-weight:600;line-height:1.3}
+.result-row .r-sub{margin-top:2px;font-size:12px;color:var(--sub)}
+.result-row .badge{margin-left:auto;flex:none}
+.city-layer{position:absolute;inset:0;z-index:26;background:rgba(15,20,28,.42);display:flex;align-items:flex-end}
+.city-sheet{width:100%;background:#fff;border-radius:18px 18px 0 0;padding:18px 16px 22px}
+.city-sheet h2{margin:0 0 4px;font-size:16px}
+.city-sheet p{margin:0 0 14px;font-size:12px;color:var(--sub)}
+.city-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.city-grid button{height:42px;border-radius:10px;background:var(--bg);border:1px solid var(--line);font-size:14px}
+.city-grid button.on{border-color:var(--brand);color:var(--action);font-weight:600;background:#fff}
+
+/* ---------- 状态块 ---------- */
+.state-block{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:0 40px;text-align:center;background:#fff}
+.state-block .ico{width:56px;height:56px;border-radius:28px;background:var(--bg);display:grid;place-items:center;color:var(--sub)}
+.state-block h3{margin:2px 0 0;font-size:17px;font-weight:700}
+.state-block p{margin:0;font-size:13px;color:var(--sub);line-height:1.5}
+.state-block .actions{display:flex;flex-direction:column;gap:10px;width:100%;margin-top:10px}
+
+.skel{background:#e9edf1;border-radius:8px;position:relative;overflow:hidden}
+.skel::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);animation:sh 1.4s infinite}
+@keyframes sh{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.skel-card{flex:0 0 330px;height:212px;border-radius:var(--r-card);background:#fff;padding:16px;display:flex;flex-direction:column;gap:10px}
+
+/* ---------- 原型切换 ---------- */
+.proto-nav{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:10px;background:#111827;color:#fff;border-radius:999px;padding:7px 8px;font-size:11px;box-shadow:0 8px 24px rgba(0,0,0,.28);white-space:nowrap}
+.proto-nav button{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;display:grid;place-items:center;font-size:13px}
+.proto-nav .lbl{max-width:210px;overflow:hidden;text-overflow:ellipsis}
+</style>
+</head>
+<body>
+<div class="phone" id="phone"></div>
+<script>
+/* ===== 参数 ===== */
+const Q = new URLSearchParams(location.search);
+const VIEW = (Q.get('view') || 'A').toUpperCase();
+let STATE = Q.get('state') || 'ready';
+const CHROME = Q.get('chrome') !== '0';
+
+/* ===== 假数据（形状对齐 /nearby/sites 契约） ===== */
+const SITES = [
+  { id:'s1', name:'静安嘉里中心 B1', addr:'南京西路 1515 号 B1 层 · 近 2 号线 7 号口', dist:210,
+    avail:1, cells:{小:6,中:3,大:1,特大:0}, hours:'07:00–23:00', pos:['B1 层 3 号电梯口','B1 层 5 号电梯口'], x:46, y:33 },
+  { id:'s2', name:'恒隆广场 1F', addr:'南京西路 1266 号 1F 服务台旁', dist:480,
+    avail:1, cells:{小:0,中:5,大:4,特大:2}, hours:'10:00–22:00', pos:['1F 服务台东侧'], x:64, y:46 },
+  { id:'s3', name:'南京西路地铁站 2 号口', addr:'南京西路站 2 号口 站厅层', dist:760,
+    avail:2, cells:{小:0,中:0,大:0,特大:0}, hours:'06:00–23:30', pos:['站厅层 2 号口闸机旁'], x:29, y:52 },
+  { id:'s4', name:'兴业太古汇 B2', addr:'南京西路 789 号 B2 层 停车场入口', dist:1250,
+    avail:3, cells:{小:0,中:0,大:0,特大:0}, hours:'10:00–22:00', pos:['B2 层 停车场 A 区'], x:71, y:24 },
+  { id:'s5', name:'威海路 688 号园区', addr:'威海路 688 号 1 号楼 大堂', dist:null,
+    avail:1, cells:{小:2,中:1,大:0,特大:0}, hours:'08:00–20:00', pos:['1 号楼大堂 前台旁'], x:null, y:null },
+];
+const BADGE = { 1:'可存件', 2:'已满', 3:'暂不可用' };
+const BADGE_CLS = { 1:'ok', 2:'full', 3:'off' };
+const SORTED = [...SITES].sort((a,b)=>(a.avail-b.avail) || ((a.dist??Infinity)-(b.dist??Infinity)) || a.name.localeCompare(b.name,'zh'));
+const state = { selected:0, listOpen:false };
+
+/* ===== 图标 ===== */
+const I = {
+  search:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8f959e" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+  chev:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  list:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg>',
+  locate:'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>',
+  pin:'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.4"/></svg>',
+  nav:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-8-8 18-2.5-7.5z"/></svg>',
+  map:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>',
+  x:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  empty:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.2"/></svg>',
+  wifi:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 8.5a15 15 0 0 1 18 0M6 12a10 10 0 0 1 12 0M9.5 15.5a5 5 0 0 1 5 0"/><path d="M4 4l16 16"/></svg>',
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V21H3z"/></svg>',
+  order:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10a1 1 0 0 1 1 1v17l-3-2-3 2-3-2-3 2V4a1 1 0 0 1 1-1z"/><path d="M9 8h6M9 12h6"/></svg>',
+  user:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>',
+};
+
+/* ===== 外壳 ===== */
+function chrome(){
+  return `
+  <div class="statusbar"><span>9:41</span><span class="icons">
+    <svg width="17" height="11" viewBox="0 0 17 11" fill="#1f2329"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></svg>
+    <svg width="16" height="11" viewBox="0 0 16 11" fill="none" stroke="#1f2329" stroke-width="1.4" stroke-linecap="round"><path d="M1 3.6a10 10 0 0 1 14 0M3.6 6.2a6.4 6.4 0 0 1 8.8 0M6.2 8.7a2.9 2.9 0 0 1 3.6 0"/></svg>
+    <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.6" y="0.6" width="21" height="10.8" rx="3" stroke="#1f2329" stroke-opacity=".4"/><rect x="2.2" y="2.2" width="17.6" height="7.6" rx="2" fill="#1f2329"/><path d="M23 4v4a2 2 0 0 0 0-4z" fill="#1f2329" fill-opacity=".5"/></svg>
+  </span></div>
+  <div class="navbar">附近柜机</div>`;
+}
+function tabbar(){
+  const tabs=[['首页',I.home],['订单',I.order],['附近柜机',I.pin],['我的',I.user]];
+  return `<div class="tabbar">${tabs.map(([t,ic],i)=>`<div class="tab ${i===2?'on':''}">${ic}<span>${t}</span></div>`).join('')}</div>`;
+}
+
+/* ===== 地图 ===== */
+function mapSVG(){
+  return `<svg class="map" viewBox="0 0 390 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <rect width="390" height="700" fill="#eef1f3"/>
+    <g fill="#e4e7ea">
+      <rect x="16" y="44" width="96" height="78" rx="4"/><rect x="128" y="44" width="84" height="78" rx="4"/><rect x="226" y="44" width="66" height="78" rx="4"/><rect x="306" y="44" width="70" height="78" rx="4"/>
+      <rect x="16" y="162" width="70" height="86" rx="4"/><rect x="102" y="162" width="110" height="86" rx="4"/><rect x="226" y="162" width="66" height="86" rx="4"/><rect x="306" y="162" width="70" height="86" rx="4"/>
+      <rect x="16" y="286" width="128" height="62" rx="4"/><rect x="160" y="286" width="60" height="62" rx="4"/><rect x="306" y="286" width="70" height="62" rx="4"/>
+      <rect x="16" y="386" width="88" height="92" rx="4"/><rect x="120" y="386" width="120" height="92" rx="4"/><rect x="256" y="386" width="120" height="92" rx="4"/>
+      <rect x="16" y="512" width="108" height="72" rx="4"/><rect x="140" y="512" width="100" height="72" rx="4"/><rect x="256" y="512" width="120" height="72" rx="4"/>
+      <rect x="16" y="612" width="148" height="62" rx="4"/><rect x="180" y="612" width="196" height="62" rx="4"/>
+    </g>
+    <rect x="226" y="286" width="72" height="62" rx="8" fill="#dcebe2"/>
+    <g stroke="#ffffff" stroke-linecap="round">
+      <path d="M0 142H390" stroke-width="16"/><path d="M0 268H390" stroke-width="22"/><path d="M0 368H390" stroke-width="14"/>
+      <path d="M0 498H390" stroke-width="15"/><path d="M0 600H390" stroke-width="13"/>
+      <path d="M118 0V700" stroke-width="13"/><path d="M218 0V700" stroke-width="12"/><path d="M298 0V700" stroke-width="12"/>
+    </g>
+    <path d="M0 268H390" stroke="#f4d58d" stroke-width="2.5" stroke-dasharray="14 12" opacity=".75"/>
+    <g fill="#9aa3ac" font-size="9" font-family="-apple-system,PingFang SC,sans-serif">
+      <text x="22" y="264">南京西路</text><text x="230" y="272" opacity=".9">南京西路</text>
+      <text x="24" y="364">威海路</text><text x="26" y="496">延安中路</text>
+      <text x="20" y="618">巨鹿路</text>
+    </g>
+    <text x="236" y="322" font-size="8.5" fill="#7fa78f" font-family="-apple-system,PingFang SC,sans-serif">静安公园</text>
+  </svg>`;
+}
+function markers(list, opts={}){
+  return list.filter(s=>s.x!=null).map(s=>{
+    const i = SORTED.indexOf(s);
+    const sel = state.selected===i;
+    return `<button class="mk ${BADGE_CLS[s.avail]} ${sel?'sel':''}" style="left:${s.x}%;top:${s.y}%" data-act="marker" data-i="${i}" aria-label="${s.name}">
+      ${sel?`<span class="callout">${s.name}</span>`:''}
+      <span class="pin"><i></i></span>
+    </button>`;
+  }).join('');
+}
+function userDot(){ return `<div class="userdot" style="left:40%;top:62%"></div>`; }
+
+/* ===== 卡片 ===== */
+function cellsHTML(site, mini){
+  return `<div class="cells ${mini?'mini':''}">${Object.entries(site.cells).map(([k,v])=>
+    `<div class="cell ${v===0?'zero':''}"><b>${v}</b><span>${k}</span></div>`).join('')}</div>`;
+}
+function badgeHTML(site){
+  return `<span class="badge ${BADGE_CLS[site.avail]}"><i class="dot"></i>${BADGE[site.avail]}</span>`;
+}
+function cardHTML(site, denied, dense){
+  const dist = denied || site.dist==null ? '' : `<span class="dist">${fmtDist(site.dist)}</span><span class="sep"></span>`;
+  const navBtn = site.x==null
+    ? `<span class="hint">暂不支持导航</span>`
+    : `<button class="btn" data-act="nav">${I.nav}导航</button>`;
+  if(dense){
+    return `<article class="sitecard dense">
+      <div class="sc-top"><h3>${site.name}</h3>${badgeHTML(site)}</div>
+      <div class="sc-meta">${dist}<span>${site.hours}</span></div>
+      <p class="sc-addr">${site.addr}</p>
+      <div class="sc-foot">${cellsHTML(site,true)}${navBtn}</div>
+      <div class="sc-pos">${I.pin}<span>柜机位置：${site.pos.join(' · ')}</span></div>
+    </article>`;
+  }
+  return `<article class="sitecard">
+    <div class="sc-top"><h3>${site.name}</h3>${badgeHTML(site)}</div>
+    <div class="sc-meta">${dist}<span>${site.hours}</span></div>
+    <p class="sc-addr">${site.addr}</p>
+    ${cellsHTML(site)}
+    <div class="sc-pos">${I.pin}<span>柜机位置：${site.pos.join(' · ')}</span></div>
+    <div class="sc-foot"><span class="hint">只读信息 · 存件请扫柜机码</span>${navBtn}</div>
+  </article>`;
+}
+function rowHTML(site, denied){
+  const dist = denied || site.dist==null ? '' : `<span class="dist">${fmtDist(site.dist)}</span>`;
+  const nav = site.x==null ? '' : `<button class="btn ghost" data-act="nav">${I.nav}导航</button>`;
+  return `<div class="c-row">
+    <div class="c-top"><h3>${site.name}</h3>${dist}</div>
+    <p class="c-addr">${site.addr}</p>
+    <div class="c-foot">${cellsHTML(site,true)}${nav}</div>
+    <div class="c-pos">${I.pin}<span>柜机位置：${site.pos.join(' · ')}</span><span style="margin-left:auto">${site.hours}</span></div>
+  </div>`;
+}
+function fmtDist(m){ return m<1000 ? `${m} m` : `${(m/1000).toFixed(1)} km`; }
+
+/* ===== 状态块 ===== */
+function skeleton(extra=''){
+  return `<div class="skel-card"><div class="skel" style="height:18px;width:60%"></div><div class="skel" style="height:12px;width:40%"></div><div class="skel" style="height:12px;width:80%"></div><div class="skel" style="height:44px;width:100%"></div><div class="skel" style="height:36px;width:100%;margin-top:auto"></div></div>${extra}`;
+}
+function pageState(kind){
+  return `<div style="position:absolute;inset:0;display:flex;flex-direction:column;background:#fff">
+    <div class="search-row">${searchField()}</div>
+    <div style="position:relative;flex:1">${stateBlock(kind)}</div>
+  </div>`;
+}
+function stateBlock(kind){
+  if(kind==='neterr') return `<div class="state-block"><div class="ico">${I.wifi}</div><h3>暂时连不上</h3><p>请检查网络后重试</p><div class="actions"><button class="btn block" data-act="retry">重试</button></div></div>`;
+  if(kind==='empty') return `<div class="state-block"><div class="ico">${I.empty}</div><h3>附近 3 公里内没有柜机</h3><p>可以扩大范围，或换个城市看看</p><div class="actions"><button class="btn block" data-act="retry">扩大到 10 公里</button><button class="btn block grey" data-act="city">切换城市</button></div></div>`;
+  if(kind==='noresult') return `<div class="search-layer"><div class="head">${searchField('嘉里中心 3 号')}<button class="cancel" data-act="cancel">取消</button></div><div class="state-block" style="position:static;flex:1"><div class="ico">${I.search}</div><h3>没有找到「嘉里中心 3 号」</h3><p>换个关键词，或切换到其他城市试试</p><div class="actions"><button class="btn block grey" data-act="cancel">返回地图</button></div></div></div>`;
+  return '';
+}
+
+/* ===== 搜索层 ===== */
+function searchField(value=''){
+  return `<div class="search-pill"><span class="city">上海${I.chev}</span><span class="vr"></span>${value?`<input value="${value}" />`:`<span class="ph">搜索站点名称或地址</span>`}</div>`;
+}
+function searchLayer(){
+  const q = '嘉里';
+  const hits = SITES.filter(s=>(s.name+s.addr).includes(q));
+  return `<div class="search-layer">
+    <div class="head">${searchField(q)}<button class="cancel" data-act="cancel">取消</button></div>
+    <div class="hint">在上海搜索「${q}」</div>
+    <div class="results">${hits.map(s=>`<div class="result-row"><div><div class="r-name">${s.name}</div><div class="r-sub">${fmtDist(s.dist)} · ${s.addr}</div></div>${badgeHTML(s)}</div>`).join('')}</div>
+  </div>`;
+}
+function cityLayer(){
+  const cities=['上海','北京','广州','深圳','杭州','成都'];
+  return `<div class="city-layer"><div class="city-sheet">
+    <h2>选择城市</h2><p>附近柜机按城市展示 · 定位只影响是否按距离排序</p>
+    <div class="city-grid">${cities.map(c=>`<button class="${c==='上海'?'on':''}" data-act="pick-city">${c}</button>`).join('')}</div>
+  </div></div>`;
+}
+function deniedBanner(){
+  return `<div class="banner" style="top:64px"><span>${I.locate}</span><span><b>未定位</b> · 按站点名排序，不显示距离</span><button class="lnk" data-act="locate">开启定位</button></div>`;
+}
+function mapFailNote(){
+  return `<div class="map-fail">${I.map}<span class="t">地图没加载出来</span><span>已自动切换到列表，站点信息仍然可用</span><button class="btn ghost" style="height:32px;margin-top:4px" data-act="retry">重试地图</button></div>`;
+}
+
+/* ===== 变体 A：地图铺满 + 底部卡片轮播 ===== */
+function screenA(){
+  if(STATE==='neterr'||STATE==='empty') return pageState(STATE);
+  if(STATE==='noresult') return stateBlock(STATE);
+  const denied = STATE==='denied';
+  const fail = STATE==='maperr';
+  const cards = SORTED.map(s=>cardHTML(s,denied)).join('');
+  return `
+    <div class="mapwrap">${fail?'':mapSVG()}${fail?mapFailNote():`${markers(SORTED)}${denied?'':userDot()}`}</div>
+    <div class="overlay-top">${searchField()}<button class="icon-btn" data-act="toggle-list">${I.list}</button></div>
+    ${denied?deniedBanner():''}
+    ${STATE==='search'?searchLayer():''}
+    ${STATE==='citypick'?cityLayer():''}
+    ${fail?'':`<button class="locate" style="bottom:300px" data-act="locate">${I.locate}</button><div class="counter" style="bottom:258px">1 / ${SORTED.length}</div>`}
+    <div class="carousel">${STATE==='loading'?skeleton()+skeleton():cards}</div>
+    ${state.listOpen?listSheet(denied):''}
+  `;
+}
+function listSheet(denied){
+  return `<div class="sheet">
+    <div class="sheet-head"><h2>附近 ${SORTED.length} 个站点</h2><span class="sub">${denied?'按站点名排序':'按可用状态、距离排序'}</span><button class="icon-btn plain" style="margin-left:auto" data-act="toggle-list">${I.x}</button></div>
+    <div class="sheet-body">${SORTED.map(s=>cardHTML(s,denied,true)).join('')}</div>
+  </div>`;
+}
+
+/* ===== 变体 B：上下分屏 ===== */
+function screenB(){
+  if(STATE==='neterr'||STATE==='empty') return pageState(STATE);
+  if(STATE==='noresult') return stateBlock(STATE);
+  const denied = STATE==='denied';
+  const fail = STATE==='maperr';
+  return `
+    <div class="search-row">${searchField()}</div>
+    ${fail ? `<div class="b-map-fail">${I.map}<div><b>地图没加载出来</b>站点列表仍可用</div><button class="btn ghost" style="margin-left:auto;height:30px;padding:0 10px;font-size:12px" data-act="retry">重试</button></div>`
+           : `<div class="b-map">${mapSVG()}${markers(SORTED)}${denied?'':userDot()}<button class="expand" data-act="expand">${I.map}全屏地图</button></div>`}
+    ${denied?`<div class="banner" style="position:static;margin:8px 12px 0"><span>${I.locate}</span><span><b>未定位</b> · 按站点名排序</span><button class="lnk" data-act="locate">开启定位</button></div>`:''}
+    <div class="list-head"><h2>附近 ${SORTED.length} 个站点</h2><span class="sort">${denied?'按可用状态、站点名排序':'按可用状态、距离排序'}</span></div>
+    <div class="b-list">${STATE==='loading'?skeleton():SORTED.map(s=>cardHTML(s,denied,true)).join('')}</div>
+    ${STATE==='search'?searchLayer():''}
+    ${STATE==='citypick'?cityLayer():''}
+  `;
+}
+
+/* ===== 变体 C：城市目录优先 ===== */
+function screenC(){
+  if(STATE==='neterr'||STATE==='empty') return pageState(STATE);
+  if(STATE==='noresult') return stateBlock(STATE);
+  const denied = STATE==='denied';
+  const groups=[[1,'可存件'],[2,'已满'],[3,'暂不可用']];
+  return `
+    <div class="search-row">${searchField()}</div>
+    <div class="list-head"><h2>上海 · ${SORTED.length} 个站点</h2><span class="sort">${denied?'按可用状态、站点名排序':'按可用状态、距离排序'}</span><button class="view-toggle" data-act="map">${I.map}地图</button></div>
+    ${denied?`<div class="banner" style="position:static;margin:0 12px 10px"><span>${I.locate}</span><span><b>未定位</b> · 不显示距离</span><button class="lnk" data-act="locate">开启定位</button></div>`:''}
+    <div class="c-list">
+      ${STATE==='loading'?`<div style="padding:12px">${skeleton()}</div>`:groups.map(([a,label])=>{
+        const list=SORTED.filter(s=>s.avail===a);
+        if(!list.length) return '';
+        return `<div class="group-head">${label}<span class="n">${list.length}</span></div>${list.map(s=>rowHTML(s,denied)).join('')}`;
+      }).join('')}
+    </div>
+    ${STATE==='search'?searchLayer():''}
+    ${STATE==='citypick'?cityLayer():''}
+    ${STATE==='map'?mapOverlay():''}
+  `;
+}
+function mapOverlay(){
+  return `<div style="position:absolute;inset:0;z-index:22">
+    <div class="mapwrap">${mapSVG()}${markers(SORTED)}${userDot()}</div>
+    <div class="overlay-top">${searchField()}<button class="icon-btn" data-act="close-map">${I.x}</button></div>
+    <div class="carousel">${SORTED.map(s=>cardHTML(s,false)).join('')}</div>
+  </div>`;
+}
+
+/* ===== 渲染 ===== */
+function render(){
+  const screen = VIEW==='B'?screenB():VIEW==='C'?screenC():screenA();
+  const names={A:'地图优先 + 卡片轮播',B:'上下分屏',C:'目录优先'};
+  document.getElementById('phone').innerHTML = chrome() + `<main class="screen">${screen}</main>` + tabbar() +
+    (CHROME?`<div class="proto-nav"><button data-act="prev">←</button><span class="lbl">${VIEW} · ${names[VIEW]}</span><button data-act="next">→</button></div>`:'');
+  wire();
+}
+function go(next){
+  const V=['A','B','C'];
+  const i=V.indexOf(VIEW);
+  const target=V[(i+next+V.length)%V.length];
+  const q=new URLSearchParams(location.search); q.set('view',target); q.set('state','ready');
+  location.search=q.toString();
+}
+function wire(){
+  const car=document.querySelector('.carousel');
+  if(car){ car.addEventListener('scroll',()=>{},{passive:true}); }
+  const phone=document.getElementById('phone');
+  phone.onclick=(e)=>{
+    const el=e.target.closest('[data-act]'); if(!el) return;
+    const act=el.dataset.act;
+    if(act==='prev') return go(-1);
+    if(act==='next') return go(1);
+    if(act==='marker'){ state.selected=+el.dataset.i; render(); return; }
+    if(act==='toggle-list'){ state.listOpen=!state.listOpen; render(); return; }
+    if(act==='search'||act==='open-search'){ STATE='search'; render(); return; }
+    if(act==='cancel'||act==='retry'){ STATE='ready'; render(); return; }
+    if(act==='city'||act==='pick-city'){ STATE = STATE==='citypick'?'ready':'citypick'; render(); return; }
+    if(act==='locate'){ STATE = STATE==='denied'?'ready':'denied'; render(); return; }
+    if(act==='map'){ STATE='map'; render(); return; }
+    if(act==='close-map'){ STATE='ready'; render(); return; }
+    if(act==='expand'){ STATE='map'; render(); return; }
+  };
+  // 搜索入口：点搜索框进搜索层
+  document.querySelectorAll('.search-pill').forEach(p=>{
+    p.addEventListener('click',(e)=>{ if(e.target.closest('[data-act]')) return; if(STATE==='search') return; STATE='search'; render(); });
+  });
+  // 轮播 → 选中 marker
+  const list=[...document.querySelectorAll('.carousel .sitecard')];
+  if(car){
+    car.addEventListener('scroll',()=>{
+      const w=340; const idx=Math.min(list.length-1,Math.max(0,Math.round((car.scrollLeft)/w)));
+      if(idx!==state.selected){ state.selected=idx; const cs=document.querySelector('.carousel'); const keep=cs.scrollLeft; render(); const c2=document.querySelector('.carousel'); if(c2) c2.scrollLeft=keep; }
+    },{passive:true});
+  }
+  document.addEventListener('keydown',(e)=>{
+    if(['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+    if(e.key==='ArrowLeft') go(-1);
+    if(e.key==='ArrowRight') go(1);
+  },{once:true});
+}
+render();
+</script>
+</body>
+</html>
