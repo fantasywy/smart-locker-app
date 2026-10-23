@@ -1,5 +1,5 @@
 <!--
-  骨架屏 —— 形状对照真实版式：列表行 = 色条 + 两行短块 + 状态标签位。
+  骨架屏 —— 形状对照真实版式。
 
   ⚠️ 纯图形占位，**无文字**。本文件里不得出现任何文本节点 / 「加载中」字样 ——
      这是逐字禁令（「不得放『加载中』文字盖住骨架」）。
@@ -8,7 +8,143 @@
      骨架块是**中性**的（$color-border），不带任何语义档 —— 此刻我们还不知道
      这些行将来是什么状态，染上任何一档都是在替数据说话。
 -->
-<view class="skeleton" aria-role="skeleton">
+
+<!--
+  首页同构骨架 —— 品牌块 / 圆按钮 / 一卡 / 入口条（#61）。
+  它只描述首页的形状，不携带任何数据；颜色同样只用中性 token。
+-->
+<view wx:if="{{ variant === 'home' }}" class="skeleton skeleton--home" aria-role="skeleton">
+  <view class="skeleton__home-brand">
+    <view class="skeleton__home-mark"></view>
+    <view class="skeleton__home-brand-copy">
+      <view class="skeleton__block skeleton__home-wordmark"></view>
+      <view class="skeleton__block skeleton__home-tagline"></view>
+    </view>
+  </view>
+
+  <view class="skeleton__home-scan">
+    <view class="skeleton__home-scan-circle"></view>
+    <view class="skeleton__block skeleton__home-scan-label"></view>
+  </view>
+
+  <view class="skeleton__row skeleton__home-card">
+    <view class="skeleton__body">
+      <view class="skeleton__block skeleton__block--title"></view>
+      <view class="skeleton__block skeleton__block--meta"></view>
+    </view>
+    <view class="skeleton__chip"></view>
+  </view>
+
+  <view class="skeleton__home-entry"></view>
+</view>
+
+<!--
+  首页进行中订单区 · 一张卡骨架（#67）。
+  ⚠️ 只画一张卡：订单区的首屏占位就是「一张卡」的形状，不是整页骨架；
+     颜色仍只有中性 token，无文字。
+-->
+<view
+  wx:elif="{{ variant === 'card' }}"
+  class="skeleton skeleton--card"
+  aria-role="skeleton"
+>
+  <view class="skeleton__row">
+    <view class="skeleton__body">
+      <view class="skeleton__block skeleton__block--title"></view>
+      <view class="skeleton__block skeleton__block--meta"></view>
+    </view>
+    <view class="skeleton__chip"></view>
+  </view>
+</view>
+
+<!--
+  附近柜机页骨架（#72）—— 搜索行 + 三张站点卡。
+  ⚠️ 三张卡对应首屏 `SKELETON_ROW_COUNT`，纯图形、无文字；地图带不在本票范围。
+-->
+<view
+  wx:elif="{{ variant === 'nearby' }}"
+  class="skeleton skeleton--nearby"
+  aria-role="skeleton"
+>
+  <view class="skeleton__nearby-search"></view>
+  <view class="skeleton__nearby-card" wx:for="{{ rows }}" wx:key="*this">
+    <view class="skeleton__nearby-head">
+      <view class="skeleton__block skeleton__nearby-name"></view>
+      <view class="skeleton__chip"></view>
+    </view>
+    <view class="skeleton__block skeleton__nearby-line"></view>
+    <view class="skeleton__block skeleton__nearby-line skeleton__nearby-line--short"></view>
+    <view class="skeleton__nearby-cells">
+      <view class="skeleton__nearby-cell"></view>
+      <view class="skeleton__nearby-cell"></view>
+      <view class="skeleton__nearby-cell"></view>
+      <view class="skeleton__nearby-cell"></view>
+    </view>
+  </view>
+</view>
+
+<!--
+  「我的」页身份区骨架（#69）—— 形状对照真实版式：64px 圆形头像 + 两行短块。
+  ⚠️ 与信用分卡**各自一份**：两块的形状不同，且读取失败时各自在块内给一行提示。
+-->
+<view
+  wx:elif="{{ variant === 'identity' }}"
+  class="skeleton skeleton--identity"
+  aria-role="skeleton"
+>
+  <view class="skeleton__avatar"></view>
+  <view class="skeleton__identity-copy">
+    <view class="skeleton__block skeleton__block--title"></view>
+    <view class="skeleton__block skeleton__block--meta"></view>
+  </view>
+</view>
+
+<!--
+  「我的」页信用分卡骨架（#69）—— 一行标签 + 一行分数 + 右侧「明细」位。
+-->
+<view wx:elif="{{ variant === 'credit' }}" class="skeleton skeleton--credit" aria-role="skeleton">
+  <view class="skeleton__block skeleton__credit-label"></view>
+  <view class="skeleton__block skeleton__credit-score"></view>
+  <view class="skeleton__chip skeleton__credit-detail"></view>
+</view>
+
+<!--
+  详情骨架（#64）—— 状态块 / 取件码块 / 两行信息 / 时间轴。
+  形状对照订单详情页的六块，让首屏加载不跳版；仍然只有中性块，没有文字。
+-->
+<view
+  wx:elif="{{ variant === 'detail' }}"
+  class="skeleton skeleton--detail"
+  aria-role="skeleton"
+>
+  <view class="skeleton__detail-status">
+    <view class="skeleton__chip"></view>
+    <view class="skeleton__block skeleton__detail-time"></view>
+  </view>
+
+  <view class="skeleton__detail-card">
+    <view class="skeleton__block skeleton__detail-code-label"></view>
+    <view class="skeleton__block skeleton__detail-code-value"></view>
+  </view>
+
+  <view class="skeleton__detail-card">
+    <view class="skeleton__block skeleton__block--title"></view>
+    <view class="skeleton__block skeleton__block--meta"></view>
+    <view class="skeleton__block skeleton__block--meta"></view>
+  </view>
+
+  <view class="skeleton__detail-card">
+    <view class="skeleton__detail-row" wx:for="{{ rows }}" wx:key="*this">
+      <view class="skeleton__block skeleton__detail-row-label"></view>
+      <view class="skeleton__block skeleton__detail-row-time"></view>
+    </view>
+  </view>
+</view>
+
+<!--
+  列表骨架 —— 形状对照真实版式：列表行 = 色条 + 两行短块 + 状态标签位。
+-->
+<view wx:else class="skeleton" aria-role="skeleton">
   <view class="skeleton__row" wx:for="{{ rows }}" wx:key="*this">
     <view class="skeleton__bar"></view>
     <view class="skeleton__body">

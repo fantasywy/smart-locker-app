@@ -100,11 +100,112 @@ export interface WxNavigateToOptions {
   complete?: () => void
 }
 
+/** `wx.stopPullDownRefresh` 的 options —— 列表页下拉刷新结束。 */
+export interface WxStopPullDownRefreshOptions {
+  success?: (res: { errMsg: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/**
+ * `wx.pageScrollTo` 的 options —— 附近页点 marker 后把对应站点卡滚进视野。
+ *
+ * ⚠️ 用 `selector`（2.7.3 起）而不是先 `createSelectorQuery` 量位置：后者要多一个
+ * 未编排即抛错的桩，且测量与滚动之间还隔着一次异步；`selector` 让「滚到哪张卡」
+ * 直接成为一次可断言的平台调用。
+ */
+export interface WxPageScrollToOptions {
+  selector?: string
+  scrollTop?: number
+  duration?: number
+  success?: (res: { errMsg: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `wx.navigateBack` 的 options —— 导航栏 `back()` 的缺省行为。 */
+export interface WxNavigateBackOptions {
+  delta?: number
+  success?: (res: { errMsg: string }) => void
+  fail?: (res: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `wx.getMenuButtonBoundingClientRect()` 的返回 —— 导航栏胶囊避让的几何来源。 */
+export interface WxMenuButtonRect {
+  left: number
+  right: number
+  top: number
+  bottom: number
+  width: number
+  height: number
+}
+
+/** `wx.getSystemInfoSync()` —— 只列导航栏用到的字段。 */
+export interface WxSystemInfo {
+  windowWidth: number
+  statusBarHeight: number
+  platform: string
+}
+
 /** `wx.scanCode` 的 options —— 通道 B。 */
 export interface WxScanCodeOptions {
   onlyFromCamera?: boolean
   scanType?: string[]
   success?: (res: { result: string; scanType?: string; errMsg?: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `wx.getLocation` 的成功结果 —— 只需本仓库用到的字段。 */
+export interface WxGetLocationSuccessResult {
+  latitude: number
+  longitude: number
+  speed?: number
+  accuracy?: number
+  altitude?: number
+  verticalAccuracy?: number
+  horizontalAccuracy?: number
+  errMsg?: string
+}
+
+/**
+ * `wx.getLocation` 的 options。
+ *
+ * ⚠️ `type` 必须是 `gcj02` 才与 `<map>` / `wx.openLocation` 同一坐标基准；
+ * 测试通过断言它来钉住这一点。
+ */
+export interface WxGetLocationOptions {
+  type?: 'wgs84' | 'gcj02'
+  altitude?: boolean
+  isHighAccuracy?: boolean
+  highAccuracyExpireTime?: number
+  success?: (res: WxGetLocationSuccessResult) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `wx.openLocation` 的 options —— 站点导航；无定位授权也可用。 */
+export interface WxOpenLocationOptions {
+  latitude: number
+  longitude: number
+  scale?: number
+  name?: string
+  address?: string
+  success?: (res: { errMsg: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `wx.getSetting` / `wx.openSetting` 的授权快照。 */
+export interface WxAuthSetting {
+  authSetting: Record<string, boolean | undefined>
+  errMsg?: string
+}
+
+/** `wx.openSetting` / `wx.getSetting` 的 options。 */
+export interface WxSettingOptions {
+  success?: (res: WxAuthSetting) => void
   fail?: (err: WxRequestFailResult) => void
   complete?: () => void
 }
@@ -151,7 +252,16 @@ export interface WxStub {
   switchTab: Mock<(options: WxSwitchTabOptions) => void>
   navigateTo: Mock<(options: WxNavigateToOptions) => void>
   redirectTo: Mock<(options: WxNavigateToOptions) => void>
+  navigateBack: Mock<(options?: WxNavigateBackOptions) => void>
+  stopPullDownRefresh: Mock<(options?: WxStopPullDownRefreshOptions) => void>
+  pageScrollTo: Mock<(options: WxPageScrollToOptions) => void>
   scanCode: Mock<(options: WxScanCodeOptions) => void>
+  getLocation: Mock<(options: WxGetLocationOptions) => void>
+  openLocation: Mock<(options: WxOpenLocationOptions) => void>
+  getSetting: Mock<(options?: WxSettingOptions) => void>
+  openSetting: Mock<(options?: WxSettingOptions) => void>
+  getSystemInfoSync: Mock<() => WxSystemInfo>
+  getMenuButtonBoundingClientRect: Mock<() => WxMenuButtonRect>
   showModal: Mock<(options: WxShowModalOptions) => void>
   showToast: Mock<(options: WxShowToastOptions) => void>
 }
@@ -257,7 +367,25 @@ export function installWxStub(): InstalledWxStub {
     //   • `scanCode` —— 入口失效页的「重新扫码」是用户唯一的出路；静默成功等于死按钮。
     navigateTo: unstubbed<[WxNavigateToOptions]>('navigateTo'),
     redirectTo: unstubbed<[WxNavigateToOptions]>('redirectTo'),
+    // 导航栏的「返回」是缺省行为：未编排即抛错，避免把「没实现」伪装成「调了但无栈可退」。
+    navigateBack: unstubbed<[WxNavigateBackOptions | undefined]>('navigateBack'),
+    // 列表页下拉刷新结束 —— 与其它 API 同一条纪律：未编排即抛错，
+    // 免得「没实现」被一个静默空调用伪装成「转圈已结束」。
+    stopPullDownRefresh: unstubbed<[WxStopPullDownRefreshOptions | undefined]>('stopPullDownRefresh'),
+    // 点 marker 后滚到对应站点卡 —— 未编排即抛错，避免「选中了但列表没动」被静默放过。
+    pageScrollTo: unstubbed<[WxPageScrollToOptions]>('pageScrollTo'),
     scanCode: unstubbed<[WxScanCodeOptions]>('scanCode'),
+    // 定位只由用户点击触发 —— 未编排即抛错，让「页面自动请求定位」当场暴露。
+    getLocation: unstubbed<[WxGetLocationOptions]>('getLocation'),
+    // 导航与定位授权是两条独立路径：导航不需要位置授权。
+    openLocation: unstubbed<[WxOpenLocationOptions]>('openLocation'),
+    // 设置页只在用户点击「开启定位」时打开；未编排即抛错同样防自动调用。
+    getSetting: unstubbed<[WxSettingOptions | undefined]>('getSetting'),
+    openSetting: unstubbed<[WxSettingOptions | undefined]>('openSetting'),
+    // 导航栏 attached 的胶囊几何来源 —— 与其它 API 一样「未编排即失败」，
+    // 免得几何算成 0 还静默通过（标题会压到胶囊底下）。
+    getSystemInfoSync: unstubbed<[]>('getSystemInfoSync'),
+    getMenuButtonBoundingClientRect: unstubbed<[]>('getMenuButtonBoundingClientRect'),
     // ⚠️ 这两个是**故意**未编排即失败的，与上面几个的方向相反：
     // 它们的正确用量是**零次**（柜机不可用与余位 0 是**正常响应**，
     // 而通用错误弹窗正是最像「功能正常」的退化）。未编排即抛错让

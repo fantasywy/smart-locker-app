@@ -40,7 +40,8 @@ import { login, refresh } from './auth-endpoints'
  * ⚠️ **豁免名单内的路径不挂恢复逻辑**（这是递归防护的第二道闸门）。`auth-endpoints.ts` 走的是
  * `requestWithoutAuth`（第一道），但后来者用 `request()` 直接调 `13.1` / `13.2` 是很自然的
  * 写法（它「也是个端点」）—— 那时若照常挂上恢复，一次刷新失败会去刷新「这次刷新」，
- * 立刻打出无限递归。两道闸门都要能独立挡住。
+ * 立刻打出无限递归。两道闸门都要能独立挡住。内容端点同理：它免税、也必须在登录链坏掉时可用，
+ * 挂恢复只会让「退路」跟着登录态一起失败。
  */
 export function request<T>(path: string, options: RequestOptions = {}): Promise<RequestResult<T>> {
   const attempt = (): Promise<RequestResult<T>> => send<T>(path, options, true)
@@ -50,7 +51,9 @@ export function request<T>(path: string, options: RequestOptions = {}): Promise<
 /**
  * 发一条**免鉴权**请求 —— 不带 `Authorization`，且**不读** storage 里的 access。
  *
- * 只给 `13.1` 与 `13.2` 用（`WebMvcConfig.java:46-47`，见 `config.ts` 的豁免名单）。
+ * 给三处用：`13.1` 登录、`13.2` 刷新（`WebMvcConfig.java:46-47`），以及
+ * `GET /contents/{key}`（spec #57 §13 的免鉴权新端点）。内容页走这条路的理由同样硬：
+ * 登录链失败时 `failure-exit` 必须还能打开计费 / FAQ —— 退路不能依赖它要绕开的那条链。
  *
  * ⚠️ 为什么不靠「url 命中豁免名单就不加头」一条路走完：那样 `13.1` / `13.2` 仍会去读
  * storage 里的 access，一旦 storage 桩未被编排，就会在登录链路上炸出一个与登录无关的错。
@@ -74,8 +77,8 @@ function send<T>(
   const header: Record<string, string> = { 'content-type': 'application/json' }
   for (const [key, value] of Object.entries(options.header ?? {})) header[key] = value
 
-  // ⚠️ 免鉴权端点**硬编码豁免**：契约里只有 `/auth/login` 与
-  // `/auth/refresh` 两个。两道闸门都必须放行才附加头 —— `withAuth` 是调用点的显式声明，
+  // ⚠️ 免鉴权端点**硬编码豁免**：登录 / 刷新两条固定路径，加上内容端点的路径前缀。
+  // 两道闸门都必须放行才附加头 —— `withAuth` 是调用点的显式声明，
   // `isAuthExempt` 是名单兜底（第二道用在 `request()` 上，见那里的注释）。
   if (withAuth && !isAuthExempt(path)) {
     const access = getAccessToken()

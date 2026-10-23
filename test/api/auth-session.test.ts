@@ -27,7 +27,7 @@ function loginBody(overrides: Partial<LoginResponse> = {}): Record<string, unkno
       accessToken: 'ACCESS-NEW',
       refreshToken: 'REFRESH-NEW',
       expiresIn: 7200,
-      user: { id: 88, nickname: null, avatar: null, phone: null, score: 100, status: 'NORMAL' },
+      user: { id: 88, nickname: null, avatar: null, phone: null, score: 100, status: 1 },
       ...overrides,
     },
   }
@@ -180,13 +180,13 @@ describe('#18 冷启动登录链：无 refresh token → wx.login → 13.1 → �
     expect(result.data).toBeNull()
   })
 
-  it('⚠️ 13.1 返回 user.status = BLACKLISTED → 登录成功、不阻断', async () => {
+  it('⚠️ 13.1 返回 user.status = 2（受限） → 登录成功、不阻断', async () => {
     // `13.1` :1065：**黑名单用户允许登录**。既定裁决明令客户端不得据此做任何
     // 事前阻断 —— 拦截权只能属于服务端（本地快照会造出双源真相，还会把已解禁用户挡在门外）。
     stubLoginFlow([
       jsonResponse(
         loginBody({
-          user: { id: 88, nickname: null, avatar: null, phone: null, score: 40, status: 'BLACKLISTED' },
+          user: { id: 88, nickname: null, avatar: null, phone: null, score: 40, status: 2 },
         }),
       ),
     ])
@@ -197,7 +197,7 @@ describe('#18 冷启动登录链：无 refresh token → wx.login → 13.1 → �
     // 而且 token 照常落盘 —— 受限状态不影响「登录身份已建立」这件事。
     expect(getAccessToken()).toBe('ACCESS-NEW')
     if (!result.ok) throw new Error('unreachable')
-    expect(result.data?.user.status).toBe('BLACKLISTED')
+    expect(result.data?.user.status).toBe(2)
   })
 
   it('wx.login 失败 → kind 为 network（落全局失败出口），不抛裸错误', async () => {

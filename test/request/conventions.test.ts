@@ -19,7 +19,7 @@ const requestDir = join(miniprogramDir, 'request')
 const apiDir = join(miniprogramDir, 'api')
 const pagesDir = join(miniprogramDir, 'pages')
 
-/** 递归收集某目录下的全部 `.ts`（跳过 `.d.ts` 与 `node_modules`）。 */
+/** 递归收集某目录下的全部 `.ts`（跳过 `.d.ts`、`node_modules` 与构建产物 miniprogram_npm）。 */
 function collectSources(dir: string): string[] {
   const found: string[] = []
   let entries: string[]
@@ -31,7 +31,8 @@ function collectSources(dir: string): string[] {
   for (const entry of entries) {
     const full = join(dir, entry)
     if (statSync(full).isDirectory()) {
-      if (entry === 'node_modules') continue
+      // `miniprogram_npm/` 是构建产物；源码守卫不扫描它。
+      if (entry === 'node_modules' || entry === 'miniprogram_npm') continue
       found.push(...collectSources(full))
     } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts')) {
       found.push(full)
@@ -137,13 +138,20 @@ describe('#18 工程约束：不引 store，App.globalData 不放业务数据', 
     ).toEqual([])
   })
 
-  it('不引任何状态管理库 —— 依赖里没有 store', () => {
-    // 既定口径：「不引任何 store（不引 pinia、不引轻量库）」。一期连运行时依赖都是零
-    // （「能不加依赖就不加」），所以这条断言在 package.json 上是全空的。
+  it('不引任何状态管理库 —— 运行时依赖只有构建期白名单（@vant/weapp）', () => {
+    // 既定口径：「不引任何 store（不引 pinia、不引轻量库）」。
+    //
+    // ⚠️ #59 起 `dependencies` **不是空的**：微信开发者工具的「构建 npm」只读取
+    // `dependencies`（`devDependencies` 会被完全忽略），因此 Vant 必须写在这里，
+    // 否则 `packNpmManually` 构建不出 `miniprogram_npm/` —— 这条事实已用 DevTools 实测。
+    // 守卫因此收窄为「**恰好**是这份构建期白名单」，而不是「全空」：
+    // 新增任何运行时依赖仍然要显式改这里，不会被悄悄放行。
     const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
     }
-    expect(pkg.dependencies ?? {}, '一期不引任何运行时依赖').toEqual({})
+    expect(pkg.dependencies ?? {}, '运行时依赖只允许构建期白名单').toEqual({
+      '@vant/weapp': '1.11.7',
+    })
   })
 })
 

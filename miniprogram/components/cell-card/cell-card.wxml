@@ -1,0 +1,33 @@
+<!--
+  四档格口卡 —— 2×2 网格里的一个格子。
+
+  ⚠️ 本文件没有任何文案字面量：档名 / 余位 / 状态字全部来自组件 data
+     （取值源头是 `startup/copy.ts` 的 `LOCKER_PAGE_COPY`）。
+  ⚠️ 选中：实心 check（`cell.selected`）；未选中：空心圆。
+     两者占同一个右上角位置，切换时不引起版式移动。
+  ⚠️ 售罄 / 离线仍渲染这张卡，只是状态字换成「已满」/「不可用」并弱化。
+     它们是**正常响应**，不是错误，所以不隐藏、不弹窗。
+-->
+<view
+  class="cell-card {{ selected ? 'is-selected' : '' }} {{ state === 'normal' ? '' : 'is-disabled' }}"
+  hover-class="{{ state === 'normal' ? 'cell-card_active' : 'none' }}"
+  aria-role="button"
+  aria-label="{{ label }}"
+  bindtap="onTap"
+>
+  <view class="cell-card__top">
+    <icon name="cell.package" tone="{{ state === 'normal' ? 'sub' : 'weak' }}" size="{{ iconSize }}" />
+    <!-- 选中：实心 check；未选中：空心圆。 -->
+    <icon
+      wx:if="{{ selected }}"
+      class="cell-card__check"
+      name="cell.selected"
+      tone="primary"
+      size="20"
+    />
+    <view wx:else class="cell-card__circle"></view>
+  </view>
+
+  <view class="cell-card__label">{{ label }}</view>
+  <view class="cell-card__availability">{{ availabilityText }}</view>
+</view>

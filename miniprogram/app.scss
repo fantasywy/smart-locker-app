@@ -1,10 +1,139 @@
-/**app.wxss**/
-.container {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  padding: 200rpx 0;
-  box-sizing: border-box;
-} 
+// **全局样式** —— 这里只做两件事：
+//   1. 把设计 token 映射成 Vant 的 CSS 变量（Vant 主题的唯一入口）；
+//   2. 覆盖 Vant 写死、没有变量可用的四处样式。
+//
+// ⚠️ **app.scss 不是第二个事实源**：所有取值都从 `styles/_variables.scss` 来，
+// 用 Sass 的 `#{}` 插值写进自定义属性。直接在这里写裸 hex 等于让主题层绕开
+// `scripts/verify-visual-tokens.mjs` 的对比度与取值守卫 —— 脚本会失败。
+//
+// ⚠️ 为什么是 `page { ... }` 而不是 ConfigProvider：
+// 产品只有浅色一套（`_variables.scss` 开篇），不需要子树 / 动态切换；
+// 全局 `page` 上的 CSS 变量最轻，也不会给每个页面多挂一个组件。
+//
+// ⚠️ 组件声明仍是**页面级**（`usingComponents`），不要往 `app.json` 里塞全局组件：
+// 全局组件会拖慢每个页面的启动，Vant 的产物又整包拷贝进 `miniprogram_npm`
+// （构建 npm 不做 tree-shaking，见 #40 研究）。
+
+@use './styles/variables' as v;
+
+page {
+  // ---------- Button ----------
+  --button-primary-background-color: #{v.$color-primary-active};
+  --button-primary-border-color: #{v.$color-primary-active};
+  --button-primary-color: #{v.$color-bg-card};
+  --button-border-radius: #{v.$radius-control};
+  --button-default-height: 48px;
+  --button-large-height: 48px;
+  --button-default-font-size: #{v.$font-size-title};
+  --button-normal-font-size: #{v.$font-size-body};
+  --button-line-height: 24px;
+  --button-plain-background-color: #{v.$color-bg-card};
+
+  // ---------- Cell ----------
+  --cell-background-color: #{v.$color-bg-card};
+  --cell-text-color: #{v.$color-text-main};
+  --cell-font-size: #{v.$font-size-body};
+  --cell-line-height: 22px;
+  --cell-vertical-padding: 14px;
+  --cell-horizontal-padding: #{v.$spacing-lg};
+  --cell-label-color: #{v.$color-text-sub};
+  --cell-label-font-size: #{v.$font-size-aux};
+  --cell-value-color: #{v.$color-text-sub};
+  --cell-right-icon-color: #{v.$color-text-weak};
+  --cell-active-color: #{v.$color-bg-page};
+
+  // ---------- CellGroup ----------
+  --cell-group-inset-border-radius: #{v.$radius-card};
+  --cell-group-title-color: #{v.$color-text-sub};
+  --cell-group-title-font-size: #{v.$font-size-aux};
+
+  // ---------- Field ----------
+  --field-label-color: #{v.$color-text-sub};
+  --field-input-text-color: #{v.$color-text-main};
+  --field-placeholder-text-color: #{v.$color-text-weak};
+  --field-input-error-text-color: #{v.$color-danger-ink};
+  --field-error-message-color: #{v.$color-danger-ink};
+  --field-error-message-text-font-size: #{v.$font-size-aux};
+
+  // ---------- Popup ----------
+  --popup-background-color: #{v.$color-bg-card};
+  --popup-round-border-radius: #{v.$radius-sheet};
+
+  // ---------- Overlay ----------
+  --overlay-background-color: #{v.$color-overlay};
+
+  // ---------- Dialog ----------
+  --dialog-border-radius: #{v.$radius-sheet};
+  --dialog-background-color: #{v.$color-bg-card};
+  --dialog-header-font-weight: #{v.$font-weight-semibold};
+
+  // ---------- Toast ----------
+  // 半透明深色底是 spec §12 的指定值；它没有对应 token（不参与 AA 文本计算）。
+  --toast-background-color: rgba(0, 0, 0, 0.72);
+  --toast-border-radius: #{v.$radius-control};
+  --toast-text-color: #{v.$color-bg-card};
+  --toast-font-size: #{v.$font-size-body};
+
+  // ---------- NavBar ----------
+  --nav-bar-background-color: #{v.$color-bg-card};
+  --nav-bar-title-text-color: #{v.$color-text-main};
+  --nav-bar-icon-color: #{v.$color-text-main};
+  --nav-bar-text-color: #{v.$color-text-main};
+  --nav-bar-title-font-size: #{v.$font-size-title};
+
+  // ---------- Search ----------
+  --search-background-color: #{v.$color-bg-page};
+  --search-input-height: 36px;
+  --search-label-color: #{v.$color-text-main};
+  --search-left-icon-color: #{v.$color-text-weak};
+  --search-action-text-color: #{v.$color-primary-active};
+
+  // ---------- SubmitBar ----------
+  --submit-bar-background-color: #{v.$color-bg-card};
+  --submit-bar-text-color: #{v.$color-text-main};
+  --submit-bar-text-font-size: #{v.$font-size-body};
+  --submit-bar-height: 64px;
+  --submit-bar-padding: #{v.$spacing-sm} #{v.$spacing-lg};
+  --submit-bar-button-height: 48px;
+  --submit-bar-button-width: 160px;
+
+  // ---------- Loading ----------
+  --loading-spinner-color: #{v.$color-primary-active};
+  --loading-text-color: #{v.$color-text-sub};
+}
+
+// ---------------------------------------------------------------------------
+// 4 处类覆盖 —— Vant 写死、没有 CSS 变量可用（spec §12）。
+// 这些选择器必须留在**全局** app.wxss：Vant 组件开启 `addGlobalClass: true`，
+// 全局类才能穿透进组件内部；组件自己的 wxss 默认进不去。
+// ---------------------------------------------------------------------------
+
+// 1. Empty 描述色：Vant 写死 #969799（压白 2.92，不到 AA）。
+//    `$color-text-sub` 是 5.45，且与全站辅助文字同一档。
+.van-empty__description {
+  color: v.$color-text-sub;
+}
+
+// 2. Cell 分隔线：Vant 写死 #ebedf0，与本仓库的边框 token 不是同一个灰。
+//    左右内缩沿用 Vant 的 16px（不覆盖 left / right）。
+.van-cell::after {
+  border-bottom-color: v.$color-border;
+}
+
+// 3. Search 内容框圆角：Vant 没有圆角变量。
+.van-search__content {
+  border-radius: v.$radius-control;
+}
+
+// 4. 弹层 / 底部行动条的阴影：Vant 的 `custom-class` 是外部类，值必须在这里定义。
+//    Popup 与 Dialog 共用 `.app-popup-shadow`（同一个弹层语义，同一条 `$shadow-sheet`）；
+//    `van-submit-bar` 用 `.app-submit-bar-shadow`（阴影朝上，`$shadow-bar`）。
+//    ⚠️ 页面使用时写 `custom-class="app-popup-shadow"` / `custom-class="app-submit-bar-shadow"`，
+//    不要在页面里另写 box-shadow —— 那会让阴影出现第二份事实源。
+.app-popup-shadow {
+  box-shadow: v.$shadow-sheet;
+}
+
+.app-submit-bar-shadow {
+  box-shadow: v.$shadow-bar;
+}

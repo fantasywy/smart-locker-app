@@ -1,6 +1,8 @@
 {
   "pages": [
     "pages/index/index",
+    "pages/order-list/order-list",
+    "pages/nearby/nearby",
     "pages/profile/profile",
     "pages/locker/locker",
     "pages/order-detail/order-detail",
@@ -23,16 +25,39 @@
     "list": [
       {
         "pagePath": "pages/index/index",
-        "text": "订单"
+        "text": "首页",
+        "iconPath": "assets/tabbar/index.png",
+        "selectedIconPath": "assets/tabbar/index-active.png"
+      },
+      {
+        "pagePath": "pages/order-list/order-list",
+        "text": "订单",
+        "iconPath": "assets/tabbar/order-list.png",
+        "selectedIconPath": "assets/tabbar/order-list-active.png"
+      },
+      {
+        "pagePath": "pages/nearby/nearby",
+        "text": "附近",
+        "iconPath": "assets/tabbar/nearby.png",
+        "selectedIconPath": "assets/tabbar/nearby-active.png"
       },
       {
         "pagePath": "pages/profile/profile",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "assets/tabbar/profile.png",
+        "selectedIconPath": "assets/tabbar/profile-active.png"
       }
     ]
   },
+  "requiredPrivateInfos": [
+    "getLocation"
+  ],
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于展示附近柜机并计算距离"
+    }
+  },
   "renderer": "webview",
-  "style": "v2",
   "sitemapLocation": "sitemap.json",
   "lazyCodeLoading": "requiredComponents"
 }

@@ -28,7 +28,7 @@ function loginBody(): Record<string, unknown> {
       accessToken: 'ACCESS-1',
       refreshToken: 'REFRESH-1',
       expiresIn: 7200,
-      user: { id: 88, nickname: null, avatar: null, phone: null, score: 100, status: 'NORMAL' },
+      user: { id: 88, nickname: null, avatar: null, phone: null, score: 100, status: 1 },
     },
   }
 }
@@ -180,13 +180,13 @@ describe('#20 首页：闸门接线（重试真的到达闸门、状态真的画
     release()
   })
 
-  it('⚠️ 登录成功且 status 为 BLACKLISTED → 照样画 ready（不阻断）', async () => {
+  it('⚠️ 登录成功且 status 为 2（受限） → 照样画 ready（不阻断）', async () => {
     const wx = installWxStub()
     wx.login.mockImplementation(reply({ code: 'WX-CODE', errMsg: 'login:ok' }))
     const body = loginBody()
-    // 把 user.status 改成 BLACKLISTED —— 登录**照样成功**。
+    // 把 user.status 改成数字码 2（受限） —— 登录**照样成功**。
     const data = body['data'] as Record<string, unknown>
-    ;(data['user'] as Record<string, unknown>)['status'] = 'BLACKLISTED'
+    ;(data['user'] as Record<string, unknown>)['status'] = 2
     wx.request.mockImplementation(respondInOrder([jsonResponse(body)]))
 
     const { definition: def } = await loadPage()
@@ -294,12 +294,30 @@ describe('#20 首页：闸门接线（重试真的到达闸门、状态真的画
     await vi_wait()
 
     expect(page.data.phase).toBe('failed')
-    // `data` 里只有 phase、导航栏标题与占位文案 —— 没有 error / code / message 任何一项。
-    // ⚠️ `title` 是 `#22` 加的：首页的自绘导航栏标题改从 `PAGE_TITLES` 取
-    // （原先写死在 wxml 里，与其余 9 个空壳页形状不一致）。它是**文案**，不是错误对象，
-    // 不在本断言要挡的东西里 —— 本断言的判据仍是「没有任何一项来自 `UnifiedError`」。
+    // `data` 里只有 phase、首页文案（品牌 / 按钮 / 附近入口）与订单区的渲染模型 ——
+    // 没有 error / code / message 任何一项。
+    // ⚠️ `#61` 起导航栏标题留空（不再从 `PAGE_TITLES` 绑定），首页 data 里的
+    // wordmark / tagline / scanLabel 是**文案**，不是错误对象；
+    // 本断言的判据仍是「没有任何一项来自 `UnifiedError`」。
     expect(Object.keys(page.data).sort()).toEqual(
-      ['dataAreaHint', 'dataAreaTitle', 'phase', 'title'].sort(),
+      [
+        'activeOrders',
+        'homeOrders',
+        'nearbyLabel',
+        'orderCount',
+        'ordersLoadFailedTitle',
+        'ordersPhase',
+        'ordersRetryLabel',
+        'ordersTitle',
+        'phase',
+        'scanLabel',
+        'showOrders',
+        'showOrdersTitle',
+        'showViewAll',
+        'tagline',
+        'viewAllLabel',
+        'wordmark',
+      ].sort(),
     )
   })
 })

@@ -1,6 +1,16 @@
-// 预约存件页 —— 空壳样式（issue #22）。页面票整体替换本文件。
+// 预约创建页样式 —— 全部走设计 token，零裸 hex、零动效。
+//
+// 版式（结构级）：三张卡（格口档位 / 日期 / 开始与结束时间）+ 动作点错误 + 提交按钮。
+// 选中态用 `$color-primary-tint` 做面 + `$color-primary` 做描边；**文字仍是 main**
+// （tint 上的绿字只有 4.18，低于 AA —— 语义色只做装饰）。
+//
+// ⚠️ 单位：布局几何用 rpx；字号 / 1px 边框 / 圆角用 px；**行高一律无单位比例**
+// （`1.5` / `1.57` 这类相对字号的比例，不写像素行高 —— 那既不是字号也不是布局几何，
+// 且会让「一屏一个像素值」重新散进页面）。
+// ⚠️ 没有任何金额 / 价格相关的样式位 —— 本页下单前不显示金额。
 
 @use '../../styles/variables' as v;
+@use '../../styles/mixins' as m;
 
 page {
   height: 100vh;
@@ -15,4 +25,145 @@ page {
 .page {
   flex: 1;
   overflow-y: auto;
+  padding: v.$spacing-lg;
+  box-sizing: border-box;
+}
+
+// ---------------------------------------------------------------------------
+// 入口参数缺失
+// ---------------------------------------------------------------------------
+.reservation-create__invalid {
+  @include m.card;
+}
+
+.reservation-create__invalid-detail {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.57;
+}
+
+// ---------------------------------------------------------------------------
+// 分区卡
+// ---------------------------------------------------------------------------
+.reservation-create__section {
+  @include m.card;
+  margin-bottom: v.$spacing-lg;
+}
+
+.reservation-create__label {
+  margin-bottom: v.$spacing-md;
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  font-weight: v.$font-weight-semibold;
+  line-height: 1.5;
+}
+
+.reservation-create__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: v.$spacing-sm;
+}
+
+.reservation-create__options + .reservation-create__options {
+  margin-top: v.$spacing-md;
+}
+
+// ---------------------------------------------------------------------------
+// 档位 chip —— 选中态：tint 面 + 主色描边；文字保持 main。
+// ---------------------------------------------------------------------------
+.reservation-create__chip {
+  min-width: 160rpx;
+  height: 72rpx;
+  padding: 0 v.$spacing-md;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  line-height: 72rpx;
+  text-align: center;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+  box-sizing: border-box;
+}
+
+.reservation-create__chip.is-selected {
+  background: v.$color-primary-tint;
+  border-color: v.$color-primary;
+}
+
+.reservation-create__chip_active {
+  background: v.$color-bg-page;
+}
+
+// ---------------------------------------------------------------------------
+// 开始 / 结束时间 —— 原生 picker 包住一块字段面；两栏等宽。
+// ---------------------------------------------------------------------------
+.reservation-create__row {
+  display: flex;
+  gap: v.$spacing-md;
+}
+
+.reservation-create__picker {
+  flex: 1;
+  min-width: 0;
+}
+
+.reservation-create__field {
+  display: flex;
+  flex-direction: column;
+  padding: v.$spacing-sm v.$spacing-md;
+  background: v.$color-bg-page;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+  box-sizing: border-box;
+}
+
+.reservation-create__field-label {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.reservation-create__field-value {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  line-height: 1.5;
+}
+
+.reservation-create__field-value.is-placeholder {
+  color: v.$color-text-weak;
+}
+
+// ---------------------------------------------------------------------------
+// 动作点错误 + 提交
+// ---------------------------------------------------------------------------
+.reservation-create__error {
+  margin-bottom: v.$spacing-md;
+  color: v.$color-danger-ink;
+  font-size: v.$font-size-body;
+  line-height: 1.57;
+}
+
+.reservation-create__submit {
+  width: 100%;
+  height: 96rpx;
+  margin: 0;
+  padding: 0;
+  color: v.$color-bg-card;
+  font-size: v.$font-size-title;
+  line-height: 96rpx;
+  background: v.$color-primary-active;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.reservation-create__submit_active {
+  background: v.$color-primary-pressed;
+}
+
+.reservation-create__submit[disabled] {
+  background: v.$color-text-weak;
 }

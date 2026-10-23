@@ -1,154 +1,130 @@
-// **自绘导航栏** —— 全端统一，weui 骨架留下的组件。
+// **自绘导航栏** —— 全站 12 页共用，内部换成 Vant `van-nav-bar`。
 //
-// ## 本票（#23）在这里修的是什么
+// ## 这一版（#59）的契约：四个入参、三个事件，各做一件事
 //
-// `homeButton` 属性一旦使用，渲染出来的是个**点了没反应的死按钮** ——
-// `wxml:26` 绑了 `bindtap="home"`，而 `methods` 里**只有 `_showChange` 与 `back`**，
-// `home` 根本没实现。这不是新功能，是**把既定设计补完**：柜机页顶部要固定
-// 一个「我的订单」出口，而柜机页是冷启动、栈深 1 的非 tab 页，底部 tabBar 不显示
-// ⇒ 那是屏幕上**唯一**通往订单列表的可见路径，一个死按钮等于把用户关在柜机页里。
+// | 入参 | 语义 | 缺省行为 |
+// |---|---|---|
+// | `title` | 页面标题 | —— |
+// | `back` | 栈深 > 1 时的返回箭头 | `wx.navigateBack()` |
+// | `homeButton` | 栈深 1 时的「首页」出口 | `wx.switchTab(HOME_PATH)` |
+// | `ordersButton` | 右侧「我的订单」出口 | `wx.switchTab(ORDER_LIST_PATH)` |
 //
-// ## 两条裁决
+// ⚠️ **`home()` 与 `orders()` 都必须自己完成跳转，不能只 `triggerEvent`。**
+// 柜机页冷启动是栈深 1 的非 tab 页：系统返回 = 直接退出小程序、底部 tabBar 不显示，
+// 导航栏上这两个出口就是屏幕上仅有的回程。若跳转交给页面、而 10 个页面里任何一个漏接
+// `bind:home` / `bind:orders`，那个出口就又变成**死按钮**了（#23 修过一次同类缺陷）。
+// ⇒ **缺省行为必须可用，事件只是可选的附加通知口。**
 //
-// 1. **`home()` 自己 `wx.switchTab`，而不是只 `triggerEvent` 让页面去跳。**
-//    `back()` 的形态是 `wx.navigateBack()` **加** `triggerEvent('back')` —— 页面接不接都能用。
-//    `home()` 照抄这个形态：`wx.switchTab` 是**缺省行为**，事件是**可选的通知口**。
-//    ⚠️ 反过来做（只 triggerEvent、跳转交给页面）的后果是**又一次死按钮**：
-//    10 个页面里任何一个漏接 `bind:home` 就又点不动了，而那正是本次要修的缺陷本身。
-//    组件的**缺省行为**必须是可用的，页面只负责可选的附加反应。
+// ⚠️ **`home()` 与 `orders()` 的目标是常量，不是本文件里的字面量。**
+// `wx.switchTab` 的 url 必须是 `app.json` 的 `tabBar.list[].pagePath` 之一，
+// 差一个字符就是**静默失败**（不跳转、不报错）—— 与死按钮同一个用户症状，只是更难查。
+// 两个目标在 #66 之前恰好都指向 `pages/index/index`，现在已分开：
+// `HOME_PATH` 是「首页」，`ORDER_LIST_PATH` 是独立的订单 tab；改路径只改对应常量。
 //
-// 2. **目标是 `ORDER_LIST_PATH` 常量，不是本文件里的字面量。**
-//    `wx.switchTab` 的 url 必须是 `app.json` 的 `tabBar.list[].pagePath` 之一，
-//    差一个字符就是**静默失败** —— 与本次要修的症状一模一样，只是更难查。
-//    理由与守卫见 `startup/copy.ts` 里那条常量的说明。
+// ⚠️ **颜色 / 背景入参已删除。** 导航栏的颜色只从 token 写死（`navigation-bar.scss`），
+// 页面传入任意色值会让主题层出现第二个事实源，且 AA 对比度不再受 token 守卫保护。
+// 其余 weui 骨架时代的透传（extClass / loading / show / animated / delta）一并删除 ——
+// 「零 `van-*` prop 透传」是 spec §11 的硬约束。
 //
-// ⚠️ **本组件是 weui 骨架留下的，改动必须真机/模拟器验渲染**（「未实测」类问题
-//    已登记过）。判据是**画面**：柜机页顶部出现房子图标、点一下真的切到订单 tab。
+// ⚠️ 视觉上仍有胶囊避让：`van-nav-bar` 本身不会避让微信右上角的胶囊按钮，
+// 所以 `attached` 用 `wx.getMenuButtonBoundingClientRect()` 算出需要预留的右侧宽度，
+// 由模板里的内层容器用 `padding-right` 让开。标题因此在剩余宽度里居中（略偏左），
+// 这是为了不压住胶囊而接受的代价。
 
-import { ORDER_LIST_PATH } from '../../startup/copy'
+import { NAVIGATION_COPY, ORDER_LIST_PATH } from '../../startup/copy'
+import { HOME_PATH } from '../../utils/routes'
 
 Component({
   options: {
-    multipleSlots: true // 在组件定义时的选项中启用多slot支持
+    multipleSlots: true,
   },
-  /**
-   * 组件的属性列表
-   */
+
   properties: {
-    extClass: {
-      type: String,
-      value: ''
-    },
+    /** 页面标题 —— 由页面从 `copy.ts` 的 `PAGE_TITLES` 取。 */
     title: {
       type: String,
-      value: ''
+      value: '',
     },
-    background: {
-      type: String,
-      value: ''
-    },
-    color: {
-      type: String,
-      value: ''
-    },
+    /** 返回上一页。栈深 > 1 时使用；点击缺省 `wx.navigateBack()`。 */
     back: {
       type: Boolean,
-      value: true
+      value: true,
     },
-    loading: {
-      type: Boolean,
-      value: false
-    },
+    /** 左侧「首页」出口。栈深 1 时使用；点击缺省 `wx.switchTab(HOME_PATH)`。 */
     homeButton: {
       type: Boolean,
       value: false,
     },
-    animated: {
-      // 显示隐藏的时候opacity动画效果
+    /** 右侧「我的订单」出口；点击缺省 `wx.switchTab(ORDER_LIST_PATH)`。 */
+    ordersButton: {
       type: Boolean,
-      value: true
-    },
-    show: {
-      // 显示隐藏导航，隐藏的时候navigation-bar的高度占位还在
-      type: Boolean,
-      value: true,
-      observer: '_showChange'
-    },
-    // back为true的时候，返回的页面深度
-    delta: {
-      type: Number,
-      value: 1
+      value: false,
     },
   },
-  /**
-   * 组件的初始数据
-   */
+
   data: {
-    displayStyle: ''
+    homeLabel: NAVIGATION_COPY.home,
+    ordersLabel: NAVIGATION_COPY.orders,
+    backLabel: NAVIGATION_COPY.back,
+    /**
+     * 右侧胶囊需要预留的宽度（px）—— 0 表示还没有量到。
+     *
+     * ⚠️ 单位是 px：`getMenuButtonBoundingClientRect()` 返回的就是 px，
+     * 与 `van-nav-bar` 的 px 几何同一坐标系。用 rpx 换算反而会引入一次误差。
+     */
+    capsuleSafeWidth: 0,
   },
+
   lifetimes: {
     attached() {
-      const rect = wx.getMenuButtonBoundingClientRect()
-      wx.getSystemInfo({
-        success: (res) => {
-          const isAndroid = res.platform === 'android'
-          const isDevtools = res.platform === 'devtools'
-          this.setData({
-            ios: !isAndroid,
-            innerPaddingRight: `padding-right: ${res.windowWidth - rect.left}px`,
-            leftWidth: `width: ${res.windowWidth - rect.left }px`,
-            safeAreaTop: isDevtools || isAndroid ? `height: calc(var(--height) + ${res.safeArea.top}px); padding-top: ${res.safeArea.top}px` : ``
-          })
-        }
-      })
+      // ⚠️ 量不到就保持 0：宁可标题偏右一点也不让导航栏整体塌掉。
+      // 这里不抛错 —— 几何失败是环境问题，不该让整页白屏。
+      try {
+        const rect = wx.getMenuButtonBoundingClientRect()
+        const system = wx.getSystemInfoSync()
+        const width = system.windowWidth - rect.left
+        this.setData({ capsuleSafeWidth: width > 0 ? width : 0 })
+      } catch {
+        this.setData({ capsuleSafeWidth: 0 })
+      }
     },
   },
-  /**
-   * 组件的方法列表
-   */
+
   methods: {
-    _showChange(show: boolean) {
-      const animated = this.data.animated
-      let displayStyle = ''
-      if (animated) {
-        displayStyle = `opacity: ${
-          show ? '1' : '0'
-        };transition:opacity 0.5s;`
-      } else {
-        displayStyle = `display: ${show ? '' : 'none'}`
-      }
-      this.setData({
-        displayStyle
-      })
-    },
-    back() {
-      const data = this.data
-      if (data.delta) {
-        wx.navigateBack({
-          delta: data.delta
-        })
-      }
-      this.triggerEvent('back', { delta: data.delta }, {})
-    },
     /**
-     * 返回订单列表 —— **柜机页顶部那个「我的订单」出口**。
+     * 返回上一页 —— **只做一件事：返回**。
      *
-     * ⚠️ **必须用 `wx.switchTab`，不能用 `wx.navigateTo` / `wx.redirectTo`。**
-     * 订单列表是 tabBar 页，而 `navigateTo` 对 tabBar 页会**静默失败**
-     * （照样不跳转、不报错）—— 那就等于没修这个死按钮。既定的跳转方式也是 `wx.switchTab`。
+     * ⚠️ 事件是可选通知口（页面接不接都能用），不带参数：返回没有「去哪」这个变量。
+     */
+    back() {
+      wx.navigateBack({})
+      this.triggerEvent('back', {}, {})
+    },
+
+    /**
+     * 回首页 —— **只做一件事：`wx.switchTab(HOME_PATH)`**。
      *
-     * ⚠️ 柜机页是**栈深 1** 的（通道 A 冷启动），`switchTab` 会**关闭全部
-     * 非 tab 页**并把订单 tab 设为当前页 —— 这正是要的：用户从柜机页去订单列表，
-     * 不该能靠系统返回退回柜机页（那只会让他再扫一次码）。
-     *
-     * 事件名用 `home`（与 `back` 对称），**不带参数** —— 目标由常量钉死，
-     * 没有「跳去哪」这个变量可传。页面接不接都能用（见文件头的裁决 1）。
+     * ⚠️ 必须是 `switchTab`：首页是 tabBar 页，`navigateTo` / `redirectTo` 对 tabBar 页
+     * 会**静默失败**。`switchTab` 同时关闭全部非 tab 页 —— 从柜机页回首页正是要这个效果。
      */
     home() {
       wx.switchTab({
-        url: `/${ORDER_LIST_PATH}`
+        url: `/${HOME_PATH}`,
       })
       this.triggerEvent('home', {}, {})
-    }
+    },
+
+    /**
+     * 回订单列表 —— **只做一件事：`wx.switchTab(ORDER_LIST_PATH)`**。
+     *
+     * ⚠️ 与 `home()` 分开命名、分开目标：柜机页顶部同时需要「首页」与「我的订单」
+     * 两个不同方向的出口，一个 `homeButton` 装不下（spec §11 的补充裁决）。
+     */
+    orders() {
+      wx.switchTab({
+        url: `/${ORDER_LIST_PATH}`,
+      })
+      this.triggerEvent('orders', {}, {})
+    },
   },
 })

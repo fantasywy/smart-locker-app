@@ -1,4 +1,8 @@
-// 常见问题页 —— 空壳样式（issue #22）。页面票整体替换本文件。
+// 常见问题页 —— 内容排版与页内失败态（issue #68）。
+//
+// ⚠️ 骨架 → 内容**直接替换**：本文件没有 transition / animation / opacity / transform。
+// ⚠️ 视觉口径与计费说明页同一套（同一类 block 用同一种排版），
+//    但样式各页独立维护 —— 页面不跨目录 @use 另一个页面的 scss。
 
 @use '../../styles/variables' as v;
 
@@ -15,4 +19,98 @@ page {
 .page {
   flex: 1;
   overflow-y: auto;
+}
+
+.content {
+  margin: v.$spacing-md v.$spacing-lg v.$spacing-xxl;
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+}
+
+.content__heading {
+  font-size: v.$font-size-heading;
+  line-height: v.$line-height-heading;
+  font-weight: v.$font-weight-semibold;
+  color: v.$color-text-main;
+  margin: v.$spacing-xl 0 v.$spacing-sm;
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+.content__paragraph {
+  font-size: v.$font-size-body;
+  line-height: 1.6;
+  color: v.$color-text-main;
+  margin-bottom: v.$spacing-md;
+}
+
+.content__qa {
+  padding: v.$spacing-md 0;
+  border-bottom: 1px solid v.$color-border;
+
+  &:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+}
+
+.content__question {
+  font-size: v.$font-size-title;
+  line-height: 1.5;
+  font-weight: v.$font-weight-medium;
+  color: v.$color-text-main;
+}
+
+.content__answer {
+  // 答案承载信息，用 sub（5.45 ✅），不用 weak（3.02 ❌）。
+  margin-top: v.$spacing-sm;
+  font-size: v.$font-size-body;
+  line-height: 1.6;
+  color: v.$color-text-sub;
+}
+
+.content-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  padding: 0 v.$spacing-xxl;
+  box-sizing: border-box;
+}
+
+.content-failed__detail {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.content-failed__retry {
+  background: v.$color-primary-active;
+  color: v.$color-bg-card;
+  font-size: v.$font-size-body;
+  border-radius: v.$radius-control;
+  margin-top: v.$spacing-xxl;
+  padding: 0 v.$spacing-xxl;
+  min-width: 240rpx;
+  // ⚠️ 定高按钮的文字居中用 flex，不写像素行高：
+  // 行高一旦写成像素值就与字号脱钩，字号一改文字就偏（且像素行高散进页面）。
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &::after {
+    border: none;
+  }
+}
+
+.content-failed__retry_active {
+  background: v.$color-primary-pressed;
 }

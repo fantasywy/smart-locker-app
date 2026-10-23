@@ -13,15 +13,35 @@ import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { fileURLToPath } from 'node:url'
 import {
-  DATA_AREA_PLACEHOLDER_HINT,
-  DATA_AREA_PLACEHOLDER_TITLE,
   EMPTY_STATES,
   FAILURE_DETAIL,
   FAILURE_TITLE,
+  HOME_PAGE_COPY,
   PAGE_TITLES,
   RETRY_LABEL,
   ORDER_LIST_PATH,
+  NAVIGATION_COPY,
+  CONFIRM_COPY,
+  LOCKER_PAGE_COPY,
+  WAITING_PAGE_COPY,
+  LOAD_FAILED_DETAIL,
+  PROFILE_COPY,
   STATIC_EXITS,
+  ORDER_CANCEL_COPY,
+  ORDER_COPY,
+  ORDER_STATUS_LABELS,
+  STORED_TIME_PREFIX,
+  TODAY_LABEL,
+  NOT_YET_STORED_HINT,
+  NO_RESULT_COPY,
+  PICKUP_SHEET_COPY,
+  SCAN_COPY,
+  ORDER_LIST_COPY,
+  RESERVATION_CREATE_COPY,
+  RESERVATION_LIST_COPY,
+  RESERVATION_STATUS_LABELS,
+  SCORE_LOGS_COPY,
+  NEARBY_COPY,
 } from '../../miniprogram/startup/copy'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -30,7 +50,7 @@ const startupDir = join(miniprogramDir, 'startup')
 const componentsDir = join(miniprogramDir, 'components')
 const pagesDir = join(miniprogramDir, 'pages')
 
-/** 递归收集某目录下指定后缀的全部文件（跳过 node_modules）。 */
+/** 递归收集某目录下指定后缀的全部文件（跳过 node_modules 与构建产物 miniprogram_npm）。 */
 function collect(dir: string, extensions: readonly string[]): string[] {
   const found: string[] = []
   let entries: string[]
@@ -42,7 +62,8 @@ function collect(dir: string, extensions: readonly string[]): string[] {
   for (const entry of entries) {
     const full = join(dir, entry)
     if (statSync(full).isDirectory()) {
-      if (entry === 'node_modules') continue
+      // `miniprogram_npm/` 是开发者工具「构建 npm」的产物（gitignored）；守卫只看源码。
+      if (entry === 'node_modules' || entry === 'miniprogram_npm') continue
       found.push(...collect(full, extensions))
     } else if (extensions.some((ext) => entry.endsWith(ext))) {
       found.push(full)
@@ -59,6 +80,22 @@ function stripComments(source: string): string {
 /** 相对仓库根的展示路径，失败信息里用。 */
 function rel(path: string): string {
   return relative(repoRoot, path)
+}
+
+/**
+ * 把一张文案表（可能含嵌套对象）摊平成字符串列表。
+ *
+ * ⚠️ 为什么需要它：`LOCKER_PAGE_COPY` 的档名是一张子表
+ * （`cellTypeLabels: { 1: '小格口', ... }`）。只做 `Object.values` 会把
+ * 子表变成 `[object Object]`，于是四条档名全都逃过守卫 ——
+ * 而这正是「新增导出必须回来补一次」最容易漏的形状。
+ */
+function flattenCopy(value: unknown): string[] {
+  if (typeof value === 'string') return [value]
+  if (value !== null && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).flatMap(flattenCopy)
+  }
+  return []
 }
 
 const allSources = (): string[] => collect(miniprogramDir, ['.ts', '.wxml', '.scss', '.json'])
@@ -82,23 +119,82 @@ const allSources = (): string[] => collect(miniprogramDir, ['.ts', '.wxml', '.sc
  * 但两道网都要有人补，**别再假设它是自动的**。
  *
  * 构成：三个失败出口的字符串常量 + `STATIC_EXITS` 每一项的 `label`
- * + 数据区占位那两句 + `PAGE_TITLES` 的每一个标题 + `EMPTY_STATES` 的每一句。
+ * + `PAGE_TITLES` 的每一个标题 + `EMPTY_STATES` 的每一句 + 首页的 `HOME_PAGE_COPY`。
  */
 const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   FAILURE_TITLE,
   FAILURE_DETAIL,
   RETRY_LABEL,
+  // ⚠️ `LOAD_FAILED_DETAIL` —— `#68` 从柜机页提升出来的共用句。
+  // 内容页与柜机页都只用常量插值；它若以字面量出现在任何页面里，就是又抄了一份。
+  LOAD_FAILED_DETAIL,
   ...STATIC_EXITS.map((exit) => exit.label),
-  DATA_AREA_PLACEHOLDER_TITLE,
-  DATA_AREA_PLACEHOLDER_HINT,
   // ⚠️ `PAGE_TITLES` 的值 —— `#22` 新增的导出（见上方说明：新增导出必须回来补一次）。
   ...Object.values(PAGE_TITLES),
+  // ⚠️ `NAVIGATION_COPY` / `CONFIRM_COPY` —— `#59` 新增的导出。
+  // 导航栏三个出口的名字与确认弹窗的两个按钮词同样是用户可见的字；
+  // 漏加一次，组件里写字面量就会一路绿灯。
+  ...Object.values(NAVIGATION_COPY),
+  ...Object.values(CONFIRM_COPY),
   // ⚠️ `EMPTY_STATES` 的每一句 —— `#23` 新增的导出。
   // 空态的三组文案都是用户可见的字，必须能在定稿文案里查到；
   // 把它们纳入这份清单，任何一句以字面量出现在 `empty-state` 组件或页面里都会被抓住。
   // ⚠️ 空串要滤掉：`scoreLogs` 的 `hint` / `actionLabel` 是**有意的缺省**，
   // 而 `code.includes('')` 恒为 true —— 留着它这条守卫会当场全红。
   ...Object.values(EMPTY_STATES).flatMap((state) => [state.title, state.hint, state.actionLabel]),
+  // ⚠️ `LOCKER_PAGE_COPY` —— **#62 新增的导出**（旧票遗漏了这一项，repo-map §5 已记为已知缺口）。
+  // 四档档名 / 底栏 / 确认弹层 / 置灰原因 / 事实行 / 入口失效文案全部是用户可见的字；
+  // 漏掉它们，柜机页或 cell-card 里写字面量就会一路绿灯。
+  ...flattenCopy(LOCKER_PAGE_COPY),
+  // ⚠️ `HOME_PAGE_COPY` 的每一句 —— `#61` 新增的导出。品牌 wordmark / tagline、
+  // 扫码主按钮与两条扫码反馈都是用户可见的字；漏加一次，首页 wxml 或页面 data
+  // 里写字面量就会一路绿灯（而首页恰好是唯一主行动的那一屏）。
+  ...Object.values(HOME_PAGE_COPY),
+  // ⚠️ `SCAN_COPY` —— 「扫码 → 柜机页」这条链路的两句反馈，`utils/scan-locker.ts`
+  // 与四个扫码入口共用。它**不在** `HOME_PAGE_COPY` 里（那条链路的文案不归某一页），
+  // 所以必须单独列进来 —— 否则「这不是柜机码」被抄进某个页面就一路绿灯。
+  ...flattenCopy(SCAN_COPY),
+  // ⚠️ `PROFILE_COPY` 的每一句 —— `#69` 新增的导出。身份回退名、受限卡四行、
+  // 信用分 / 两组入口、昵称校验与保存失败全部是用户可见的字；
+  // 漏加一次，「我的」页 wxml 里写字面量就会一路绿灯（而受限卡的四行是逐字定稿）。
+  ...flattenCopy(PROFILE_COPY),
+  // ⚠️ `WAITING_PAGE_COPY` 的每一句 —— `#63` 新增的导出。主陈述 / 停滞说明 /
+  // 手动核对 / 取消与重新开门弹窗 / 九种终局 / 金额四词全部是用户可见的字；
+  // 漏掉它们，等待页 wxml 或页面 data 里写字面量就会一路绿灯。
+  ...flattenCopy(WAITING_PAGE_COPY),
+  // ⚠️ `ORDER_STATUS_LABELS` / `ORDER_CANCEL_COPY` / `ORDER_COPY` —— `#64` 新增的导出。
+  // 九个状态标签、取消弹窗与详情页的金额词 / 时间轴文案 / 失败出口全部是用户可见的字；
+  // 漏加一次，订单详情（以及 #66 的列表卡）里写字面量就会一路绿灯。
+  ...flattenCopy(ORDER_STATUS_LABELS),
+  ...flattenCopy(ORDER_CANCEL_COPY),
+  ...flattenCopy(ORDER_COPY),
+  // ⚠️ `PICKUP_SHEET_COPY` —— `#65` 新增的导出。取件层的三条金额说明、
+  // 成功三态与五类失败归因全部是用户可见的字；漏加一次，组件里写字面量就会一路绿灯。
+  ...flattenCopy(PICKUP_SHEET_COPY),
+  // ⚠️ `ORDER_LIST_COPY` —— `#66` 新增的导出。组标题 / 进行中「还有更多」/
+  // 首屏失败与加载更多失败都是用户可见的字；漏加一次，列表页里写字面量就会一路绿灯。
+  ...flattenCopy(ORDER_LIST_COPY),
+  // ⚠️ `RESERVATION_STATUS_LABELS` / `RESERVATION_LIST_COPY` / `RESERVATION_CREATE_COPY`
+  // —— `#70` 新增的导出。五个预约状态标签、两个二次确认、爽约 / 失效归因与
+  // 创建页的分组标题 / 校验句全部是用户可见的字；漏加一次，预约两页里写字面量
+  // 就会一路绿灯（而爽约与失效分开讲正是本票的验收事实）。
+  ...flattenCopy(RESERVATION_STATUS_LABELS),
+  ...flattenCopy(RESERVATION_LIST_COPY),
+  ...flattenCopy(RESERVATION_CREATE_COPY),
+  // ⚠️ `SCORE_LOGS_COPY` —— `#71` 新增的导出。页内失败句与重试按钮同样是
+  // 用户可见的字；漏加一次，信用分明细页里写字面量就会一路绿灯。
+  ...flattenCopy(SCORE_LOGS_COPY),
+  // ⚠️ `NEARBY_COPY` —— `#72` 新增的导出。搜索 / 定位横幅 / 列表头 / 四类空态 /
+  // 城市选择器 / 状态标签 / 四档档名 / 柜机位置 / 导航 / 只读说明全部是用户可见的字；
+  // 漏加一次，附近页或 station-card 里写字面量就会一路绿灯。
+  // ⚠️ 单字档名（小 / 中 / 大）在 `flattenCopy` 里会变成「任意源码出现该字就报」的宽判据，
+  // 因此下面按长度 ≥2 过滤；档名由同表的「特大」与站卡字段断言继续覆盖。
+  ...flattenCopy(NEARBY_COPY).filter((literal) => literal.length >= 2),
+  // ⚠️ `STORED_TIME_PREFIX` / `TODAY_LABEL` —— 从 `datetime.ts` 的字面量提升出来的共享词。
+  STORED_TIME_PREFIX,
+  TODAY_LABEL,
+  NOT_YET_STORED_HINT,
+  NO_RESULT_COPY,
 ].filter((literal) => literal !== '')
 
 describe('#20 失败出口是唯一的一份', () => {
@@ -388,10 +484,16 @@ describe('#20 闸门链路的工程约束', () => {
       /globalData/,
     )
 
+    // ⚠️ #59 起 `dependencies` 恰好是**构建期白名单**：微信开发者工具「构建 npm」
+    // 只读取 `dependencies`（`devDependencies` 会被忽略），Vant 必须写在这里，
+    // 否则 `packNpmManually` 产不出 `miniprogram_npm/`（DevTools 实测）。
+    // 收窄成白名单而不是删除断言 —— 新增运行时依赖仍要显式改这一条。
     const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
     }
-    expect(pkg.dependencies ?? {}, '一期不引任何运行时依赖').toEqual({})
+    expect(pkg.dependencies ?? {}, '运行时依赖只允许构建期白名单').toEqual({
+      '@vant/weapp': '1.11.7',
+    })
   })
 
   it('⚠️ `startup/` 不依赖 `pages/` 或 `components/` —— 依赖方向单向', () => {
@@ -424,11 +526,13 @@ describe('#23 `wx.switchTab` 的目标确实是 tabBar 的一项', () => {
     }
     const tabPaths = appJson.tabBar.list.map((item) => item.pagePath)
 
-    expect(tabPaths, '订单必须是 tabBar 的第一项').toContain(ORDER_LIST_PATH)
+    expect(tabPaths, '订单必须是 tabBar 的第二项（首页 / 订单 / 我的）').toContain(
+      ORDER_LIST_PATH,
+    )
     expect(appJson.pages, 'ORDER_LIST_PATH 不在 pages 注册表里').toContain(ORDER_LIST_PATH)
     // ⚠️ `wx.switchTab` 的 url 拼成 `/${ORDER_LIST_PATH}` —— 断言拼出来的那个串
     // 与 app.json 里的字面路径**逐字相同**（而不是「归一化之后相同」）。
-    expect(`/${ORDER_LIST_PATH}`).toBe(`/${tabPaths[0]}`)
+    expect(`/${ORDER_LIST_PATH}`).toBe(`/${tabPaths[1]}`)
   })
 
   it('⚠️ **`wx.switchTab` 的 url**不得由别处拼出来 —— 那是最像静默失败的一处', () => {
@@ -460,5 +564,97 @@ describe('#23 `wx.switchTab` 的目标确实是 tabBar 的一项', () => {
         `一个家，写错一个字符就是 wx.switchTab 的静默失败：\n` +
         offenders.map((f) => `  • ${f}`).join('\n'),
     ).toEqual([])
+  })
+})
+
+describe('#57 全局禁用词与等待页判断字段（spec §14.4 / §15）', () => {
+  it('⚠️ 全站源码不出现「门已开 / 开门成功 / 取件成功 / 已付清 / 应付 / 预估价 / 锁定价」', () => {
+    // 前四个是**无法证明或说错**的话：C 端看不到门的状态，支付成功也不等于订单完成；
+    // 后三个是**金额词的边界**：参考金额永远带「参考」，实付是已定格累计，补缴差额不由客户端算。
+    // 判据是**剥掉注释后的全部源码**（含 copy.ts 自己）—— 注释里讨论这些词是必要的，
+    // 但只要它们以字符串形式出现在任何可达界面 / 文案层，就是违规。
+    //
+    // ⚠️ 「门已开」必须用 `(?!启)` 收窄：`3002` 的契约逐字
+    // 「柜门已开启，请放入物品后关门，或联系客服」天然包含「门已开」三个字，
+    // 而那一句是**必须存在**的。禁用词挡的是把「门已开」当结论说出来，不是挡
+    // 「柜门已开启」这个服务端事实的引用。
+    const banned: readonly { word: string; pattern: RegExp }[] = [
+      { word: '门已开', pattern: /门已开(?!启)/ },
+      { word: '开门成功', pattern: /开门成功/ },
+      { word: '取件成功', pattern: /取件成功/ },
+      { word: '已付清', pattern: /已付清/ },
+      { word: '应付', pattern: /应付/ },
+      { word: '预估价', pattern: /预估价/ },
+      { word: '锁定价', pattern: /锁定价/ },
+    ]
+    const offenders: string[] = []
+    for (const file of allSources()) {
+      const code = stripComments(readFileSync(file, 'utf8'))
+      for (const { word, pattern } of banned) {
+        if (pattern.test(code)) offenders.push(`${rel(file)} → 「${word}」`)
+      }
+    }
+
+    expect(
+      offenders,
+      `以下位置出现了全局禁用词 —— 它们在任何可达界面都不得出现：\n` +
+        offenders.map((f) => `  • ${f}`).join('\n'),
+    ).toEqual([])
+  })
+
+  it('⚠️ `paid` / `openCommandIssued` 零引用（DTO 除外）—— 页面不得拿它们判态', () => {
+    // 支付成功 ≠ 订单完成：结算由关门事件驱动。等待页只能从
+    // `status` / `startAt` / `endAt` / `payAmount` 派生状态；`paid` 与
+    // `openCommandIssued` 即使返回，也不证明门开没开、更不证明订单已结束。
+    // ⇒ 这两个字段只允许存在于 `types/` 的 DTO 声明里（契约形状），任何页面 /
+    //    组件 / api 代码引用它们都是把「支付回执」当成了「订单终局」。
+    const offenders: string[] = []
+    const allowedPrefix = join(miniprogramDir, 'types') + '/'
+    for (const file of allSources()) {
+      if (file.startsWith(allowedPrefix)) continue
+      const code = stripComments(readFileSync(file, 'utf8'))
+      for (const field of ['paid', 'openCommandIssued']) {
+        const pattern = new RegExp(`\\b${field}\\b`)
+        if (pattern.test(code)) offenders.push(`${rel(file)} → ${field}`)
+      }
+    }
+
+    expect(
+      offenders,
+      `以下位置引用了支付回执字段 —— 等待页判态只用 status/startAt/endAt/payAmount：\n` +
+        offenders.map((f) => `  • ${f}`).join('\n'),
+    ).toEqual([])
+  })
+})
+
+describe('文案的「同一个值只有一个家」', () => {
+  it('⚠️ 高频复用的句子在 `copy.ts` 里只以字面量出现一次，其余处按引用取值', () => {
+    // 口径：同一个东西在全局只能有一个名字。这些句子此前各有两处字面量
+    // （首页入口条 vs 页面标题、首页失败标题 vs 列表失败标题、等待页主陈述 vs
+    // 取件层幂等重开标题、底栏「暂无可存格口」两处、两个「我的预约」）——
+    // 两处字面量的后果不是啰嗦，而是改一处漏一处之后**同一件事在界面上有两种说法**。
+    //
+    // 判据是 copy.ts 源码里这些句子的**字面量出现次数**：1 次 = 有且仅有一个家；
+    // 第二处只允许写成对那个家的引用。取值相同的断言（toBe）在这里没有意义 ——
+    // 它永远为真，挡不住任何一次重新抄写。
+    const source = stripComments(readFileSync(join(startupDir, 'copy.ts'), 'utf8'))
+    const SINGLE_HOME = ['已发出开门指令', '订单加载失败', '附近柜机', '我的预约', '暂无可存格口', '进行中']
+    for (const literal of SINGLE_HOME) {
+      // ⚠️ 数的是**带引号的完整字符串**，不是裸子串：「进行中」会出现在
+      // 「还有更多进行中订单」里面，按子串数会把一个正常的长句判成第二份字面量。
+      const hits = source.split(`'${literal}'`).length - 1
+      expect(hits, `「${literal}」在 copy.ts 里出现了 ${hits} 次 —— 它只能有一个家`).toBe(1)
+    }
+  })
+
+  it('⚠️ 确认弹窗的「取消」不再被任何表重新抄一遍', () => {
+    // `CONFIRM_COPY.cancel` 是那几个中性取消按钮的唯一家：资料弹层 / 取件确认弹层 /
+    // 重新开门弹窗 / 城市选择器都引用它。判据取源码里的赋值形态 ——
+    // `cancel: '取消'` 这样的第二份字面量一个都不许再有。
+    const source = stripComments(readFileSync(join(startupDir, 'copy.ts'), 'utf8'))
+    expect(CONFIRM_COPY.cancel).toBe('取消')
+    // 恰好一次 —— 就是 `CONFIRM_COPY` 自己的定义；第二处只允许写成对它的引用。
+    const typed = source.match(/(cancel|Cancel):\s*'取消'/g) ?? []
+    expect(typed, `「取消」被抄了 ${typed.length} 次`).toHaveLength(1)
   })
 })

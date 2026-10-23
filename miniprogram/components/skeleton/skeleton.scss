@@ -48,7 +48,7 @@
 
 .skeleton__block {
   background: v.$color-border;
-  border-radius: v.$radius-component;
+  border-radius: v.$radius-chip;
 }
 
 .skeleton__block--title {
@@ -69,7 +69,284 @@
   width: 48px;
   height: 20px;
   background: v.$color-border;
-  border-radius: v.$radius-component;
+  border-radius: v.$radius-chip;
   margin-left: v.$spacing-md;
   flex-shrink: 0;
+}
+
+// ---------------------------------------------------------------------------
+// 首页同构骨架（#61）
+// ---------------------------------------------------------------------------
+// ⚠️ 与首页同样：左右 16px、区块间距 24px；形状依次是品牌块 / 圆按钮 / 一卡 / 入口条。
+// 颜色仍只允许中性 token（$color-border / $color-bg-card），不染任何语义档。
+.skeleton--home {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-xxl;
+  padding: v.$spacing-lg;
+}
+
+.skeleton__home-brand {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-md;
+}
+
+.skeleton__home-mark {
+  // 40px 品牌方块 = 80rpx；圆角与真版式同一个 control 档。
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: v.$radius-control;
+  background: v.$color-border;
+  flex-shrink: 0;
+}
+
+.skeleton__home-brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-sm;
+  flex: 1;
+  min-width: 0;
+}
+
+.skeleton__home-wordmark {
+  width: 50%;
+  height: 24px;
+}
+
+.skeleton__home-tagline {
+  width: 34%;
+  height: 12px;
+}
+
+.skeleton__home-scan {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: v.$spacing-md;
+}
+
+.skeleton__home-scan-circle {
+  // 112px 圆按钮 = 224rpx。
+  width: 224rpx;
+  height: 224rpx;
+  border-radius: 50%;
+  background: v.$color-border;
+}
+
+.skeleton__home-scan-label {
+  width: 120rpx;
+  height: 16px;
+}
+
+.skeleton__home-card {
+  // 列表行的类复用一卡形状；首页骨架只有这一张，间距交给父级 gap。
+  margin-bottom: 0;
+}
+
+.skeleton__home-entry {
+  // 56px 入口条 = 112rpx。
+  width: 100%;
+  height: 112rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+}
+
+// ---------------------------------------------------------------------------
+// 「我的」页骨架（#69）—— 身份区 / 信用分卡各自一份。
+//
+// ⚠️ 两块都用中性 token（$color-border / $color-bg-card），不带任何语义档：
+// 此刻还不知道用户的 status / score，染上任何一档都是在替数据说话。
+// ---------------------------------------------------------------------------
+.skeleton--identity,
+.skeleton--credit {
+  display: flex;
+  align-items: center;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+  padding: v.$spacing-md;
+}
+
+.skeleton--identity {
+  // 真版式的头像位是 64px —— 骨架照抄这个几何，内容到位时布局不跳。
+  min-height: 64px;
+}
+
+.skeleton__avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: v.$color-border;
+  margin-right: v.$spacing-md;
+  flex: none;
+}
+
+.skeleton__identity-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.skeleton__identity-copy .skeleton__block--title {
+  width: 40%;
+}
+
+.skeleton__identity-copy .skeleton__block--meta {
+  width: 24%;
+  margin-top: v.$spacing-sm;
+}
+
+.skeleton__credit-label {
+  width: 30%;
+  height: 16px;
+}
+
+.skeleton__credit-score {
+  width: 12%;
+  height: 20px;
+  margin-left: auto;
+}
+
+.skeleton__credit-detail {
+  width: 12%;
+  margin-left: v.$spacing-sm;
+  background: v.$color-border;
+}
+
+// ---------------------------------------------------------------------------
+// 详情骨架（#64）—— 状态块 / 取件码块 / 两行信息 / 时间轴
+// ---------------------------------------------------------------------------
+// ⚠️ 形状对照订单详情页：首屏加载时布局不能跳，否则内容一到位整页重排。
+// 仍然只用中性 token，不染语义档 —— 此刻还不知道这笔订单是什么状态。
+.skeleton--detail {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-lg;
+  padding: v.$spacing-lg;
+}
+
+.skeleton__detail-status,
+.skeleton__detail-card {
+  display: flex;
+  flex-direction: column;
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+}
+
+.skeleton__detail-status {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.skeleton__detail-time {
+  width: 40%;
+  height: 12px;
+}
+
+.skeleton__detail-code-label {
+  width: 30%;
+  height: 12px;
+  margin: 0 auto;
+}
+
+.skeleton__detail-code-value {
+  width: 50%;
+  height: 32px;
+  margin: v.$spacing-md auto 0;
+}
+
+.skeleton__detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: v.$spacing-sm 0;
+}
+
+.skeleton__detail-row-label {
+  width: 30%;
+  height: 14px;
+}
+
+.skeleton__detail-row-time {
+  width: 30%;
+  height: 12px;
+}
+
+// ---------------------------------------------------------------------------
+// 首页进行中订单区 · 一张卡骨架（#67）
+// ---------------------------------------------------------------------------
+// 订单区自己已经有 16px 页面内边距，所以这里不再叠一层 `.skeleton` 的 12px；
+// 卡的形状与真实 `order-card` 对齐：一行标题 + 一行副行 + 状态标签位。
+.skeleton--card {
+  padding: 0;
+}
+
+// ---------------------------------------------------------------------------
+// 附近柜机页骨架（#72）—— 搜索行 + 三张站点卡
+// ---------------------------------------------------------------------------
+// ⚠️ 形状对照真实版式：顶部 36px 搜索行，其下三张卡（名称 / 状态位 / 两行信息 /
+// 四档余位格）。仍然只有中性 token，不染语义档。
+.skeleton--nearby {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-md;
+  padding: v.$spacing-lg;
+}
+
+.skeleton__nearby-search {
+  width: 100%;
+  height: 72rpx;
+  background: v.$color-border;
+  border-radius: v.$radius-control;
+}
+
+.skeleton__nearby-card {
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+  padding: v.$spacing-lg;
+}
+
+.skeleton__nearby-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+}
+
+.skeleton__nearby-name {
+  width: 52%;
+  height: 20px;
+}
+
+.skeleton__nearby-line {
+  width: 70%;
+  height: 12px;
+  margin-top: v.$spacing-sm;
+}
+
+.skeleton__nearby-line--short {
+  width: 46%;
+}
+
+.skeleton__nearby-cells {
+  display: flex;
+  gap: v.$spacing-sm;
+  margin-top: v.$spacing-md;
+  padding: v.$spacing-md;
+  background: v.$color-bg-page;
+  border-radius: v.$radius-chip;
+}
+
+.skeleton__nearby-cell {
+  flex: 1;
+  height: 28px;
+  background: v.$color-border;
+  border-radius: v.$radius-chip;
 }

@@ -1,10 +1,19 @@
-// **时间格式化** —— 7 种时间写法的唯一实现处。issue #23 的交付物之一。
+// **时间格式化** —— 全站每个时间写法的唯一实现处。issue #23 的交付物之一。
 //
 // ## 为什么需要一个模块，而不是各页面自己拼
 //
-// 这里有**7 种互不相同**的时间写法，而它们的消费者散在 5 个页面里。
+// 这里有**互不相同**的几种时间写法，而它们的消费者散在多个页面里。
 // 各页面自己拼的后果不是「不好看」，是**同一时刻在不同页面上写成两个样子** ——
 // 而用户会拿这个去对客服。本模块让每种写法只有一处实现，`pnpm test` 逐个钉住。
+//
+// ⚠️ 其中 `formatOrderTime()` 是**订单时间位的默认写法**（§14.3 的全站三档：
+// 今天 / 当年 / 跨年）；`formatFullTime()` 只给**回查用途**的位置（详情时间轴、
+// 支付记录、信用分明细、受限卡）。列表 / 卡片不许自造第三套写法。
+//
+// ⚠️ 预约创建页**没有时间写法**：它的开始 / 结束时刻由用户用原生 time picker 直接给出，
+// 页面只把 `HH:mm` 拼成契约要的无偏移本地 ISO（那是**请求口径**，不是展示口径）。
+// 早先的「30 分钟档位 / 1-2-4-8 小时时长档位」是**编出来的业务形态**（`13.12` 里没有），
+// 已按 spec §10「字段与校验严格按 13.12」删除 —— 所以那两个格式化函数也一并消失。
 //
 // ## 三条硬规则（本模块逐条落地）
 //
@@ -18,9 +27,13 @@
 //    没有 `formatNow()`，没有任何函数在缺参数时回落到 `new Date()`。
 //    一个「取当前时间并格式化」的函数在这里根本写不出来。
 //
-// 2. **格式受控，不提供自由拼装。** 本模块只导出 7 个具名函数，**不导出**通用的
+//    ⚠️ **唯一需要「现在」的是** `formatOrderTime()` 的「今天 / 当年」选择；
+//    它的 `now` 是**显式入参**（由调用方在渲染时传入），模块自己不读时钟 ——
+//    那条纪律因此仍然成立：模块内没有一处 `new Date()` 去猜当前时刻。
+//
+// 2. **格式受控，不提供自由拼装。** 本模块只导出少数据名函数，**不导出**通用的
 //    `format(date, pattern)`。一个 pattern 参数等于把整张时间写法表重新交给调用方，
-//    下一个人就会拼出第 8 种写法 —— 而那种写法没有任何依据。
+//    下一个人就会拼出一种没有依据的新写法。
 //
 // 3. **禁止项是机械的，不是靠自觉**：❌ 相对时间（「3 分钟前」）❌ 星期 ❌ 秒
 //    ❌ 任何倒计时 ❌ 任何分钟数。
@@ -45,10 +58,17 @@
 // ⚠️ **本模块是纯函数，不碰 `wx.*`** —— 所以 Vitest 里可以直接测（不需要任何桩）。
 // 这也是 `utils/` 的定位：纯函数（如 `resolveLockerCode`）。
 
+import {
+  NOT_YET_STORED_HINT,
+  PROFILE_COPY,
+  STORED_TIME_PREFIX,
+  TODAY_LABEL,
+} from '../startup/copy'
+
 /**
  * 服务端回显的时刻串 —— 形如 `2026-04-01T11:30:00+08:00`（**不是** `Date`）。
  *
- * 写成别名而不是到处 `string`：本模块 7 个函数的入参全都是它，
+ * 写成别名而不是到处 `string`：本模块多数函数的入参都是它，
  * 且下一个人一眼能看出「这里要的是服务端那个串」。
  */
 export type ServerInstant = string
@@ -94,35 +114,83 @@ function partsOf(
 }
 
 /**
- * **订单列表 · 终局行** —— `MM-DD HH:mm`（取件时刻），**不加前缀**。
+ * **订单列表 · 在途行** —— 全站时间写法 + 前缀「**存入**」。
  *
- * 契约：订单列表终局行 → `2026-04-01T11:30:00+08:00` → `04-01 11:30`。
+ * 契约：订单列表在途行 → `存入 今天 09:00` / `存入 04-01 09:00` / `存入 2025-04-01 09:00`。
  *
- * ⚠️ **不加「存入」前缀**是有意的：终局行的状态标签已经说明这是什么时刻，
- * 再加前缀等于把同一件事说两遍。
+ * ⚠️ **它就是 §14.3 的全站三档写法（`formatOrderTime`）+ 前缀** —— 不是第二种格式。
+ * 写成本函数而不是让调用方拼 `'存入 ' + formatOrderTime(...)`：那一句是
+ * `GLOSSARY.md` 的 canonical 术语（不许说「寄件 / 寄存」），加上「今天 / 当年 / 跨年」
+ * 的选择，两件事各写一遍就会在某一页分叉。
  *
- * @returns 解析不出时返回**空串** —— 列表副行留空，不编一个时刻出来
- */
-export function formatOrderTime(instant: ServerInstant): string {
-  const parts = partsOf(instant)
-  if (parts === null) return ''
-  return parts.monthDay
-}
-
-/**
- * **订单列表 · 在途行** —— `MM-DD HH:mm`，前缀「**存入**」。
- *
- * 契约：订单列表在途行 → `存入 04-01 09:00`。
- *
- * ⚠️ 前缀「存入」是 `GLOSSARY.md` 的 canonical 术语（不许说「寄件 / 寄存」）。
- * 它写在本模块里而不是各页面里，理由始终如一：**用户可见的每个字都只有一个家**。
+ * ⚠️ `now` 与 `formatOrderTime` 同一条纪律：**显式入参**，模块自己不读时钟。
  *
  * @returns 解析不出时返回空串（与 `formatOrderTime` 同一口径）
  */
-export function formatOrderTimeInProgress(instant: ServerInstant): string {
-  const time = formatOrderTime(instant)
+export function formatOrderTimeInProgress(instant: ServerInstant, now: Date): string {
+  const time = formatOrderTime(instant, now)
   if (time === '') return ''
-  return `存入 ${time}`
+  // 前缀只有 `copy.ts` 一个家（时间轴 `OPENED` 用的是同一个词）。
+  return `${STORED_TIME_PREFIX} ${time}`
+}
+
+/** 两位补零 —— 比较用的日期字面量固定宽度。 */
+function pad2(value: number): string {
+  return value < 10 ? `0${value}` : String(value)
+}
+
+/**
+ * 把「现在」收敛成**东八区**的日期字面量 —— **只用于「今天 / 当年 / 跨年」这一档选择**。
+ *
+ * ⚠️ 为什么固定 +08:00 而不是读设备本地时区：服务端回显的时刻串带 `+08:00`
+ * （已实测），「今天」是相对于服务端时间基准的相对说法。用设备本地时区判断
+ * 会让一个在东八区之外的用户看到「今天」标在一个不属于他今天的日期上 ——
+ * 那正是本模块文件头规则 1 要挡的「双源真相」。
+ *
+ * ⚠️ 本函数不读时钟：`now` 由调用方传入（页面 / 组件在渲染时提供），
+ * 所以模块仍然没有「自己取当前时间」的入口。
+ */
+function chinaDateOf(now: Date): { date: string; year: string } | null {
+  const time = now.getTime()
+  if (!Number.isFinite(time)) return null
+  // 先把绝对时刻拨到东八区，再用 UTC getter 读「东八区的年月日」——
+  // 这样结果与运行设备的时区设置无关。
+  const china = new Date(time + 8 * 60 * 60 * 1000)
+  const year = china.getUTCFullYear()
+  const month = china.getUTCMonth() + 1
+  const day = china.getUTCDate()
+  return { date: `${year}-${pad2(month)}-${pad2(day)}`, year: String(year) }
+}
+
+/**
+ * **全站时间写法（spec §14.3）** —— `今天 HH:mm` / `MM-DD HH:mm` / `YYYY-MM-DD HH:mm`。
+ *
+ * 契约（§14.3 / §2 / §6 / §7）：
+ *
+ *   • 当天 → 「今天 HH:mm」；当年 → `MM-DD HH:mm`；跨年 → `YYYY-MM-DD HH:mm`；
+ *   • 不使用相对时间。
+ *
+ * ⚠️ **它是订单时间位的默认写法**：首页进行中卡的存入时间、订单列表的行时间、
+ * 订单详情的「关键时间」都走它。只有**明确要求补全年份**的位置才用 `formatFullTime()`
+ * （详情时间轴 / 支付记录 / 信用分明细 / 受限卡 —— 那些是回查用途）。
+ * 两处分界写在这里，页面就不需要各自判断「今天 / 当年」。
+ *
+ * ⚠️ **不加「存入」前缀**：首页卡的格口行是 `cellNo · 存入时间`，前缀会让
+ * 同一行读成「S03 · 存入 今天 09:00」—— 状态标签已经说明这是什么时刻。
+ * 需要前缀的位置用 `formatOrderTimeInProgress()`。
+ *
+ * ⚠️ `now` 是**显式入参**，不是模块内部 `new Date()`：本模块仍然没有
+ * 「取当前时间」的入口（见文件头规则 1）。调用方在渲染时传入自己的时钟。
+ *
+ * @returns 解析不出 / `now` 非法时返回空串 —— 页面按「没有时刻」处理，不编一个值
+ */
+export function formatOrderTime(instant: ServerInstant, now: Date): string {
+  const parts = partsOf(instant)
+  const today = chinaDateOf(now)
+  if (parts === null || today === null) return ''
+  if (parts.date === today.date) return `${TODAY_LABEL} ${parts.time}`
+  if (parts.date.slice(0, 4) === today.year) return parts.monthDay
+  return parts.full
 }
 
 /**
@@ -138,7 +206,7 @@ export function formatOrderTimeInProgress(instant: ServerInstant): string {
  * **不代表**门没关）。「关好柜门才算存入」只说条件，不断言现状。
  */
 export function formatNotYetStored(): string {
-  return '关好柜门才算存入'
+  return NOT_YET_STORED_HINT
 }
 
 /**
@@ -192,76 +260,12 @@ export function formatReservationRange(start: ServerInstant, end: ServerInstant)
 }
 
 /**
- * **预约创建 · 开始档位** —— `HH:mm`，步长 30 分钟。
+ * **受限卡 · 时间行** —— 「自 `YYYY-MM-DD HH:mm` 起」。
  *
- * 契约：预约创建开始档位 → `14:00` / `14:30`。
+ * 契约（spec #57 §9）：「时间行『自 {createdAt} 起』（全站时间格式）」；
+ * 定稿示例「**自 2026-09-22 15:04 起**」。
  *
- * ⚠️ **只给时刻，不给日期。** 档位列表是「今天 / 明天」这类上下文里的一个选择器，
- * 日期由页面标题承担。在档位里带上日期会让每个选项长一倍、且放不下。
- *
- * ⚠️ **只渲染未来档位** —— 那是**筛选**，不是格式化。本函数不判断
- * 某个档位过没过期：那需要读当前时间，而读当前时间正是本模块要挡的事（见文件头规则 1）。
- * 筛选属页面（档位生成），且它用的是**设备当下的时刻去比服务端给的档位**，
- * 那是另一个口径，不该混进格式化层。
- *
- * @returns 解析不出时返回空串
- */
-export function formatSlotTime(instant: ServerInstant): string {
-  const parts = partsOf(instant)
-  if (parts === null) return ''
-  return parts.time
-}
-
-/**
- * **预约创建 · 时长档位** —— `1小时 / 2小时 / 4小时 / 8小时`（**不用 `1h`**）。
- *
- * 契约：档位取 1/2/4/8 小时，单位写作「小时」：
- *
- * > **预约创建 · 时长档位** | `1小时 / 2小时 / 4小时 / 8小时`（**不用 `1h`**）
- *
- * ## ⚠️ 为什么它属于「时间写法」这一层（而不是页面的一个字符串数组）
- *
- * 时长档位也是**时间写法**的一种 —— 它与「开始档位」是同一个选择器的两半
- * （用户回答「什么时候开始」+「要占多久」），而两半的**写法口径**
- * 都归这一层。若它落在页面里，预约创建页要自己挑单位 —— 而这条口径存在的
- * 全部意义就是**预先否掉 `1h` 这个写法**（档位表用的恰恰是 `1h`，
- * 所以这不是一个假想的错法：照档位表抄就会写错）。
- *
- * ## ⚠️ 入参是**小时数**，不是时刻 —— 这是本模块唯一的非时刻入参，有意为之
- *
- * 「时长档位」的取值在契约里是**数值**（`1h / 2h / 4h / 8h`），
- * 不是服务端回显的时刻。所以它不吃 `ServerInstant`。
- *
- * ⚠️ **它因此也不违反「不用客户端本地时钟重算」**（文件头规则 1）：时长是一个
- * 用户选出来的**量**，不是「现在是几点」。这里没有任何时钟参与。
- *
- * ⚠️ **档位值是页面持有的常量，不是服务端回显的** —— 这一点与
- * 硬规则 1（不得渲染未经服务端回显的值）**不冲突**：那条禁的是
- * 「配置阈值 / 剩余天数 / 扣分额」这类**服务端知道而客户端不该猜**的事实，
- * 而「档位有 1/2/4/8 小时四个选项」是已裁决的**产品形态**，
- * 用户看到的是他自己刚选的那个值，不是服务端的事实断言。
- * ⚠️ 真正不许出现的是 `maxHours`(24) 那类**配置数字**（C 端拿不到任何
- * 预约配置数字）—— 本函数不含任何上限判断，它只把传入的小时数写成中文。
- *
- * @returns 小时数不是正整数时返回**空串** —— 与别的格式化函数同一口径：
- *          解析不出来就不给值，页面按自己的方式处理空档位，
- *          ⛔ **不编一个 `0小时` 或 `1h` 出来**
- */
-export function formatDurationSlot(hours: number): string {
-  // ⚠️ 判据是「正整数」而不是「> 0」：`1.5` 会渲染成「1.5小时」，
-  // 而档位是整数小时 —— 一个小数说明调用方传错了东西，
-  // 那种错该当场可见（空串）而不是画成一个不存在的档位。
-  if (!Number.isInteger(hours) || hours <= 0) return ''
-  return `${hours}小时`
-}
-
-/**
- * **受限卡 · 时间行** —— 「限制开始于 `YYYY-MM-DD HH:mm`」。
- *
- * 契约：逐字示例「**限制开始于 2026-09-22 15:04**」
- * （「限制开始于 `createdAt`」）。
- *
- * ⚠️ 为什么单独一个函数而不是让页面拼 `'限制开始于 ' + formatFullTime(...)`：
+ * ⚠️ 为什么单独一个函数而不是让页面拼 `'自 ' + formatFullTime(...) + ' 起'`：
  * 那一句是**定稿逐字**，页面自己拼就是把它抄了一份 ——
  * 与 `startup/copy.ts` 存在的理由完全相同（用户可见的每个字只有一个家）。
  *
@@ -274,5 +278,7 @@ export function formatDurationSlot(hours: number): string {
 export function formatRestrictionSince(instant: ServerInstant): string {
   const time = formatFullTime(instant)
   if (time === '') return ''
-  return `限制开始于 ${time}`
+  // ⚠️ 句子本身归文案层（`PROFILE_COPY.restrictedSince`），本函数只负责把时刻填进去 ——
+  // 否则「自 … 起」会在 `copy.ts` 与这里各有一份。
+  return PROFILE_COPY.restrictedSince.replace('{time}', () => time)
 }

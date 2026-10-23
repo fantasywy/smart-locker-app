@@ -1,0 +1,161 @@
+{
+  "lucideVersion": "1.61.0",
+  "tones": {
+    "primary": "$color-primary-active",
+    "sub": "$color-text-sub",
+    "weak": "$color-text-weak",
+    "danger": "$color-danger-ink",
+    "white": "$color-bg-card",
+    "main": "$color-text-main"
+  },
+  "icons": {
+    "action.scan": {
+      "lucide": "scan-line"
+    },
+    "action.search": {
+      "lucide": "search"
+    },
+    "action.locate": {
+      "lucide": "locate-fixed"
+    },
+    "action.refresh": {
+      "lucide": "rotate-ccw"
+    },
+    "action.close": {
+      "lucide": "x"
+    },
+    "action.back": {
+      "lucide": "chevron-left"
+    },
+    "action.copy": {
+      "lucide": "copy"
+    },
+    "status.waiting": {
+      "lucide": "hourglass"
+    },
+    "status.pendingPayment": {
+      "lucide": "wallet"
+    },
+    "status.inProgress": {
+      "lucide": "timer"
+    },
+    "status.completed": {
+      "lucide": "circle-check"
+    },
+    "status.timeout": {
+      "lucide": "clock-alert"
+    },
+    "status.forcedEnd": {
+      "lucide": "circle-slash"
+    },
+    "status.refunded": {
+      "lucide": "undo-2"
+    },
+    "status.cancelled": {
+      "lucide": "circle-x"
+    },
+    "order.deposit": {
+      "lucide": "package-plus"
+    },
+    "order.pickup": {
+      "lucide": "package-check"
+    },
+    "order.amount": {
+      "lucide": "receipt"
+    },
+    "order.code": {
+      "lucide": "hash"
+    },
+    "order.pay": {
+      "lucide": "credit-card"
+    },
+    "order.paySuccess": {
+      "lucide": "badge-check"
+    },
+    "cell.package": {
+      "lucide": "package",
+      "sizes": [
+        20,
+        24,
+        28,
+        32
+      ]
+    },
+    "cell.selected": {
+      "lucide": "circle-check"
+    },
+    "nearby.station": {
+      "lucide": "map-pinned"
+    },
+    "nearby.navigate": {
+      "lucide": "navigation"
+    },
+    "nearby.distance": {
+      "lucide": "route"
+    },
+    "nearby.hours": {
+      "lucide": "clock"
+    },
+    "profile.avatar": {
+      "lucide": "user-round"
+    },
+    "profile.orders": {
+      "lucide": "receipt-text"
+    },
+    "profile.reservations": {
+      "lucide": "calendar-clock"
+    },
+    "profile.points": {
+      "lucide": "star"
+    },
+    "profile.billing": {
+      "lucide": "receipt"
+    },
+    "profile.faq": {
+      "lucide": "circle-help"
+    },
+    "profile.contact": {
+      "lucide": "headset"
+    },
+    "profile.settings": {
+      "lucide": "settings"
+    },
+    "profile.logout": {
+      "lucide": "log-out"
+    },
+    "nav.disclosure": {
+      "lucide": "chevron-right"
+    }
+  },
+  "tabbar": [
+    {
+      "pagePath": "pages/index/index",
+      "lucide": "house",
+      "normal": "weak",
+      "active": "main"
+    },
+    {
+      "pagePath": "pages/order-list/order-list",
+      "lucide": "receipt-text",
+      "normal": "weak",
+      "active": "main"
+    },
+    {
+      "pagePath": "pages/nearby/nearby",
+      "lucide": "map-pinned",
+      "normal": "weak",
+      "active": "main"
+    },
+    {
+      "pagePath": "pages/profile/profile",
+      "lucide": "user-round",
+      "normal": "weak",
+      "active": "main"
+    }
+  ],
+  "mapMarkers": {
+    "available": "$color-primary",
+    "full": "$color-warning",
+    "unavailable": "$color-info"
+  }
+}

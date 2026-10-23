@@ -1,0 +1,498 @@
+// 附近柜机页样式 —— 全部走设计 token，零裸 hex、零动效。
+//
+// 版式（spec §8）：顶部城市 + 搜索；未定位横幅；常驻列表（无地图 / 列表切换）。
+// 列表头 12px sub；站点卡间距 12px。城市选择器是底部弹层。
+//
+// ⚠️ 单位：布局几何用 rpx；字号 / 1px 边框 / 圆角用 px。
+// ⚠️ 不写 transition / animation / keyframes / opacity —— 按下反馈只换颜色。
+
+@use '../../styles/variables' as v;
+
+page {
+  min-height: 100vh;
+  // ⚠️ 显式设一次主文字色 —— 页面根节点不得依赖继承。
+  color: v.$color-text-main;
+  background: v.$color-bg-page;
+  font-family: v.$font-family;
+}
+
+.page {
+  padding: v.$spacing-lg v.$spacing-lg v.$spacing-xxxl;
+  box-sizing: border-box;
+}
+
+// ---------------------------------------------------------------------------
+// 搜索区
+// ---------------------------------------------------------------------------
+.nearby__search {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-sm;
+}
+
+.nearby__city {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-xs;
+  flex-shrink: 0;
+  height: 72rpx;
+  padding: 0 v.$spacing-md;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+  box-sizing: border-box;
+}
+
+.nearby__city-name {
+  max-width: 120rpx;
+  overflow: hidden;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  font-weight: v.$font-weight-medium;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nearby__city_active {
+  background: v.$color-bg-page;
+}
+
+.nearby__search-box {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-sm;
+  flex: 1;
+  min-width: 0;
+  height: 72rpx;
+  padding: 0 v.$spacing-md;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+  box-sizing: border-box;
+}
+
+.nearby__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+}
+
+.nearby__clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40rpx;
+  height: 40rpx;
+  flex-shrink: 0;
+}
+
+.nearby__search-action {
+  flex-shrink: 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-body;
+  font-weight: v.$font-weight-medium;
+  line-height: 1.5;
+}
+
+.nearby__search-action_active {
+  color: v.$color-primary-pressed;
+}
+
+.nearby__search-hint {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+// ---------------------------------------------------------------------------
+// 未定位横幅
+// ---------------------------------------------------------------------------
+.nearby__location {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+  margin-top: v.$spacing-md;
+  padding: v.$spacing-md;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+}
+
+.nearby__location-text {
+  min-width: 0;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.nearby__location-action {
+  flex-shrink: 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-body;
+  font-weight: v.$font-weight-medium;
+  line-height: 1.5;
+}
+
+.nearby__location-action_active {
+  color: v.$color-primary-pressed;
+}
+
+// ---------------------------------------------------------------------------
+// 地图带 —— 206px；失败时塌成 64px 提示行
+// ---------------------------------------------------------------------------
+.nearby__map-band {
+  position: relative;
+  // spec §8 的固定高度是 px 口径（与屏宽无关）；失败行 64px 同理。
+  height: 206px;
+  margin-top: v.$spacing-md;
+  overflow: hidden;
+  border-radius: v.$radius-card;
+  background: v.$color-bg-page;
+}
+
+.nearby__map-band.is-failed {
+  height: 64px;
+}
+
+.nearby__map {
+  width: 100%;
+  height: 100%;
+}
+
+.nearby__map-entry {
+  position: absolute;
+  right: v.$spacing-md;
+  bottom: v.$spacing-md;
+  width: 160rpx;
+  height: 56rpx;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-aux;
+  line-height: 56rpx;
+  text-align: center;
+  background: v.$color-bg-card;
+  border-radius: v.$radius-chip;
+}
+
+.nearby__map-fail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+  height: 64px;
+  padding: 0 v.$spacing-md;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-sizing: border-box;
+}
+
+.nearby__map-fail-text {
+  min-width: 0;
+}
+
+.nearby__map-fail-title {
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  font-weight: v.$font-weight-medium;
+  line-height: 1.5;
+}
+
+.nearby__map-fail-hint {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.nearby__map-fail-action {
+  flex-shrink: 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-body;
+  font-weight: v.$font-weight-medium;
+  line-height: 1.5;
+}
+
+.nearby__map-fail-action_active {
+  color: v.$color-primary-pressed;
+}
+
+// ---------------------------------------------------------------------------
+// 列表
+// ---------------------------------------------------------------------------
+.nearby__list {
+  margin-top: v.$spacing-md;
+}
+
+.nearby__list-header {
+  margin-bottom: v.$spacing-md;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.nearby__cards {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-md;
+}
+
+// 选中态是列表与地图共享的唯一状态；只加一圈主色描边，不改变卡片尺寸。
+.nearby__card {
+  border-radius: v.$radius-card;
+}
+
+.nearby__card.is-selected {
+  box-shadow: 0 0 0 2rpx v.$color-primary;
+}
+
+.nearby__citypick-hold {
+  padding-top: v.$spacing-xl;
+}
+
+// ---------------------------------------------------------------------------
+// 网络失败
+// ---------------------------------------------------------------------------
+.nearby__failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 120rpx v.$spacing-lg 0;
+  text-align: center;
+}
+
+.nearby__failed-title {
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  font-weight: v.$font-weight-semibold;
+  line-height: 1.5;
+}
+
+.nearby__failed-detail {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.6;
+}
+
+.nearby__failed-action {
+  width: 100%;
+  height: 96rpx;
+  margin: v.$spacing-xxl 0 0;
+  padding: 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-title;
+  line-height: 96rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.nearby__failed-action_active {
+  color: v.$color-primary-pressed;
+  background: v.$color-bg-page;
+}
+
+// ---------------------------------------------------------------------------
+// 「切换城市」文字按钮 —— 空态/搜索无结果的第二出口
+// ---------------------------------------------------------------------------
+.nearby__switch-city {
+  margin: v.$spacing-lg auto 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-body;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.nearby__switch-city_active {
+  color: v.$color-primary-pressed;
+}
+
+// ---------------------------------------------------------------------------
+// 城市选择器（底部弹层）
+// ---------------------------------------------------------------------------
+.nearby__overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-end;
+  background: v.$color-overlay;
+}
+
+.nearby__sheet {
+  width: 100%;
+  max-height: 70vh;
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+  border-radius: v.$radius-sheet v.$radius-sheet 0 0;
+  box-sizing: border-box;
+}
+
+.nearby__sheet-title {
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  font-weight: v.$font-weight-semibold;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.nearby__city-list {
+  max-height: 50vh;
+  margin-top: v.$spacing-md;
+}
+
+.nearby__city-option {
+  height: 96rpx;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  line-height: 96rpx;
+  text-align: center;
+  border-bottom: 1px solid v.$color-border;
+}
+
+.nearby__city-option.is-selected {
+  color: v.$color-primary-active;
+  font-weight: v.$font-weight-medium;
+}
+
+.nearby__sheet-cancel {
+  height: 96rpx;
+  margin-top: v.$spacing-md;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 96rpx;
+  text-align: center;
+  background: v.$color-bg-page;
+  border-radius: v.$radius-control;
+}
+
+.nearby__sheet-cancel_active {
+  color: v.$color-text-main;
+}
+
+// ---------------------------------------------------------------------------
+// 全屏地图 —— 同一页的次级状态；浮层内容全部在 cover-view 体系里
+// ---------------------------------------------------------------------------
+.nearby__fullscreen {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 30;
+}
+
+.nearby__fs-map {
+  width: 100%;
+  height: 100%;
+}
+
+.nearby__fs-exit {
+  position: absolute;
+  top: 88rpx;
+  left: v.$spacing-lg;
+  width: 120rpx;
+  height: 64rpx;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  line-height: 64rpx;
+  text-align: center;
+  background: v.$color-bg-card;
+  border-radius: v.$radius-control;
+}
+
+.nearby__fs-card {
+  position: absolute;
+  right: v.$spacing-lg;
+  bottom: v.$spacing-xxxl;
+  left: v.$spacing-lg;
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+  border-radius: v.$radius-card;
+}
+
+.nearby__fs-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+}
+
+.nearby__fs-name {
+  min-width: 0;
+  overflow: hidden;
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  font-weight: v.$font-weight-semibold;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nearby__fs-status {
+  flex-shrink: 0;
+  padding: 0 v.$spacing-sm;
+  font-size: v.$font-size-aux;
+  line-height: 1.67;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-chip;
+}
+
+.nearby__fs-status.is-ok {
+  color: v.$color-primary-active;
+  border-color: v.$color-primary;
+}
+
+.nearby__fs-status.is-warn {
+  color: v.$color-warning-ink;
+  border-color: v.$color-warning;
+}
+
+.nearby__fs-status.is-muted {
+  color: v.$color-text-sub;
+}
+
+.nearby__fs-distance {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  font-weight: v.$font-weight-medium;
+  line-height: 1.5;
+}
+
+.nearby__fs-address {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.nearby__fs-footer {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.nearby__fs-navigate {
+  width: 160rpx;
+  height: 56rpx;
+  margin-top: v.$spacing-md;
+  color: v.$color-bg-card;
+  font-size: v.$font-size-body;
+  line-height: 56rpx;
+  text-align: center;
+  background: v.$color-primary-active;
+  border-radius: v.$radius-chip;
+}

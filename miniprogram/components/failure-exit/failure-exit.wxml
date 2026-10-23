@@ -13,7 +13,11 @@
     <view class="failure-exit__detail">{{ detail }}</view>
   </view>
 
-  <button class="failure-exit__retry" bindtap="onRetry">{{ retryLabel }}</button>
+  <button
+    class="failure-exit__retry"
+    hover-class="failure-exit__retry_active"
+    bindtap="onRetry"
+  >{{ retryLabel }}</button>
 
   <!-- 静态出口三件套 —— 与「我的」页是同一份内容（「两条路一份内容」） -->
   <view class="failure-exit__statics">
@@ -24,7 +28,8 @@
 
         ⚠️ 「联系客服」必须走 open-type="contact" —— 微信原生承载，
            不做运行时可用性探测、不做电话双出口（未配客服时静默无反应，
-           登记为上线前置项）。其余两项是本地内容页，一期未实现，点击交回页面。
+           登记为上线前置项）。其余两项是本地内容页（#68 已实现）：
+           点击把 `data-exit-id` 交回页面，由页面 `navigateTo` 到对应页。
       -->
       <button
         wx:if="{{ item.id === contactExitId }}"

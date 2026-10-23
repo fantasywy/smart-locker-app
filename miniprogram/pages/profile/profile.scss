@@ -1,6 +1,11 @@
-// 我的页 —— 空壳样式（issue #22）。页面票整体替换本文件。
+// 「我的」页样式 —— 身份 / 受限 / 信用分 / 两组入口 / 昵称编辑弹层。
+//
+// ⚠️ 零裸 hex：颜色、圆角、阴影、字号全部走 `styles/_variables.scss`；
+//    间距走 token（px），布局几何走 rpx（字号与 1px 级细节用 px）。
+// ⚠️ 零动效：按下反馈只用 `hover-class` 瞬时换色，不用 transition / transform / opacity。
 
 @use '../../styles/variables' as v;
+@use '../../styles/mixins' as m;
 
 page {
   height: 100vh;
@@ -15,4 +20,283 @@ page {
 .page {
   flex: 1;
   overflow-y: auto;
+  padding: v.$spacing-lg;
+  box-sizing: border-box;
+}
+
+// ---------------------------------------------------------------------------
+// 块内失败 / 身份区
+// ---------------------------------------------------------------------------
+.profile__section {
+  margin-bottom: v.$spacing-lg;
+}
+
+.profile__block-error {
+  @include m.card;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.57;
+}
+
+.profile__identity {
+  @include m.card;
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+}
+
+.profile__identity_active {
+  background: v.$color-bg-page;
+}
+
+.profile__avatar {
+  // spec §9 逐字：64px 头像。它是**固定物理尺寸**，不随屏宽缩放，所以用 px。
+  width: 64px;
+  height: 64px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: v.$spacing-md;
+  background: v.$color-bg-page;
+  border: 1px solid v.$color-border;
+  border-radius: 50%;
+}
+
+.profile__identity-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile__nickname {
+  overflow: hidden;
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  font-weight: v.$font-weight-semibold;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile__edit-entry {
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin-left: v.$spacing-md;
+}
+
+.profile__edit-label {
+  margin-right: v.$spacing-xs;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+// ---------------------------------------------------------------------------
+// 受限提示 —— 只由 status === 2 驱动；左侧色条用 tone-card 的 danger 档。
+// 语义色只做色条 / 边框，文字一律走 ink。
+// ---------------------------------------------------------------------------
+.profile__restricted {
+  @include m.tone-card((danger,));
+  margin-bottom: v.$spacing-lg;
+}
+
+.profile__restricted-title {
+  color: v.$color-danger-ink;
+  font-size: v.$font-size-title;
+  font-weight: v.$font-weight-semibold;
+  line-height: 1.5;
+}
+
+.profile__restricted-body {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  line-height: 1.57;
+}
+
+.profile__restricted-meta {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+// 原生 `open-type="contact"` 按钮 —— 重置原生外观，只留一行可点的文字。
+.profile__contact {
+  display: block;
+  width: 100%;
+  margin-top: v.$spacing-md;
+  padding: 0;
+  background: transparent;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-body;
+  line-height: 1.57;
+  text-align: left;
+}
+
+.profile__contact::after {
+  border: none;
+}
+
+.profile__contact_active {
+  color: v.$color-primary-pressed;
+}
+
+// ---------------------------------------------------------------------------
+// 信用分卡
+// ---------------------------------------------------------------------------
+.profile__credit {
+  @include m.card;
+  display: flex;
+  align-items: center;
+}
+
+.profile__credit_active {
+  background: v.$color-bg-page;
+}
+
+.profile__credit-label {
+  flex: 1;
+  margin-left: v.$spacing-sm;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  line-height: 1.57;
+}
+
+.profile__credit-score {
+  color: v.$color-text-main;
+  font-size: v.$font-size-heading;
+  font-weight: v.$font-weight-semibold;
+  line-height: v.$line-height-heading;
+}
+
+.profile__credit-detail {
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin-left: v.$spacing-md;
+}
+
+.profile__credit-detail-label {
+  margin-right: v.$spacing-xs;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+// ---------------------------------------------------------------------------
+// 「我的服务」/「帮助与支持」两组入口
+// ---------------------------------------------------------------------------
+.profile__group {
+  margin-top: v.$spacing-xxl;
+}
+
+.profile__group-title {
+  margin: 0 v.$spacing-xs v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.profile__group-card {
+  @include m.card;
+  padding: 0;
+  overflow: hidden;
+}
+
+.profile__cell {
+  display: flex;
+  align-items: center;
+  min-height: 88rpx;
+  padding: 0 v.$spacing-lg;
+  background: v.$color-bg-card;
+}
+
+.profile__cell + .profile__cell {
+  border-top: 1px solid v.$color-border;
+}
+
+.profile__cell_active {
+  background: v.$color-bg-page;
+}
+
+.profile__cell-label {
+  flex: 1;
+  margin-left: v.$spacing-sm;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  line-height: 1.57;
+}
+
+// 「联系客服」是原生 button —— 重置它的默认外观，行为仍是 width:100% 的整行。
+.profile__cell--button {
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  font-size: v.$font-size-body;
+  line-height: 1.57;
+  text-align: left;
+}
+
+.profile__cell--button::after {
+  border: none;
+}
+
+// ---------------------------------------------------------------------------
+// 昵称编辑弹层
+// ---------------------------------------------------------------------------
+.profile__sheet {
+  padding: v.$spacing-xl v.$spacing-lg v.$spacing-xxxl;
+  background: v.$color-bg-card;
+}
+
+.profile__sheet-title {
+  color: v.$color-text-main;
+  font-size: v.$font-size-heading;
+  font-weight: v.$font-weight-semibold;
+  line-height: v.$line-height-heading;
+}
+
+.profile__field {
+  margin-top: v.$spacing-lg;
+}
+
+.profile__field-label {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.profile__input {
+  margin-top: v.$spacing-sm;
+  padding: v.$spacing-md;
+  background: v.$color-bg-page;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  line-height: 1.57;
+}
+
+.profile__field-error {
+  margin-top: v.$spacing-sm;
+  color: v.$color-danger-ink;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.profile__sheet-actions {
+  display: flex;
+  align-items: center;
+  margin-top: v.$spacing-xl;
+}
+
+.profile__sheet-cancel {
+  flex: 1;
+}
+
+.profile__sheet-save {
+  flex: 1;
+  margin-left: v.$spacing-md;
 }

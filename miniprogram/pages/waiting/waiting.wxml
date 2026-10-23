@@ -1,19 +1,101 @@
 <!--
-  waiting 页 —— **空壳**（issue #22 铺的骨架，页面本身归各自的功能票）。
+  等待关门页 —— 存取件两条主链在「按下开门之后、关门落定之前」的会合点。
 
-  ⚠️ 为什么先落空壳：`app.json` 的 `pages` 是**全局唯一**的注册表，
-     每张页面票各改一次它，必然并发冲突。
-     一次性把 10 个页面注册齐，页面票就只动自己那个目录。
+  ⚠️ **本文件没有一句用户可见字面量**：主陈述、停滞说明、手动核对、取消 /
+  重新开门弹窗、九种终局与金额词全部来自 `startup/copy.ts` 的 `WAITING_PAGE_COPY`，
+  页面 `data` 只做转手。`test/startup/conventions.test.ts` 的反推清单会扫描这里。
 
-  ⚠️ 标题来自 `startup/copy.ts` 的 `PAGE_TITLES`，**不在本文件里写字面量** ——
-     标题是用户可见的字，归文案层；
-     `test/startup/conventions.test.ts` 有一条守卫会判违规（它在本票第一版抓过一次）。
+  ⚠️ **唯一可以说出口的事实是「已发出开门指令」**。不渲染倒计时 / 分钟数 /
+  指令状态 / 进度条；非终局不渲染金额。`openTimeoutMinutes` 不在模板里出现。
 
-  ⚠️ 这个文件里**没有任何业务内容**，也**不假装**有：
-     不写「敬请期待」、不写占位数据、不写开发者台词。
-     它渲染的只有自绘导航栏（全端统一自绘）与一个空的页面容器。
-     承载它的页面票请**整体替换**本文件，而不是往上叠。
+  ⚠️ 导航栏 `back=false`：等待页常为栈深 1，返回＝退出小程序；出口是页面里的
+  「回订单列表」与终局的「重新扫码」，**没有任何自动跳转**。
 -->
-<navigation-bar title="{{ title }}" back="{{true}}" color="black" background="#FFF"></navigation-bar>
+<navigation-bar title="{{ title }}" back="{{false}}"></navigation-bar>
 
-<view class="page"></view>
+<view class="page">
+  <!-- ① 进行中（等待 / 核对 / 停滞 / 网络提示）—— 主陈述永远只有一句。 -->
+  <view
+    wx:if="{{ phase === 'waiting' || phase === 'checking' || phase === 'stalled' || phase === 'trouble' }}"
+    class="waiting"
+  >
+    <icon name="status.waiting" tone="primary" size="{{48}}" />
+    <view class="waiting__statement">{{ mainStatement }}</view>
+    <view wx:if="{{ nextStep }}" class="waiting__next">{{ nextStep }}</view>
+    <view wx:if="{{ showAutoUpdate }}" class="waiting__auto">{{ autoUpdate }}</view>
+    <view wx:if="{{ phase === 'stalled' }}" class="waiting__stalled">{{ stalledHint }}</view>
+    <view wx:if="{{ phase === 'trouble' }}" class="waiting__network">{{ networkHint }}</view>
+
+    <view class="waiting__actions">
+      <button
+        wx:if="{{ showManualCheck }}"
+        class="waiting__secondary"
+        hover-class="waiting__secondary_active"
+        disabled="{{ manualCheckDisabled }}"
+        bindtap="onManualCheck"
+      >{{ manualCheckLabel }}</button>
+
+      <view
+        wx:if="{{ showReopen }}"
+        class="waiting__reopen {{ reopenDisabled ? 'is-disabled' : '' }}"
+        hover-class="{{ reopenDisabled ? 'none' : 'waiting__reopen_active' }}"
+        aria-role="button"
+        aria-label="{{ reopenLabel }}"
+        bindtap="onReopen"
+      >{{ reopenLabel }}</view>
+
+      <button
+        wx:if="{{ showCancel }}"
+        class="waiting__secondary"
+        hover-class="waiting__secondary_active"
+        disabled="{{ cancelDisabled }}"
+        bindtap="onCancel"
+      >{{ cancelActionLabel }}</button>
+
+      <button
+        class="waiting__primary"
+        hover-class="waiting__primary_active"
+        bindtap="onBackToOrders"
+      >{{ backToOrdersLabel }}</button>
+    </view>
+  </view>
+
+  <!-- ② 终局 / 不存在 —— 九种落点共用同一块版式，只换文案与出口。 -->
+  <view wx:else class="terminal">
+    <icon wx:if="{{ terminalIcon }}" name="{{ terminalIcon }}" tone="primary" size="{{48}}" />
+    <view class="terminal__title">{{ terminalTitle }}</view>
+    <view wx:if="{{ terminalChip }}" class="terminal__chip is-warn">{{ terminalChip }}</view>
+
+    <!-- 取件码块：有值时常驻，字号与字距按 spec §4（28px / 600 / 4px）。 -->
+    <view wx:if="{{ showPickupCode }}" class="terminal__code">
+      <view class="terminal__code-label">{{ pickupCodeLabel }}</view>
+      <view class="terminal__code-value">{{ pickupCode }}</view>
+    </view>
+
+    <!-- 金额块：只有终局的实付 / 已付；非终局绝不出现。 -->
+    <view wx:if="{{ showAmount }}" class="terminal__amount">
+      <view class="terminal__amount-label">{{ amountLabel }}</view>
+      <view class="terminal__amount-value">{{ amountText }}</view>
+    </view>
+
+    <view wx:if="{{ terminalHint }}" class="terminal__hint">{{ terminalHint }}</view>
+
+    <view class="terminal__actions">
+      <button
+        wx:if="{{ showRescan }}"
+        class="terminal__secondary"
+        hover-class="terminal__secondary_active"
+        bindtap="onRescan"
+      >{{ rescanLabel }}</button>
+      <button
+        class="terminal__primary"
+        hover-class="terminal__primary_active"
+        bindtap="onBackToOrders"
+      >{{ backToOrdersLabel }}</button>
+    </view>
+  </view>
+
+  <!-- 反馈宿主：页面决定宿主在哪，页面本身不 import Vant 的 Toast / Dialog。 -->
+  <van-toast id="van-toast" />
+  <van-dialog id="van-dialog" />
+</view>

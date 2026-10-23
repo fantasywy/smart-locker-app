@@ -1,0 +1,58 @@
+<!--
+  附近站点卡 —— 只读站点目录（ticket #72 / spec #57 §8）。
+
+  ⚠️ 本文件没有一句用户可见字面量：状态 / 四档档名 / 柜机位置标签 / 导航 /
+     只读说明 / 距离单位全部来自 startup/copy.ts。
+  ⚠️ 卡内唯一动作是「导航」，且只发事件；不出现查看柜机 / 下单 / 预约。
+  ⚠️ 四档余位每行只有档名与数量，0 也渲染；不写尺寸。
+  ⚠️ 无坐标站点：模板按 showDistance / showNavigate 隐藏，站点本身仍在列表。
+-->
+<view class="station-card">
+  <view
+    class="station-card__surface"
+    hover-class="station-card__surface_active"
+    hover-start-time="0"
+    hover-stay-time="0"
+    catchtap="onSelect"
+  >
+    <view class="station-card__head">
+      <view class="station-card__name">{{ name }}</view>
+      <view class="station-card__status is-{{ statusTone }}">{{ statusLabel }}</view>
+    </view>
+
+    <view wx:if="{{ showDistance }}" class="station-card__distance">{{ distanceText }}</view>
+    <view wx:if="{{ showBusinessHours }}" class="station-card__hours">{{ businessHours }}</view>
+    <view wx:if="{{ showAddress }}" class="station-card__address">{{ address }}</view>
+
+    <view class="station-card__cells">
+      <view
+        wx:for="{{ cellRows }}"
+        wx:key="key"
+        class="station-card__cell"
+      >
+        <view class="station-card__cell-label">{{ item.label }}</view>
+        <view class="station-card__cell-count">{{ item.count }}</view>
+      </view>
+    </view>
+
+    <view wx:if="{{ showLockers }}" class="station-card__lockers">
+      <view class="station-card__lockers-label">{{ lockerPositionLabel }}</view>
+      <view
+        wx:for="{{ lockerPositions }}"
+        wx:key="*this"
+        class="station-card__locker"
+      >{{ item }}</view>
+      <view wx:if="{{ showLockerMore }}" class="station-card__locker-more">{{ lockerMoreText }}</view>
+    </view>
+
+    <view class="station-card__foot">
+      <view class="station-card__footer">{{ footer }}</view>
+      <button
+        wx:if="{{ showNavigate }}"
+        class="station-card__navigate"
+        hover-class="station-card__navigate_active"
+        catchtap="onNavigate"
+      >{{ navigateLabel }}</button>
+    </view>
+  </view>
+</view>

@@ -1,30 +1,144 @@
 <!--
-  首页 = 启动闸门的承载页（首页 = 订单列表；本票只交付闸门形态）。
+  首页 —— **一个主行动**：扫码存件。
 
-  ⚠️ 三条分支**互斥**，由闸门的 phase 一个变量驱动（失败出口由**启动态**驱动，
-     不下放到各页面的数据区）：
-       loading → 骨架屏（页面结构先出现，数据区等 token）
-       ready   → 业务数据区
-       failed  → 全局唯一失败出口（说明 + 重试 + 静态出口）
+  三条分支**互斥**，由闸门的 phase 一个变量驱动（失败出口由**启动态**驱动，
+  不下放到各页面的数据区）：
+    loading → 首页同构骨架（品牌块 / 圆按钮 / 一卡 / 入口条，纯图形无文字）
+    ready   → 品牌区 → 112px 圆形扫码按钮 → 进行中订单区 → 附近入口条
+    failed  → 全局唯一失败出口（说明 + 重试 + 静态出口）
+
+  ⚠️ **导航栏标题留空**（只留胶囊）：spec §2 的首页身份是「一个主行动」，
+     标题再写一个「首页」只会和品牌 wordmark 抢注意力。`PAGE_TITLES` 仍登记「首页」，
+     那是给文案守卫 / 分享等非渲染场景用的，不绑到这里的 `title`。
+
+  ⚠️ **本文件没有一句用户可见字面量**：品牌 wordmark / tagline、按钮文案与两条
+     扫码提示全部来自 `startup/copy.ts` 的 `HOME_PAGE_COPY`，页面 data 只是转手。
 -->
-<navigation-bar title="{{ title }}" back="{{false}}" color="black" background="#FFF"></navigation-bar>
+
+<navigation-bar back="{{false}}"></navigation-bar>
 
 <view class="page">
-  <!-- ① 骨架屏 —— 页面结构先出现。纯图形占位、无文字。 -->
-  <skeleton wx:if="{{ phase === 'loading' }}" />
+  <!--
+    ① 骨架屏 —— 页面结构先出现，登录链跑完前不渲染业务内容。
+       形状与首页同构：品牌块 / 圆按钮 / 一卡 / 入口条（组件里是 `variant="home"`）。
+       ⚠️ 纯图形占位、无文字，组件不接任何数据。
+  -->
+  <skeleton wx:if="{{ phase === 'loading' }}" variant="home" />
 
   <!--
-    ② 业务数据区 —— 登录完成后才渲染。
+    ② 首页 —— 品牌区 + 扫码主行动 + 进行中订单区 + 附近入口条。
 
-    ⚠️ 本票**不实现订单列表**（归 D3）。这里是显式的占位块，让「闸门通了」
-       在真机上可见、可 demo；订单列表落地时替换本块内容即可，闸门形状不变。
-    ⚠️ 数据不得来自本地缓存 —— 真实实现时这里只由 api/ 的请求填充。
-    ⚠️ 文案从 startup/copy.ts 来（它是**过渡期的债**，见那里的说明），
-       不在模板里写字面量 —— 用户可见的每个字都归文案层。
+    ⚠️ 订单卡只画「我在办的事」：站点名 / 状态 / 格口 / 存入时间 / 取件码；
+       不显示参考金额、实付或支付按钮（spec §2）。
+    ⚠️ **附近入口条在订单区之后**：它随 #72 与附近 tab 同一次发版露出（spec §1），
+       只指路、不带距离 / 余位等动态数据。
   -->
-  <view wx:elif="{{ phase === 'ready' }}" class="gate-passed">
-    <view class="gate-passed__title">{{ dataAreaTitle }}</view>
-    <view class="gate-passed__hint">{{ dataAreaHint }}</view>
+  <view wx:elif="{{ phase === 'ready' }}" class="home">
+    <!--
+      品牌区：40px 品牌绿圆角方块 + 白色 package 24px；右侧 wordmark + tagline。
+      右上角 120px、品牌绿 6% 的圆形装饰是**纯装饰**（aria-hidden），不承载信息。
+      ⚠️ 无问候语、无用户昵称 —— 品牌标记是占位，将来换 logo 只改这一处。
+    -->
+    <view class="home__brand">
+      <view class="home__brand-decor" aria-hidden="true"></view>
+      <view class="home__brand-mark">
+        <icon name="cell.package" tone="white" size="{{24}}" />
+      </view>
+      <view class="home__brand-copy">
+        <view class="home__brand-wordmark">{{ wordmark }}</view>
+        <view class="home__brand-tagline">{{ tagline }}</view>
+      </view>
+    </view>
+
+    <!--
+      扫码主按钮：112px 圆形 + 下方一行文字，**整块可点**（圆与文字是一个动作）。
+      按下反馈只换填充色（hover-class → $color-primary-pressed），
+      不缩放、不做透明度、不加时长（spec §12 动效白名单第 ③ 条）。
+    -->
+    <view
+      class="home__scan"
+      bindtap="onScan"
+      hover-class="home__scan_active"
+      hover-start-time="0"
+      hover-stay-time="0"
+      aria-role="button"
+      aria-label="{{ scanLabel }}"
+    >
+      <view class="home__scan-circle">
+        <icon name="action.scan" tone="white" size="{{44}}" />
+      </view>
+      <view class="home__scan-label">{{ scanLabel }}</view>
+    </view>
+
+    <!--
+      进行中订单区（#67）。
+
+      ⚠️ **N = 0 时整区（含标题）不渲染**：`showOrders` 由页面按过滤后的条数设置。
+      ⚠️ 首屏 / 重试失败是**页内块**，不是整页失败出口 —— 扫码主行动始终可用。
+      ⚠️ 卡片只用 `order-card` 的 `home` 变体：无金额、无支付按钮；取件码有值必显。
+      ⚠️ 「查看全部 N 个」只在 N > 2 时出现，点击切订单 tab。
+    -->
+    <view wx:if="{{ showOrders }}" class="home__orders">
+      <view wx:if="{{ showOrdersTitle }}" class="home__orders-head">
+        <view class="home__orders-title">{{ ordersTitle }}</view>
+        <view
+          wx:if="{{ showViewAll }}"
+          class="home__view-all"
+          bindtap="onViewAll"
+          hover-class="home__view-all_active"
+          hover-start-time="0"
+          hover-stay-time="0"
+          aria-role="button"
+        >
+          <text class="home__view-all-label">{{ viewAllLabel }}</text>
+          <icon name="nav.disclosure" tone="sub" size="{{16}}" />
+        </view>
+      </view>
+
+      <!-- 闸门 ready、订单未回：订单区一张卡骨架（纯图形，无文字）。 -->
+      <skeleton wx:if="{{ ordersPhase === 'loading' }}" variant="card" />
+
+      <view wx:elif="{{ ordersPhase === 'loadFailed' }}" class="home__orders-failed">
+        <view class="home__orders-failed-title">{{ ordersLoadFailedTitle }}</view>
+        <button
+          class="home__orders-failed-action"
+          hover-class="home__orders-failed-action_active"
+          hover-start-time="0"
+          hover-stay-time="0"
+          bindtap="onOrdersRetry"
+        >{{ ordersRetryLabel }}</button>
+      </view>
+
+      <view wx:else class="home__orders-cards">
+        <order-card
+          wx:for="{{ homeOrders }}"
+          wx:key="id"
+          order="{{ item }}"
+          variant="home"
+          bind:tap="onOrderTap"
+        />
+      </view>
+    </view>
+
+    <!--
+      附近入口条 —— 56px 白底行，只指路。
+      ⚠️ 无距离 / 无余位 / 无任何动态数据；点击 switchTab 到附近 tab。
+    -->
+    <view
+      class="home__nearby"
+      bindtap="onNearby"
+      hover-class="home__nearby_active"
+      hover-start-time="0"
+      hover-stay-time="0"
+      aria-role="button"
+      aria-label="{{ nearbyLabel }}"
+    >
+      <view class="home__nearby-mark">
+        <icon name="nearby.station" tone="primary" size="{{20}}" />
+      </view>
+      <view class="home__nearby-label">{{ nearbyLabel }}</view>
+      <icon name="nav.disclosure" tone="weak" size="{{16}}" />
+    </view>
   </view>
 
   <!--
@@ -32,4 +146,10 @@
        页面只负责把它 wx:if 出来，不在数据区里再写一份失败态。
   -->
   <failure-exit wx:else bind:retry="onRetry" bind:staticexit="onStaticExit" />
+
+  <!--
+    轻提示宿主 —— `utils/feedback.ts` 的 Vant Toast 需要页面里的 `#van-toast`。
+    ⚠️ 页面不 import Vant 的 Toast 模块；宿主放在这里只是「页面决定宿主在哪」这一半。
+  -->
+  <van-toast id="van-toast" />
 </view>

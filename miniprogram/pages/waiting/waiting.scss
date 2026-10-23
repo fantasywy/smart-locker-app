@@ -1,6 +1,15 @@
-// 等待关门页 —— 空壳样式（issue #22）。页面票整体替换本文件。
+// 等待关门页样式 —— 全部走设计 token 与 mixin，零裸 hex。
+//
+// 版式（spec §4）：`hourglass` 48px 品牌绿图标 → 主陈述 24px / 600 / hero 行高 →
+// 下一步 16px / main → 说明 14px / sub；终局取件码 28px / 600 / 字距 4px；
+// 次级按钮 48px 高、文字 `$color-primary-active`。
+//
+// ⚠️ 单位：布局几何用 rpx；字号 / 1px 边框 / 圆角用 px。
+// ⚠️ 不写 transition / animation / @keyframes / opacity —— 按下反馈只换背景色，
+//    且由 `hover-class` 瞬时完成（spec §12 动效白名单之外一律不做）。
 
 @use '../../styles/variables' as v;
+@use '../../styles/mixins' as m;
 
 page {
   height: 100vh;
@@ -15,4 +24,258 @@ page {
 .page {
   flex: 1;
   overflow-y: auto;
+  padding: v.$spacing-xxl v.$spacing-lg v.$spacing-xxxl;
+}
+
+// ---------------------------------------------------------------------------
+// 进行中：图标 → 主陈述 → 下一步 → 说明 → 动作
+// ---------------------------------------------------------------------------
+.waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 96rpx v.$spacing-lg 0;
+  text-align: center;
+}
+
+.waiting__statement {
+  margin-top: v.$spacing-xl;
+  color: v.$color-text-main;
+  font-size: v.$font-size-hero;
+  line-height: v.$line-height-hero;
+  font-weight: v.$font-weight-semibold;
+}
+
+.waiting__next {
+  margin-top: v.$spacing-lg;
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  line-height: 1.5;
+}
+
+.waiting__auto {
+  margin-top: v.$spacing-md;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.6;
+}
+
+.waiting__stalled,
+.waiting__network {
+  margin-top: v.$spacing-lg;
+  padding: v.$spacing-md v.$spacing-lg;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.6;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+}
+
+.waiting__network {
+  color: v.$color-warning-ink;
+}
+
+.waiting__actions {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-md;
+  width: 100%;
+  margin-top: v.$spacing-xxxl;
+}
+
+// 次级按钮 48px 高、文字主绿 —— spec §4 的固定尺子。
+.waiting__secondary {
+  width: 100%;
+  height: 96rpx;
+  margin: 0;
+  padding: 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-title;
+  line-height: 96rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.waiting__secondary[disabled] {
+  color: v.$color-text-weak;
+  background: v.$color-bg-page;
+}
+
+.waiting__secondary_active {
+  color: v.$color-primary-pressed;
+  background: v.$color-bg-page;
+}
+
+.waiting__primary {
+  width: 100%;
+  height: 96rpx;
+  margin: 0;
+  padding: 0;
+  color: v.$color-bg-card;
+  font-size: v.$font-size-title;
+  line-height: 96rpx;
+  background: v.$color-primary-active;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.waiting__primary_active {
+  background: v.$color-primary-pressed;
+}
+
+.waiting__reopen {
+  padding: v.$spacing-sm 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-body;
+  line-height: 1.5;
+}
+
+.waiting__reopen_active {
+  color: v.$color-primary-pressed;
+}
+
+.waiting__reopen.is-disabled {
+  color: v.$color-text-weak;
+}
+
+// ---------------------------------------------------------------------------
+// 终局：图标 → 标题 → 状态 chip → 取件码 / 金额 → 说明 → 出口
+// ---------------------------------------------------------------------------
+.terminal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 96rpx v.$spacing-lg 0;
+  text-align: center;
+  color: v.$color-text-main;
+}
+
+.terminal__title {
+  margin-top: v.$spacing-xl;
+  color: v.$color-text-main;
+  font-size: v.$font-size-hero;
+  line-height: v.$line-height-hero;
+  font-weight: v.$font-weight-semibold;
+}
+
+.terminal__chip {
+  margin-top: v.$spacing-md;
+  @include m.tone-chip((warn,));
+}
+
+.terminal__code {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-top: v.$spacing-xxl;
+  padding: v.$spacing-xl v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+}
+
+.terminal__code-label {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.5;
+}
+
+.terminal__code-value {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-main;
+  // 取件码专用大号数字：28px / 600 / 字距 4px（spec §4）。
+  font-size: v.$font-size-display;
+  line-height: v.$line-height-display;
+  font-weight: v.$font-weight-semibold;
+  letter-spacing: 4px;
+}
+
+.terminal__amount {
+  margin-top: v.$spacing-xxl;
+  padding: v.$spacing-lg v.$spacing-xl;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+}
+
+.terminal__amount-label {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.5;
+}
+
+.terminal__amount-value {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-main;
+  font-size: v.$font-size-hero;
+  line-height: v.$line-height-hero;
+  font-weight: v.$font-weight-semibold;
+}
+
+.terminal__hint {
+  margin-top: v.$spacing-lg;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.6;
+}
+
+.terminal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-md;
+  width: 100%;
+  margin-top: v.$spacing-xxxl;
+}
+
+.terminal__primary {
+  width: 100%;
+  height: 96rpx;
+  margin: 0;
+  padding: 0;
+  color: v.$color-bg-card;
+  font-size: v.$font-size-title;
+  line-height: 96rpx;
+  background: v.$color-primary-active;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.terminal__primary_active {
+  background: v.$color-primary-pressed;
+}
+
+.terminal__secondary {
+  width: 100%;
+  height: 96rpx;
+  margin: 0;
+  padding: 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-title;
+  line-height: 96rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.terminal__secondary_active {
+  color: v.$color-primary-pressed;
+  background: v.$color-bg-page;
 }
