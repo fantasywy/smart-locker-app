@@ -1,0 +1,124 @@
+// 支付取件确认层样式 —— 全部走设计 token 与 mixin，零裸 hex。
+//
+// ⚠️ 单位：布局几何用 rpx；字号 / 1px 边框 / 圆角用 px。
+// ⚠️ 不写 transition / animation / @keyframes / opacity —— 弹层的出现与消失由
+//    Vant popup 的内建过渡承担（动效白名单第 ① 条），本文件不新增动效。
+// ⚠️ 按下反馈只用 `hover-class` 换背景色，不做缩放 / 透明度。
+
+@use '../../styles/variables' as v;
+
+.pickup-sheet {
+  box-sizing: border-box;
+  padding: v.$spacing-xxl v.$spacing-xl;
+  // 组件根节点显式设一次主文字色 —— 不依赖继承。
+  color: v.$color-text-main;
+  background: v.$color-bg-card;
+  border-radius: v.$radius-sheet v.$radius-sheet 0 0;
+}
+
+.pickup-sheet__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.pickup-sheet__location {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.pickup-sheet__amount-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: v.$spacing-lg;
+  font-size: v.$font-size-body;
+}
+
+.pickup-sheet__amount-label {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+}
+
+.pickup-sheet__amount-value {
+  color: v.$color-text-main;
+  font-size: v.$font-size-heading;
+  line-height: v.$line-height-heading;
+  font-weight: v.$font-weight-semibold;
+}
+
+.pickup-sheet__note {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.6;
+}
+
+.pickup-sheet__failure {
+  margin-top: v.$spacing-md;
+  padding: v.$spacing-sm v.$spacing-md;
+  color: v.$color-danger-ink;
+  font-size: v.$font-size-aux;
+  line-height: 1.6;
+  // 白底（与弹层同底）+ 边框：danger-ink 压白底 4.53 过 AA，压页面浅灰会掉到 4.2。
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+}
+
+.pickup-sheet__action {
+  width: 100%;
+  height: 96rpx;
+  margin: v.$spacing-xl 0 0;
+  padding: 0;
+  color: v.$color-bg-card;
+  font-size: v.$font-size-title;
+  line-height: 96rpx;
+  background: v.$color-primary-active;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.pickup-sheet__action_active {
+  background: v.$color-primary-pressed;
+}
+
+.pickup-sheet__action[disabled] {
+  background: v.$color-text-weak;
+}
+
+.pickup-sheet__success-title {
+  margin-top: v.$spacing-xl;
+  color: v.$color-text-main;
+  font-size: v.$font-size-heading;
+  line-height: v.$line-height-heading;
+  font-weight: v.$font-weight-semibold;
+  text-align: center;
+}
+
+.pickup-sheet__success-amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: v.$spacing-sm;
+  margin-top: v.$spacing-md;
+}
+
+.pickup-sheet__success-hint {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.pickup-sheet__reconciling {
+  margin-top: v.$spacing-xl;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.6;
+  text-align: center;
+}
