@@ -291,3 +291,75 @@ export interface PayOrderResponse {
   /** 是否已生成开门指令 —— **等待页零引用**。 */
   openCommandIssued: boolean
 }
+
+/**
+ * `13.8` 我的订单列表的**一行**。
+ *
+ * 契约：API设计文档.md §13.8 (:1151-1178)
+ *
+ * ```json
+ * { "id": 2001, "orderNo": "20250401001", "lockerId": 11, "lockerNo": "WD-01",
+ *   "siteName": "万达广场店", "cellNo": "S03", "cellType": 2,
+ *   "startAt": "2025-04-01T09:00:00+08:00", "endAt": null,
+ *   "status": 2, "payAmount": null, "estimatedAmount": 1800, "pickupCode": "385214" }
+ * ```
+ *
+ * ⚠️ 这是**列表自己的行**，不是 `13.9` 的嵌套详情：它有 `lockerNo` / `siteName` /
+ * `cellNo`（详情在 `locker` 块里），没有费用明细 / 时间轴 / 支付记录。
+ * 订单列表卡与首页卡都用它；`pickup-sheet` 的 `PickupOrder` 也直接由它满足。
+ *
+ * ⚠️ `orderNo` 如实保留（形状归类型层），但**任何界面都不得上屏**（spec §14.5）。
+ */
+export interface OrderSummary {
+  id: number
+  orderNo: string
+  lockerId: number
+  lockerNo: string
+  siteName: string
+  /** 具体格口号 —— 只作行内定位辅助，不给它中文名（spec §14.6）。 */
+  cellNo: string
+  cellType: CellType
+  /** 存入时刻 —— 关门落定后才有值；为空表示还没存入。 */
+  startAt: string | null
+  /** 结束时刻 —— 取件关门 / 强制结束 / 退款后才有值。 */
+  endAt: string | null
+  status: OrderStatus
+  /** 累计实收（分）；未支付为 `null`。 */
+  payAmount: number | null
+  /** 未结算订单的当前时长预估（分）；已结算为 `null`。 */
+  estimatedAmount: number | null
+  /** 6 位取件码 —— 只在已存入未取件时返回。 */
+  pickupCode: string | null
+}
+
+/**
+ * `13.8` 响应 `data` 的原始形状 —— `list` 是服务端的字段名。
+ *
+ * ⚠️ **`list` → `records` 的映射只在 `api/orders.ts` 做一次**（`PageOf` 的统一形状）。
+ * 页面只认 `PageOf`，不认服务端的 `list`；否则每个列表页都要各写一遍映射。
+ */
+export interface OrderListResponse {
+  list: OrderSummary[]
+  total: number
+}
+
+/**
+ * `order-card` 需要的订单视图 —— **首页卡与订单列表卡共用的唯一入参**。
+ *
+ * ⚠️ 它是 `OrderSummary` 的**子集**，刻意不含 `orderNo` / `lockerId` / `cellType`：
+ * 卡片全程不展示订单号（spec §14.5），少搬一个字段就少一条上屏的路。
+ * 页面把 `13.8` 的行映射成这个形状再交给组件；组件不认服务端的完整行。
+ */
+export type OrderCardOrder = Pick<
+  OrderSummary,
+  | 'id'
+  | 'status'
+  | 'startAt'
+  | 'endAt'
+  | 'payAmount'
+  | 'estimatedAmount'
+  | 'pickupCode'
+  | 'siteName'
+  | 'lockerNo'
+  | 'cellNo'
+>

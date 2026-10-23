@@ -1,0 +1,96 @@
+<!--
+  订单列表 —— 进行中在上、已结束在下（spec §6）。
+
+  ⚠️ **本文件没有一句用户可见字面量**：标题 / 组标题 / 空态 / 失败与加载更多文案
+  全部来自 `startup/copy.ts`，页面 `data` 只做转手。
+
+  ⚠️ **五种状态互不混淆**：
+    loading → 列表骨架（无文字）；
+    loadFailed → 页内「订单加载失败 / 重试」，tabBar 仍可用；
+    ready + isEmpty → `EMPTY_STATES.orders`（主行动 = 扫码存件）；
+    ready + 列表 → 两组卡片（组标题只在组非空时出现）；
+    ready + 加载更多失败 → 列表底部「加载失败，点击重试」。
+
+  ⚠️ **不放常驻扫码入口**：空态自带主行动，非空时用户回首页 tab。
+  ⚠️ 卡片只声明 active / history 两个变体；主行动的事件由页面接线，
+     本页不画支付界面（已存入 / 已超时打开共享 `pickup-sheet`）。
+-->
+<navigation-bar title="{{ title }}" back="{{false}}"></navigation-bar>
+
+<view class="page">
+  <skeleton wx:if="{{ phase === 'loading' }}" variant="list" />
+
+  <view wx:elif="{{ phase === 'loadFailed' }}" class="order-list__retry">
+    <view class="order-list__retry-detail">{{ loadFailedTitle }}</view>
+    <button
+      class="order-list__retry-action"
+      hover-class="order-list__retry-action_active"
+      bindtap="onRetry"
+    >{{ retryLabel }}</button>
+  </view>
+
+  <block wx:else>
+    <empty-state
+      wx:if="{{ isEmpty }}"
+      title="{{ emptyTitle }}"
+      hint="{{ emptyHint }}"
+      action-label="{{ emptyActionLabel }}"
+      bind:action="onEmptyAction"
+    />
+
+    <block wx:else>
+      <view wx:if="{{ showActiveGroup }}" class="order-list__group">
+        <view class="order-list__group-title">{{ activeGroupTitle }}</view>
+        <view class="order-list__cards">
+          <order-card
+            wx:for="{{ activeOrders }}"
+            wx:key="id"
+            order="{{ item }}"
+            variant="active"
+            bind:tap="onCardTap"
+            bind:action="onCardAction"
+          />
+        </view>
+      </view>
+
+      <view wx:if="{{ showHistoryGroup }}" class="order-list__group">
+        <view class="order-list__group-title">{{ historyGroupTitle }}</view>
+        <view class="order-list__cards">
+          <order-card
+            wx:for="{{ historyOrders }}"
+            wx:key="id"
+            order="{{ item }}"
+            variant="history"
+            bind:tap="onCardTap"
+            bind:action="onCardAction"
+          />
+        </view>
+      </view>
+
+    </block>
+
+    <!-- 列表底部的两个入口：进行中还有更多 / 加载更多失败后重试。 -->
+    <button
+      wx:if="{{ showMoreActive }}"
+      class="order-list__more"
+      hover-class="order-list__more_active"
+      bindtap="onMoreActive"
+    >{{ moreActiveLabel }}</button>
+
+    <button
+      wx:if="{{ showLoadMoreFailed }}"
+      class="order-list__more order-list__more--failed"
+      hover-class="order-list__more_active"
+      bindtap="onLoadMoreRetry"
+    >{{ loadMoreFailedLabel }}</button>
+  </block>
+
+  <van-toast id="van-toast" />
+</view>
+
+<pickup-sheet
+  order="{{ pickupOrder }}"
+  bind:success="onPickupSuccess"
+  bind:dismiss="onPickupDismiss"
+  bind:refresh="onPickupRefresh"
+/>

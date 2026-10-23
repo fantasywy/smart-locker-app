@@ -18,9 +18,13 @@ import type {
   CreateOrderRequest,
   CreateOrderResponse,
   OrderDetailResponse,
+  OrderListResponse,
+  OrderStatus,
+  OrderSummary,
   PayOrderResponse,
 } from '../types/orders'
 import type { RequestResult } from '../request/types'
+import type { PageOf } from '../utils/pagination'
 import { API_PREFIX } from '../request/config'
 import { request } from '../request/index'
 
@@ -114,4 +118,42 @@ export function payOrder(orderId: number): Promise<RequestResult<PayOrderRespons
   return request<PayOrderResponse>(`${orderPath(orderId)}/pay`, {
     method: 'POST',
   })
+}
+
+/**
+ * `13.8` 我的订单列表的查询参数 —— 只列契约里有的三个。
+ *
+ * ⚠️ 订单列表的两条流各有固定用法：
+ *   • 进行中：`{ status: 2, pageSize: 20 }` 与 `{ status: 4, pageSize: 20 }`；
+ *   • 历史：`{ pageSize: 10, page: N }`（**不带 status**）。
+ * 调用方只传这三个字段，不在这里拼业务分支。
+ */
+export interface OrderListQuery {
+  status?: OrderStatus
+  pageSize?: number
+  page?: number
+}
+
+/**
+ * `13.8` 我的订单列表 —— `GET /api/app/v1/orders`。
+ *
+ * 服务端返回 `{ list, total }`，而全站列表推进工具统一吃 `PageOf.records`。
+ * ⚠️ **`list` → `records` 的映射只在这里做一次**（repo-map §7 的裁决）：
+ * 让每个页面各映射一遍，就是同一形状在两个地方各有一个家。
+ *
+ * ⚠️ `total` 如实带回给调用方，但**页面不得把它当用户可见数量**
+ * （spec §6 的硬约束；首页「查看全部 N 个」按过滤后条数计，不走这个字段）。
+ */
+export async function getOrders(
+  query: OrderListQuery = {},
+): Promise<RequestResult<PageOf<OrderSummary>>> {
+  const params: string[] = []
+  if (query.status !== undefined) params.push(`status=${query.status}`)
+  if (query.pageSize !== undefined) params.push(`pageSize=${query.pageSize}`)
+  if (query.page !== undefined) params.push(`page=${query.page}`)
+  const suffix = params.length === 0 ? '' : `?${params.join('&')}`
+
+  const result = await request<OrderListResponse>(`${CREATE_ORDER_PATH}${suffix}`)
+  if (!result.ok) return result
+  return { ok: true, data: { records: result.data.list, total: result.data.total } }
 }

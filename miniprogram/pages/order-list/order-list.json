@@ -1,0 +1,11 @@
+{
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "navigation-bar": "/components/navigation-bar/navigation-bar",
+    "skeleton": "/components/skeleton/skeleton",
+    "empty-state": "/components/empty-state/empty-state",
+    "order-card": "/components/order-card/order-card",
+    "pickup-sheet": "/components/pickup-sheet/pickup-sheet",
+    "van-toast": "@vant/weapp/toast/index"
+  }
+}

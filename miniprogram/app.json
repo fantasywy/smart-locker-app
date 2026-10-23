@@ -1,6 +1,7 @@
 {
   "pages": [
     "pages/index/index",
+    "pages/order-list/order-list",
     "pages/profile/profile",
     "pages/locker/locker",
     "pages/order-detail/order-detail",
@@ -23,11 +24,21 @@
     "list": [
       {
         "pagePath": "pages/index/index",
-        "text": "订单"
+        "text": "首页",
+        "iconPath": "assets/tabbar/index.png",
+        "selectedIconPath": "assets/tabbar/index-active.png"
+      },
+      {
+        "pagePath": "pages/order-list/order-list",
+        "text": "订单",
+        "iconPath": "assets/tabbar/order-list.png",
+        "selectedIconPath": "assets/tabbar/order-list-active.png"
       },
       {
         "pagePath": "pages/profile/profile",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "assets/tabbar/profile.png",
+        "selectedIconPath": "assets/tabbar/profile-active.png"
       }
     ]
   },

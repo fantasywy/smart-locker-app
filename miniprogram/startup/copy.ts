@@ -333,6 +333,7 @@ export type EmptyStateCopy = (typeof EMPTY_STATES)[keyof typeof EMPTY_STATES]
  * ⚠️ 本表的取值**多数尚未定稿** —— 它们随各页面票一起收敛：
  *   • `pages/index/index` → 「首页」（逐字；#61 起首页不再承载订单列表，
  *     导航栏本身标题留空，见 spec §2）
+ *   • `pages/order-list/order-list` → 「订单」（逐字；#66 起订单有独立 tab）
  *   • `pages/profile/profile` → 「我的」（tabBar 逐字）
  *   • `pages/billing-info/billing-info` / `pages/faq/faq` → 复用 `STATIC_EXITS` 的措辞（同一份内容）
  *   • 其余为**页面清单里的归属名**，属过渡措辞 —— 页面票拿到定稿后，改这里一处即可。
@@ -340,6 +341,7 @@ export type EmptyStateCopy = (typeof EMPTY_STATES)[keyof typeof EMPTY_STATES]
  */
 export const PAGE_TITLES = {
   'pages/index/index': '首页',
+  'pages/order-list/order-list': '订单',
   'pages/profile/profile': '我的',
   'pages/locker/locker': '储物柜',
   'pages/order-detail/order-detail': '订单详情',
@@ -355,20 +357,21 @@ export const PAGE_TITLES = {
 export type PagePath = keyof typeof PAGE_TITLES
 
 /**
- * 订单列表（= 首页）的页面路径 —— **`wx.switchTab` 的目标**。
+ * 订单列表的页面路径 —— **`wx.switchTab` 的目标**。
  *
- * 设计要求：柜机页顶部固定一个「我的订单」出口，**走 `wx.switchTab` 到订单 tab**。
+ * 设计要求：订单有独立 tab（首页 / 订单 / 我的），柜机页顶部的「我的订单」出口
+ * 与等待页 / 详情的回列表出口都**走 `wx.switchTab` 到这个 tab**。
  * 而柜机页是**冷启动、栈深 1 的非 tab 页**（通道 A：系统返回 = 直接退回微信、
  * 底部 tabBar 不显示）⇒ 这是屏幕上**唯一**通往订单列表的可见路径。
  *
- * ⚠️ **为什么不就地在 `navigation-bar` 里写 `'/pages/index/index'` 字面量**：
+ * ⚠️ **为什么不就地在 `navigation-bar` 里写 `'/pages/order-list/order-list'` 字面量**：
  * `wx.switchTab` 的 url **必须**是 `app.json` 的 `tabBar.list[].pagePath` 之一，
  * 差一个字符就是**静默失败**（不跳转、不报错、按钮继续点不动 —— 与它要修的那个死按钮
  * 是同一个症状）。那个路径在 `app.json`（原生配置，引不到 TS）、`PAGE_TITLES` 的键
  * 与调用点三处各有一份。集中到这里，`test/startup/conventions.test.ts` 有一条守卫
  * 读 `app.json` 断言本常量**确实是 tabBar 的一项** —— 那次比对是唯一的兜底。
  */
-export const ORDER_LIST_PATH: PagePath = 'pages/index/index'
+export const ORDER_LIST_PATH: PagePath = 'pages/order-list/order-list'
 
 /**
  * **订单状态标签** —— 订单列表与订单详情共用的一张表（spec §6「状态标签」）。
@@ -1042,4 +1045,37 @@ export const PICKUP_SHEET_COPY = {
 
   /** 网络核对后确认没有支付 —— 逐字；停留，可重试。 */
   noPayment: '没有查询到支付结果，请重试',
+} as const
+
+/**
+ * **订单列表页**的全部用户可见文案 —— spec #57 §6。
+ *
+ * ⚠️ 这里只有**列表页独有**的字：状态标签在 `ORDER_STATUS_LABELS`，金额词在
+ * `ORDER_COPY`，取件码标签与主行动词在 `ORDER_COPY` / `PICKUP_SHEET_COPY`。
+ * 本表引用 / 转手它们，不另写一份。
+ *
+ * ⚠️ **两条流都不显示条数**：`total` 不是用户可见数量（spec §6）。
+ * 所以这里没有「共 N 单」「N 个进行中」一类的模板。
+ */
+export const ORDER_LIST_COPY = {
+  /** 进行中分组标题 —— 逐字。 */
+  activeGroup: '进行中',
+  /** 已结束分组标题 —— 逐字。 */
+  historyGroup: '已结束',
+
+  /**
+   * 进行中流还有下一页时的底部入口 —— 逐字。
+   *
+   * ⚠️ 它只说「还有更多」，不带数量：`total` 不进入任何用户可见数量。
+   */
+  moreActive: '还有更多进行中订单',
+
+  /** 首屏失败标题 —— 逐字（页内重试块，不是整页失败出口）。 */
+  loadFailed: '订单加载失败',
+  /** 首屏失败的重试按钮 —— 与全局失败出口同一个词。 */
+  retry: RETRY_LABEL,
+  /** 加载更多失败 —— 逐字；点击重试，已加载项保留。 */
+  loadMoreFailed: '加载失败，点击重试',
+  /** 下拉刷新失败轻提示 —— 与页内失败同一句。 */
+  refreshFailed: LOAD_FAILED_DETAIL,
 } as const

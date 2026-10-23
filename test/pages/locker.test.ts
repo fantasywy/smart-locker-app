@@ -24,7 +24,12 @@ import { installWxStub, jsonResponse, reply } from '../helpers/wx'
 import { respondInOrder, requestsTo, sentRequests } from '../helpers/http'
 import { deferred } from '../helpers/timers'
 import { BASE_URL } from '../../miniprogram/request/config'
-import { LOCKER_PAGE_COPY, PAGE_TITLES, RETRY_LABEL } from '../../miniprogram/startup/copy'
+import {
+  LOCKER_PAGE_COPY,
+  ORDER_LIST_PATH,
+  PAGE_TITLES,
+  RETRY_LABEL,
+} from '../../miniprogram/startup/copy'
 import { RESERVATION_CREATE_PATH, WAITING_PATH } from '../../miniprogram/utils/routes'
 import type { WxRequestOptions, WxRequestSuccessResult } from '../helpers/wx'
 import type { InstalledWxStub } from '../helpers/wx'
@@ -653,8 +658,9 @@ describe('#62 柜机页 · 导航出口', () => {
     ;(page.onMyOrders as () => void)()
     await settle()
 
+    // #66：订单列表有了独立 tab，目标从 `ORDER_LIST_PATH` 取，不再猜首页。
     expect((wx.switchTab.mock.calls[0]?.[0] as { url: string } | undefined)?.url).toBe(
-      '/pages/index/index',
+      `/${ORDER_LIST_PATH}`,
     )
   })
 
