@@ -1,4 +1,8 @@
-// 计费说明页 —— 空壳样式（issue #22）。页面票整体替换本文件。
+// 计费说明页 —— 内容排版与页内失败态（issue #68）。
+//
+// ⚠️ 骨架 → 内容**直接替换**：本文件没有 transition / animation / opacity / transform。
+//    动效白名单里没有「页面淡入」，内容页也不需要靠动画掩盖加载。
+// ⚠️ 所有颜色 / 字号 / 间距走 token；布局几何用 rpx 的地方见 `.content` 的横向留白。
 
 @use '../../styles/variables' as v;
 
@@ -15,4 +19,89 @@ page {
 .page {
   flex: 1;
   overflow-y: auto;
+}
+
+.content {
+  // 正文是一整块有边界的卡：标题 / 段落 / 问答都在这张卡里，
+  // 用户看到的是「一页规则」而不是散落的文本块。
+  margin: v.$spacing-md v.$spacing-lg v.$spacing-xxl;
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+}
+
+.content__heading {
+  font-size: v.$font-size-heading;
+  line-height: v.$line-height-heading;
+  font-weight: v.$font-weight-semibold;
+  color: v.$color-text-main;
+  margin: v.$spacing-xl 0 v.$spacing-sm;
+}
+
+.content__paragraph {
+  font-size: v.$font-size-body;
+  line-height: 1.6;
+  color: v.$color-text-main;
+  margin-bottom: v.$spacing-md;
+}
+
+.content__qa {
+  padding: v.$spacing-md 0;
+  border-bottom: 1px solid v.$color-border;
+}
+
+.content__question {
+  font-size: v.$font-size-title;
+  line-height: 1.5;
+  font-weight: v.$font-weight-medium;
+  color: v.$color-text-main;
+}
+
+.content__answer {
+  // 答案承载信息，用 sub（5.45 ✅），不用 weak（3.02 ❌）。
+  margin-top: v.$spacing-sm;
+  font-size: v.$font-size-body;
+  line-height: 1.6;
+  color: v.$color-text-sub;
+}
+
+.content-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  padding: 0 v.$spacing-xxl;
+  box-sizing: border-box;
+}
+
+.content-failed__detail {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.content-failed__retry {
+  // 主按钮：白字压 $color-primary-active（4.62 ≥ AA）。
+  background: v.$color-primary-active;
+  color: v.$color-bg-card;
+  font-size: v.$font-size-body;
+  border-radius: v.$radius-control;
+  margin-top: v.$spacing-xxl;
+  padding: 0 v.$spacing-xxl;
+  min-width: 240rpx;
+  line-height: 44px;
+  height: 44px;
+
+  &::after {
+    border: none;
+  }
+}
+
+.content-failed__retry_active {
+  // 按下只换填充色，不做缩放 / 透明度 / 时长。
+  background: v.$color-primary-pressed;
 }

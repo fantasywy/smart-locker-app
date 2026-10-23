@@ -60,20 +60,12 @@ Component({
     },
 
     /**
-     * 静态出口三件套的点击。
+     * 静态出口三件套的点击（「计费说明」/「常见问题」）。
      *
-     * ⚠️ **一期只有「联系客服」有实现**（`open-type="contact"` 一个按钮）。
-     * 「计费说明」/「常见问题」是**本地内容页**，属于静态页，
-     * **不在本票**（本票不实现任何业务页面）—— 所以这里如实什么都不做，
-     * 由页面 `bind` 决定去哪。**不假装跳转、不弹 toast 说「敬请期待」**
-     * （后者是一句文案，而文案归文案层，且本票没有为它定稿）。
-     *
-     * ⚠️ 「联系客服」**刻意不走这里**：它是 `open-type="contact"` 的按钮，
-     * 由微信原生承载，wxml 里直接就是 `<button open-type="contact">`。
-     * 走 `triggerEvent` 再由页面去组一个 `contact` 按钮，等于把原生能力翻译一遍 ——
-     * 且这里明确不做运行时降级、不做电话双出口，所以没有需要翻译的东西。
+     * ⚠️ 载荷来自 `data-exit-id`，**不是 `label`**：页面按 `id` 选路由，
+     * 改文案不会影响行为。客服不经过这里（`open-type="contact"` 由微信原生承载）。
      */
-    onStaticExit(event: WechatMiniprogram.CustomEvent<{ label: string }>): void {
+    onStaticExit(event: WechatMiniprogram.CustomEvent<{ exitId?: string }>): void {
       this.triggerEvent('staticexit', event.currentTarget.dataset)
     },
   },
