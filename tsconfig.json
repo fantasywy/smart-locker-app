@@ -40,6 +40,10 @@
   //   • scripts/         —— 验收脚本是 .mjs，node 直接跑，不经小程序 TS 编译链
   "exclude": [
     "node_modules",
+    // ⚠️ 开发者工具「构建 npm」的产物（gitignored）。它含整套 Vant `.d.ts`，
+    // 其中 `/// <reference types="miniprogram-api-typings" />` 会与本仓库 vendored 的
+    // `typings/types/wx/` 形成两份全局声明，导致 `Component({...})` 的 `this` 推断失效。
+    "miniprogram/miniprogram_npm",
     "test",
     "vitest.config.ts",
     "scripts"
