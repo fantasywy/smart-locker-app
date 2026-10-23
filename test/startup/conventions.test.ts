@@ -36,6 +36,9 @@ import {
   NOT_YET_STORED_HINT,
   NO_RESULT_COPY,
   PICKUP_SHEET_COPY,
+  RESERVATION_CREATE_COPY,
+  RESERVATION_LIST_COPY,
+  RESERVATION_STATUS_LABELS,
 } from '../../miniprogram/startup/copy'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -164,6 +167,13 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   // ⚠️ `PICKUP_SHEET_COPY` —— `#65` 新增的导出。取件层的三条金额说明、
   // 成功三态与五类失败归因全部是用户可见的字；漏加一次，组件里写字面量就会一路绿灯。
   ...flattenCopy(PICKUP_SHEET_COPY),
+  // ⚠️ `RESERVATION_STATUS_LABELS` / `RESERVATION_LIST_COPY` / `RESERVATION_CREATE_COPY`
+  // —— `#70` 新增的导出。五个预约状态标签、两个二次确认、爽约 / 失效归因与
+  // 创建页的分组标题 / 校验句全部是用户可见的字；漏加一次，预约两页里写字面量
+  // 就会一路绿灯（而爽约与失效分开讲正是本票的验收事实）。
+  ...flattenCopy(RESERVATION_STATUS_LABELS),
+  ...flattenCopy(RESERVATION_LIST_COPY),
+  ...flattenCopy(RESERVATION_CREATE_COPY),
   // ⚠️ `STORED_TIME_PREFIX` —— 从 `datetime.ts` 的字面量提升出来的共享词。
   STORED_TIME_PREFIX,
   NOT_YET_STORED_HINT,

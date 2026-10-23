@@ -110,6 +110,17 @@ export const SCORE_LOGS_PATH: PagePath = 'pages/score-logs/score-logs'
 export const RESERVATION_LIST_PATH: PagePath = 'pages/reservation-list/reservation-list'
 
 /**
+ * **订单详情页**的路径 —— 预约列表 `USED` 行的「查看订单」入口（issue #70）。
+ *
+ * 用途：预约转单成功后，`USED` 行带 `orderId`；用户从这里回到那笔存件订单的详情。
+ * `13.15` 的响应里 `orderNo` 不上屏，订单详情页的参数是 `id`（订单 ID）。
+ *
+ * ⚠️ 用 `navigateTo`：它不是 tab 页；从预约列表出发，返回键应回预约列表。
+ * 与其它路径同理，写成常量而不是在页面里写 `pages/...` 字面量 —— 路径写错是静默失败。
+ */
+export const ORDER_DETAIL_PATH: PagePath = 'pages/order-detail/order-detail'
+
+/**
  * 静态出口的**行为 id → 路由**映射 —— 首页失败出口与「我的」页共用同一张表。
  *
  * ⚠️ 键是 `STATIC_EXITS` 的 `id`，**不是 label**：`STATIC_EXITS` 把「行为」与「措辞」解耦；
