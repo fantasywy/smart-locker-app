@@ -152,5 +152,10 @@
       "normal": "weak",
       "active": "main"
     }
-  ]
+  ],
+  "mapMarkers": {
+    "available": "$color-primary",
+    "full": "$color-warning",
+    "unavailable": "$color-info"
+  }
 }

@@ -138,10 +138,10 @@ describe('#66/#72 tabBar：首页 + 订单 + 附近 + 我的（图标就位）',
     }
   })
 
-  it('⚠️ 仓库里的图片资源恰好是 8 张 tabBar PNG，且都是 81×81 RGBA', () => {
+  it('⚠️ 仓库里的图片资源恰好是 8 张 tabBar PNG + 3 张地图 marker PNG', () => {
     // 这条替换了 #22 的「无本地图片资源」断言（#60 起，那句话不再是事实）。
-    // 判据不是「文件存在」而是**原生 tabBar 的硬要求**：81×81、8-bit RGBA、
-    // 非隔行、内容盒 72、两态颜色分别等于 weak / main。
+    // 判据不是「文件存在」而是**原生组件的硬要求**：tabBar 是 81×81、8-bit RGBA、
+    // 非隔行、内容盒 72、两态颜色分别等于 weak / main；#73 的三张 marker 是 48×48。
     const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico']
     const found: string[] = []
     const walk = (dir: string): void => {
@@ -155,12 +155,16 @@ describe('#66/#72 tabBar：首页 + 订单 + 附近 + 我的（图标就位）',
     }
     walk(miniprogramDir)
     expect(found.sort()).toEqual(
-      ['index', 'order-list', 'nearby', 'profile']
-        .flatMap((route) => [
+      [
+        ...['index', 'order-list', 'nearby', 'profile'].flatMap((route) => [
           `miniprogram/assets/tabbar/${route}.png`,
           `miniprogram/assets/tabbar/${route}-active.png`,
-        ])
-        .sort(),
+        ]),
+        // 地图 marker 的三色图不会被 tabBar 引用，但同样必须进 git。
+        'miniprogram/assets/map/marker-available.png',
+        'miniprogram/assets/map/marker-full.png',
+        'miniprogram/assets/map/marker-unavailable.png',
+      ].sort(),
     )
 
     const scss = readFileSync(join(miniprogramDir, 'styles', '_variables.scss'), 'utf8')

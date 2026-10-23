@@ -18,17 +18,12 @@
 // ⚠️ 本组件是纯展示 + 两个事件：不读 storage、不发请求、不碰任何 `wx.*`。
 
 import { NEARBY_COPY } from '../../startup/copy'
-import type {
-  NearbyAvailability,
-  NearbyCellAvailability,
-  NearbySite,
-} from '../../types/nearby'
-
-/** 可用状态的三档渲染结果。 */
-interface AvailabilityBadge {
-  label: string
-  tone: 'ok' | 'warn' | 'muted'
-}
+import {
+  NEARBY_AVAILABILITY,
+  formatNearbyDistance,
+  hasSiteCoordinates,
+} from '../../utils/nearby'
+import type { NearbyCellAvailability, NearbySite } from '../../types/nearby'
 
 /** 四档余位的一行 —— 档名 + 数量。 */
 interface CellRow {
@@ -68,43 +63,11 @@ interface StationCardInstance {
 /** 实例 → 当前站点。事件只带 `siteId`，不把 DTO 整个抛出去。 */
 const currentSites = new WeakMap<StationCardInstance, NearbySite>()
 
-/** 三档固定文案与色档 —— 服务端码到用户语言的唯一映射。 */
-const AVAILABILITY: Record<NearbyAvailability, AvailabilityBadge> = {
-  1: { label: NEARBY_COPY.statusAvailable, tone: 'ok' },
-  2: { label: NEARBY_COPY.statusFull, tone: 'warn' },
-  3: { label: NEARBY_COPY.statusUnavailable, tone: 'muted' },
-}
-
 /** 运行时守卫：属性来自外部，形状不可信。 */
 function isNearbySite(value: unknown): value is NearbySite {
   if (typeof value !== 'object' || value === null) return false
   const candidate = value as Record<string, unknown>
   return typeof candidate['siteId'] === 'number' && typeof candidate['name'] === 'string'
-}
-
-/** 坐标是否可用 —— 缺任何一轴都不出距离与导航。 */
-function hasCoordinates(site: NearbySite): boolean {
-  return (
-    typeof site.lng === 'number' &&
-    Number.isFinite(site.lng) &&
-    typeof site.lat === 'number' &&
-    Number.isFinite(site.lat)
-  )
-}
-
-/**
- * 距离格式 —— 服务端只给整数米。
- *
- * <1 km：取整到 10 m 的米数；≥1 km：一位小数 + km。不加「步行」。
- * `0` 是合法距离，不能因为 falsy 被吃掉。
- */
-function formatDistance(meters: number | null): string {
-  if (meters === null || !Number.isFinite(meters) || meters < 0) return ''
-  if (meters < 1000) {
-    const rounded = Math.round(meters / 10) * 10
-    return NEARBY_COPY.distanceMeters.replace('{value}', String(rounded))
-  }
-  return NEARBY_COPY.distanceKilometers.replace('{value}', (meters / 1000).toFixed(1))
 }
 
 /** 四档余位 —— 顺序固定，0 也保留。 */
@@ -130,8 +93,8 @@ function lockerPositionsOf(site: NearbySite): string[] {
 
 /** 一条站点 → 渲染模型。 */
 function viewOf(site: NearbySite): Partial<StationCardData> {
-  const hasLocation = hasCoordinates(site)
-  const distanceText = hasLocation ? formatDistance(site.distanceMeters) : ''
+  const hasLocation = hasSiteCoordinates(site)
+  const distanceText = hasLocation ? formatNearbyDistance(site.distanceMeters) : ''
   const hours = site.businessHours ?? ''
   const address = site.address ?? ''
   const positions = lockerPositionsOf(site)
@@ -139,7 +102,7 @@ function viewOf(site: NearbySite): Partial<StationCardData> {
   // 「共 N 台」的 N 是站点柜机台数，不是位置文案条数 —— 空 position 也是一台柜机。
   const hasMore = site.lockers.length > 2
   // 契约保证 1/2/3；运行时多一道兜底，未知码按「暂不可用」呈现而不是崩卡。
-  const badge = AVAILABILITY[site.availability] ?? AVAILABILITY[3]
+  const badge = NEARBY_AVAILABILITY[site.availability] ?? NEARBY_AVAILABILITY[3]
 
   return {
     siteId: site.siteId,
@@ -258,7 +221,7 @@ Component({
      */
     onNavigate(): void {
       const site = currentSites.get(this as unknown as StationCardInstance)
-      if (site === undefined || !hasCoordinates(site)) return
+      if (site === undefined || !hasSiteCoordinates(site)) return
       this.triggerEvent('navigate', { siteId: site.siteId })
     },
   },

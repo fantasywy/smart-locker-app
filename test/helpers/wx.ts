@@ -107,6 +107,22 @@ export interface WxStopPullDownRefreshOptions {
   complete?: () => void
 }
 
+/**
+ * `wx.pageScrollTo` 的 options —— 附近页点 marker 后把对应站点卡滚进视野。
+ *
+ * ⚠️ 用 `selector`（2.7.3 起）而不是先 `createSelectorQuery` 量位置：后者要多一个
+ * 未编排即抛错的桩，且测量与滚动之间还隔着一次异步；`selector` 让「滚到哪张卡」
+ * 直接成为一次可断言的平台调用。
+ */
+export interface WxPageScrollToOptions {
+  selector?: string
+  scrollTop?: number
+  duration?: number
+  success?: (res: { errMsg: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
 /** `wx.navigateBack` 的 options —— 导航栏 `back()` 的缺省行为。 */
 export interface WxNavigateBackOptions {
   delta?: number
@@ -238,6 +254,7 @@ export interface WxStub {
   redirectTo: Mock<(options: WxNavigateToOptions) => void>
   navigateBack: Mock<(options?: WxNavigateBackOptions) => void>
   stopPullDownRefresh: Mock<(options?: WxStopPullDownRefreshOptions) => void>
+  pageScrollTo: Mock<(options: WxPageScrollToOptions) => void>
   scanCode: Mock<(options: WxScanCodeOptions) => void>
   getLocation: Mock<(options: WxGetLocationOptions) => void>
   openLocation: Mock<(options: WxOpenLocationOptions) => void>
@@ -355,6 +372,8 @@ export function installWxStub(): InstalledWxStub {
     // 列表页下拉刷新结束 —— 与其它 API 同一条纪律：未编排即抛错，
     // 免得「没实现」被一个静默空调用伪装成「转圈已结束」。
     stopPullDownRefresh: unstubbed<[WxStopPullDownRefreshOptions | undefined]>('stopPullDownRefresh'),
+    // 点 marker 后滚到对应站点卡 —— 未编排即抛错，避免「选中了但列表没动」被静默放过。
+    pageScrollTo: unstubbed<[WxPageScrollToOptions]>('pageScrollTo'),
     scanCode: unstubbed<[WxScanCodeOptions]>('scanCode'),
     // 定位只由用户点击触发 —— 未编排即抛错，让「页面自动请求定位」当场暴露。
     getLocation: unstubbed<[WxGetLocationOptions]>('getLocation'),

@@ -5,10 +5,15 @@
 //        │  read icons/<glyph>.svg
 //        ├── miniprogram/assets/tabbar/<route>.png        81×81 RGBA, content box 72, stroke 2
 //        │   miniprogram/assets/tabbar/<route>-active.png
+//        ├── miniprogram/assets/map/marker-<status>.png   48×48 RGBA pin, fill = availability token
 //        └── miniprogram/components/icon/icons.generated.ts
 //              semantic key → tone → base64 data URI (colors baked in)
 //
 // Runtime code never imports Lucide. The generated table is the only runtime artifact.
+//
+// ⚠️ 地图 marker 的颜色必须与站点可用状态语义色一致，但 `<map marker iconPath>` 只吃
+// 图片路径（不吃 token / data URI），所以三色在这里栅格化进代码包；`#73` 的三色
+// 映射在运行时只做「可用状态 → 文件名」查表，不再拼任何颜色。
 //
 // Usage:
 //   pnpm icons:build   write artifacts
@@ -24,6 +29,7 @@ const repoRoot = join(here, '..')
 const manifestPath = join(here, 'icons', 'manifest.json')
 const variablesPath = join(repoRoot, 'miniprogram', 'styles', '_variables.scss')
 const tabbarDir = join(repoRoot, 'miniprogram', 'assets', 'tabbar')
+const mapDir = join(repoRoot, 'miniprogram', 'assets', 'map')
 const generatedPath = join(repoRoot, 'miniprogram', 'components', 'icon', 'icons.generated.ts')
 
 /** The component's public tone whitelist (spec §11). `main` exists only for tabBar. */
@@ -33,6 +39,8 @@ const TABBAR_SIZE = 81
 const CONTENT_BOX = 72
 const LUCIDE_VIEWBOX = 24
 const STROKE_WIDTH = 2
+/** 地图 marker 的栅格边长 —— 运行时按 24 / 34px 显示，留出 2x 余量。 */
+const MARKER_SIZE = 48
 
 let wasmReady = false
 
@@ -98,6 +106,23 @@ function routeOf(pagePath) {
   return route
 }
 
+/**
+ * 站点 marker —— 经典水滴形，纯色填充 + 白色描边与圆点。
+ *
+ * 只有两处不透明色：可用状态 token（fill）与卡片白（描边 / 圆点）。地图底图深浅不定，
+ * 白色描边是 marker 与底图之间的唯一分隔；不写字、不画第二层语义。
+ */
+function markerSvg(fill, ring) {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${MARKER_SIZE}" height="${MARKER_SIZE}" ` +
+    `viewBox="0 0 ${MARKER_SIZE} ${MARKER_SIZE}">` +
+    `<path d="M24 3C14.6 3 7 10.6 7 20c0 12.5 17 25 17 25s17-12.5 17-25C41 10.6 33.4 3 24 3Z" ` +
+    `fill="${fill}" stroke="${ring}" stroke-width="3"/>` +
+    `<circle cx="24" cy="20" r="6" fill="${ring}"/>` +
+    `</svg>`
+  )
+}
+
 function dataUri(svg) {
   return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`
 }
@@ -147,7 +172,7 @@ function renderGenerated(entries) {
 
 /**
  * Generate every artifact in memory. Deterministic: same inputs → identical bytes.
- * @returns {Promise<{ pngs: Map<string, Buffer>, generated: string }>}
+ * @returns {Promise<{ pngs: Map<string, Buffer>, mapPngs: Map<string, Buffer>, generated: string }>}
  */
 export async function buildArtifacts() {
   await initResvg()
@@ -189,23 +214,38 @@ export async function buildArtifacts() {
     }
   }
 
-  return { pngs, generated: renderGenerated(entries) }
+  const mapPngs = new Map()
+  const ring = tokenMap.get('color-bg-card')
+  if (!ring) throw new Error('$color-bg-card not found in miniprogram/styles/_variables.scss')
+  for (const [key] of Object.entries(manifest.mapMarkers ?? {})) {
+    const fill = resolveColor(tokenMap, key, manifest.mapMarkers)
+    const rendered = new Resvg(markerSvg(fill, ring)).render()
+    if (rendered.width !== MARKER_SIZE || rendered.height !== MARKER_SIZE) {
+      throw new Error(`unexpected marker raster size ${rendered.width}×${rendered.height}`)
+    }
+    mapPngs.set(join(mapDir, `marker-${key}.png`), Buffer.from(rendered.asPng()))
+  }
+
+  return { pngs, mapPngs, generated: renderGenerated(entries) }
 }
 
 export async function writeArtifacts() {
-  const { pngs, generated } = await buildArtifacts()
+  const { pngs, mapPngs, generated } = await buildArtifacts()
   await mkdir(tabbarDir, { recursive: true })
   for (const [file, bytes] of pngs) await writeFile(file, bytes)
+  await mkdir(mapDir, { recursive: true })
+  for (const [file, bytes] of mapPngs) await writeFile(file, bytes)
   await mkdir(dirname(generatedPath), { recursive: true })
   await writeFile(generatedPath, generated, 'utf8')
-  return { pngs, generated }
+  return { pngs, mapPngs, generated }
 }
 
 async function main() {
-  const { pngs } = await writeArtifacts()
+  const { pngs, mapPngs } = await writeArtifacts()
   const generated = await readFile(generatedPath)
   process.stdout.write(
-    `icons:build wrote ${pngs.size} PNGs and icons.generated.ts (${generated.length} bytes)\n`,
+    `icons:build wrote ${pngs.size} tabBar PNGs, ${mapPngs.size} map PNGs ` +
+      `and icons.generated.ts (${generated.length} bytes)\n`,
   )
 }
 

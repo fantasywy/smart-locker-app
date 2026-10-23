@@ -9,6 +9,8 @@
        neterr    → 网络失败（暂时连不上 / 重试）
        denied    → 未定位横幅，不是空页；列表仍可用
   ⚠️ 没有地图 / 列表切换，没有「查看柜机」「下单」「预约」出口。
+  ⚠️ 地图带与列表共用 selectedSiteId；全屏地图是同页的次级状态，不是新页面。
+     全屏卡片浮层用 cover-view —— 原生 <map> 会盖住普通 view。
 -->
 <navigation-bar title="{{ title }}" back="{{false}}" />
 
@@ -74,6 +76,50 @@
     >{{ locationAction }}</view>
   </view>
 
+  <!--
+    地图带（206px）：搜索区之下、列表之上，无「地图 / 列表」切换。
+    - marker 只落有坐标站点；callout 只挂选中 marker（同屏一个）。
+    - 失败后塌成 64px 提示行，列表原样保留；重试只重挂地图。
+  -->
+  <view
+    wx:if="{{ showMapBand }}"
+    class="nearby__map-band {{ mapFailed ? 'is-failed' : '' }}"
+  >
+    <map
+      wx:if="{{ !mapFailed }}"
+      id="nearby-map"
+      class="nearby__map"
+      latitude="{{ mapLatitude }}"
+      longitude="{{ mapLongitude }}"
+      scale="{{ mapScale }}"
+      markers="{{ markers }}"
+      bindmarkertap="onMarkerTap"
+      bindregionchange="onRegionChange"
+      bindupdated="onMapUpdated"
+      bindrendererror="onMapRenderError"
+    >
+      <cover-view
+        class="nearby__map-entry"
+        bindtap="onOpenFullscreen"
+      >{{ mapFullscreenLabel }}</cover-view>
+    </map>
+
+    <view wx:if="{{ mapFailed }}" class="nearby__map-fail">
+      <view class="nearby__map-fail-text">
+        <view class="nearby__map-fail-title">{{ mapFailTitle }}</view>
+        <view class="nearby__map-fail-hint">{{ mapFailHint }}</view>
+      </view>
+      <view
+        class="nearby__map-fail-action"
+        bindtap="onMapRetry"
+        hover-class="nearby__map-fail-action_active"
+        hover-start-time="0"
+        hover-stay-time="0"
+        aria-role="button"
+      >{{ retryLabel }}</view>
+    </view>
+  </view>
+
   <!-- 首屏骨架：三张站点卡，纯图形、无文字。 -->
   <skeleton wx:if="{{ phase === 'loading' }}" variant="nearby" />
 
@@ -126,13 +172,18 @@
   <view wx:elif="{{ phase === 'ready' }}" class="nearby__list">
     <view class="nearby__list-header">{{ listHeader }}</view>
     <view class="nearby__cards">
-      <station-card
+      <view
         wx:for="{{ sites }}"
         wx:key="siteId"
-        site="{{ item }}"
-        bind:select="onSiteSelect"
-        bind:navigate="onSiteNavigate"
-      />
+        id="nearby-site-{{ item.siteId }}"
+        class="nearby__card {{ item.siteId === selectedSiteId ? 'is-selected' : '' }}"
+      >
+        <station-card
+          site="{{ item }}"
+          bind:select="onSiteSelect"
+          bind:navigate="onSiteNavigate"
+        />
+      </view>
     </view>
   </view>
 
@@ -162,4 +213,44 @@
       aria-role="button"
     >{{ cityPickerCancel }}</view>
   </view>
+</view>
+
+<!--
+  全屏地图 —— 同一页的次级入口（`showFullscreenMap`），不新增路由。
+  ⚠️ 卡片浮层与返回按钮都在 <map> 内、且只能用 cover-view / cover-image：
+     原生地图层级高于普通 view，普通浮层会被盖住。
+-->
+<view wx:if="{{ showFullscreenMap }}" class="nearby__fullscreen">
+  <map
+    id="nearby-fullscreen-map"
+    class="nearby__fs-map"
+    latitude="{{ mapLatitude }}"
+    longitude="{{ mapLongitude }}"
+    scale="{{ mapScale }}"
+    markers="{{ markers }}"
+    bindmarkertap="onMarkerTap"
+    bindregionchange="onRegionChange"
+    bindupdated="onMapUpdated"
+    bindrendererror="onMapRenderError"
+  >
+    <cover-view class="nearby__fs-exit" bindtap="onCloseFullscreen">{{ mapExitLabel }}</cover-view>
+
+    <cover-view wx:if="{{ selectedCard.siteId }}" class="nearby__fs-card">
+      <cover-view class="nearby__fs-head">
+        <cover-view class="nearby__fs-name">{{ selectedCard.name }}</cover-view>
+        <cover-view
+          wx:if="{{ selectedCard.statusLabel }}"
+          class="nearby__fs-status is-{{ selectedCard.statusTone }}"
+        >{{ selectedCard.statusLabel }}</cover-view>
+      </cover-view>
+      <cover-view wx:if="{{ selectedCard.showDistance }}" class="nearby__fs-distance">{{ selectedCard.distanceText }}</cover-view>
+      <cover-view wx:if="{{ selectedCard.showAddress }}" class="nearby__fs-address">{{ selectedCard.address }}</cover-view>
+      <cover-view class="nearby__fs-footer">{{ selectedCard.footer }}</cover-view>
+      <cover-view
+        wx:if="{{ selectedCard.showNavigate }}"
+        class="nearby__fs-navigate"
+        bindtap="onFullscreenNavigate"
+      >{{ selectedCard.navigateLabel }}</cover-view>
+    </cover-view>
+  </map>
 </view>
