@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { installWxStub, jsonResponse, reply } from '../helpers/wx'
 import { respondInOrder } from '../helpers/http'
-import { HOME_PAGE_COPY, PAGE_TITLES } from '../../miniprogram/startup/copy'
+import { HOME_PAGE_COPY, NEARBY_PATH, PAGE_TITLES } from '../../miniprogram/startup/copy'
 import { LOCKER_PATH } from '../../miniprogram/utils/routes'
 import type { InstalledWxStub } from '../helpers/wx'
 
@@ -270,13 +270,32 @@ describe('#61 首页 · 硬约束（源码守卫）', () => {
     }
   })
 
-  it('⚠️ 订单区仍是占位：没有订单卡组件、没有附近入口、没有 switchTab', () => {
+  it('⚠️ 订单区仍是占位：没有订单卡组件、没有订单列表数据', () => {
     const wxml = stripComments(indexWxml())
-    for (const forbidden of ['order-card', 'nearby', 'switchTab', 'wx:for="{{ orders }}"']) {
-      expect(wxml, `首页提前实现了「${forbidden}」—— 订单区归 #67，附近入口随 #72`).not.toContain(
-        forbidden,
-      )
+    for (const forbidden of ['order-card', 'wx:for="{{ orders }}"']) {
+      expect(wxml, `首页提前实现了「${forbidden}」—— 订单区归 #67`).not.toContain(forbidden)
     }
+  })
+
+  it('⚠️ 附近入口条只指路：无动态数据，点击 switchTab 到 NEARBY_PATH', async () => {
+    const wx = installWxStub()
+    wx.switchTab.mockImplementation(() => {})
+    const def = await loadPage()
+    const page = instantiate(def)
+
+    ;(page.onNearby as (() => void) | undefined)?.()
+
+    expect(wx.switchTab).toHaveBeenCalledTimes(1)
+    expect(wx.switchTab.mock.calls[0]?.[0]).toMatchObject({ url: `/${NEARBY_PATH}` })
+    expect(wx.getLocation).not.toHaveBeenCalled()
+    expect(wx.request).not.toHaveBeenCalled()
+
+    const wxml = stripComments(indexWxml())
+    expect(wxml).toContain('class="home__nearby"')
+    expect(wxml).toContain('{{ nearbyLabel }}')
+    expect(wxml).toContain('name="nearby.station"')
+    expect(wxml).not.toMatch(/nearby[^>]*(distance|count|余位)/i)
+    expect(page.data.nearbyLabel).toBe(HOME_PAGE_COPY.nearbyEntry)
   })
 
   it('⚠️ 按下反馈只有 0ms 换色：hover-class 换 `$color-primary-pressed`，无 transition / transform / opacity', () => {

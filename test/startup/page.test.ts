@@ -294,13 +294,14 @@ describe('#20 首页：闸门接线（重试真的到达闸门、状态真的画
     await vi_wait()
 
     expect(page.data.phase).toBe('failed')
-    // `data` 里只有 phase、首页文案（品牌 / 按钮）与订单区占位文案 ——
+    // `data` 里只有 phase、首页文案（品牌 / 按钮 / 附近入口）与订单区占位文案 ——
     // 没有 error / code / message 任何一项。
     // ⚠️ `#61` 起导航栏标题留空（不再从 `PAGE_TITLES` 绑定），首页 data 里的
     // wordmark / tagline / scanLabel 是**文案**，不是错误对象；
     // 本断言的判据仍是「没有任何一项来自 `UnifiedError`」。
     expect(Object.keys(page.data).sort()).toEqual(
       [
+        'nearbyLabel',
         'ordersPlaceholderHint',
         'ordersPlaceholderTitle',
         'phase',

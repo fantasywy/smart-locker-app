@@ -1,0 +1,11 @@
+{
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "navigation-bar": "/components/navigation-bar/navigation-bar",
+    "skeleton": "/components/skeleton/skeleton",
+    "empty-state": "/components/empty-state/empty-state",
+    "station-card": "/components/station-card/station-card",
+    "icon": "/components/icon/icon",
+    "van-toast": "@vant/weapp/toast/index"
+  }
+}

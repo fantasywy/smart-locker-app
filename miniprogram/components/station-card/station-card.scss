@@ -1,0 +1,164 @@
+// 附近站点卡样式 —— 全部走设计 token，零裸 hex、零动效。
+//
+// 版式（spec §8）：白底 / 16px 圆角 / 16px 内边距 / 12px 卡间距；
+// 首行站点名 16px / 600 + 可用状态标签；距离与营业时间 12px sub；
+// 四档余位是四个等宽小格，数量 16px / 600、0 也渲染；
+// 柜机位置为两行文本，>2 台折叠计数。
+//
+// ⚠️ 单位：布局几何用 rpx；字号 / 1px 边框 / 圆角用 px。
+// ⚠️ 不写 transition / animation / opacity —— 按下反馈只换背景色。
+
+@use '../../styles/variables' as v;
+@use '../../styles/mixins' as m;
+
+.station-card {
+  display: block;
+  color: v.$color-text-main;
+}
+
+.station-card__surface {
+  @include m.card;
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+}
+
+.station-card__surface_active {
+  background: v.$color-bg-page;
+}
+
+.station-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+}
+
+.station-card__name {
+  min-width: 0;
+  overflow: hidden;
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  font-weight: v.$font-weight-semibold;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.station-card__status {
+  @include m.tone-chip((ok, warn, muted));
+  flex-shrink: 0;
+}
+
+.station-card__distance {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  font-weight: v.$font-weight-medium;
+  line-height: 1.5;
+}
+
+.station-card__hours {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.station-card__address {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.station-card__cells {
+  display: flex;
+  gap: v.$spacing-sm;
+  margin-top: v.$spacing-md;
+  padding: v.$spacing-md;
+  background: v.$color-bg-page;
+  border-radius: v.$radius-chip;
+}
+
+.station-card__cell {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.station-card__cell-label {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.station-card__cell-count {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  font-weight: v.$font-weight-semibold;
+  line-height: 1.5;
+}
+
+.station-card__lockers {
+  margin-top: v.$spacing-md;
+}
+
+.station-card__lockers-label {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.station-card__locker {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  line-height: 1.5;
+}
+
+.station-card__locker-more {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.station-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+  margin-top: v.$spacing-md;
+  padding-top: v.$spacing-md;
+  border-top: 1px solid v.$color-border;
+}
+
+.station-card__footer {
+  min-width: 0;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.station-card__navigate {
+  flex-shrink: 0;
+  height: 72rpx;
+  margin: 0;
+  padding: 0 v.$spacing-lg;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-body;
+  line-height: 72rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-primary;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.station-card__navigate_active {
+  color: v.$color-primary-pressed;
+  background: v.$color-primary-tint;
+}

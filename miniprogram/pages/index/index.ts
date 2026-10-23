@@ -23,8 +23,8 @@
 //
 // - **不做相机权限探测 / 引导**（spec §2 末段）：`wx.scanCode` 不写 `authSetting`，
 //   `wx.getSetting()` 无法区分「未请求」与「被拒绝」，任何「请开启相机权限」都是假归因。
-// - **不做进行中订单区与附近入口**：订单区在本票仍是占位，由 #67 接手；附近入口
-//   随 #72 的同一次发版露出。提前做一个假入口会违反「不造假入口」。
+// - **不做进行中订单区**：订单区在本票仍是占位，由 #67 接手。附近入口已随
+//   #72 的同一次发版露出 —— 只指路，不带任何动态数据。
 // - **不写页面路径字面量**：柜机页路径来自 `utils/routes.ts` 的 `LOCKER_PATH`。
 //   `wx.*To` 拿到不存在的路径是**静默失败** —— 与「点了没反应」同一个症状。
 //
@@ -35,7 +35,7 @@
 
 import { createStartupGate } from '../../startup/gate'
 import type { StartupGate, StartupState } from '../../startup/gate'
-import { HOME_PAGE_COPY } from '../../startup/copy'
+import { HOME_PAGE_COPY, NEARBY_PATH } from '../../startup/copy'
 import { showToast } from '../../utils/feedback'
 import { resolveLockerCode } from '../../utils/locker-code'
 import { LOCKER_PATH, STATIC_EXIT_PATHS } from '../../utils/routes'
@@ -105,6 +105,12 @@ Component({
      */
     ordersPlaceholderTitle: HOME_PAGE_COPY.ordersPlaceholderTitle,
     ordersPlaceholderHint: HOME_PAGE_COPY.ordersPlaceholderHint,
+
+    /**
+     * 附近入口条的唯一一句文案 —— 没有距离 / 余位 / 动态数据。
+     * 点击只做 `switchTab`，目标来自 `NEARBY_PATH`（tab 路径写错是静默失败）。
+     */
+    nearbyLabel: HOME_PAGE_COPY.nearbyEntry,
   },
 
   lifetimes: {
@@ -156,6 +162,16 @@ Component({
     /** 失败出口的「重试」—— **重跑启动链**。 */
     onRetry(): void {
       void gate?.start()
+    },
+
+    /**
+     * 附近入口 —— 只 `switchTab` 到附近 tab。
+     *
+     * ⚠️ 入口条不承载任何动态数据：不发请求、不探测定位、不显示距离 / 余位。
+     * 那是附近页自己的事；首页这里只负责“指路”。
+     */
+    onNearby(): void {
+      wx.switchTab({ url: `/${NEARBY_PATH}` })
     },
 
     /**

@@ -2,7 +2,7 @@
 //
 // 与 `test/startup/conventions.test.ts` 同一取向：这些是**关于代码形状**的约束，
 // 不是运行时行为。「tabBar 的图标还没接进 app.json」「`navigationStyle` 仍是 `custom`」
-// 「11 个页面都注册了（#66 起）」「`logs` 没有残留引用」—— 功能测试一个都测不到
+// 「12 个页面都注册了」「`logs` 没有残留引用」—— 功能测试一个都测不到
 // （一个带图标的 tabBar 照样能跑），所以只能读配置与源码。
 //
 // ⚠️ 这些守卫的价值全在**未来**：本票把骨架一次性配齐，是为了让后面的页面票
@@ -109,25 +109,25 @@ describe('#22 BASE_URL 指向可联调后端', () => {
   })
 })
 
-describe('#66 tabBar：首页 + 订单 + 我的（图标就位）', () => {
-  it('⚠️ tabBar 恰好三项：首页（index 0）+ 订单（index 1）+ 我的（index 2）', () => {
+describe('#66/#72 tabBar：首页 + 订单 + 附近 + 我的（图标就位）', () => {
+  it('⚠️ tabBar 恰好四项：首页（0）+ 订单（1）+ 附近（2）+ 我的（3）', () => {
     const tabBar = appJson.tabBar
     expect(tabBar, 'app.json 必须有 tabBar').toBeDefined()
     // ⚠️ 顺序是**语义**不是排版：首页是唯一主行动入口，订单是「我的订单」出口的目标，
-    // 我的在最后。`ORDER_LIST_PATH` 必须指向 index 1 的那一项。
-    expect(tabBar?.list.map((item) => item.text)).toEqual(['首页', '订单', '我的'])
+    // 我的在最后。`ORDER_LIST_PATH` 必须指向 index 1 的那一项，附近是 index 2。
+    expect(tabBar?.list.map((item) => item.text)).toEqual(['首页', '订单', '附近', '我的'])
     expect(tabBar?.list.map((item) => item.pagePath)).toEqual([
       'pages/index/index',
       'pages/order-list/order-list',
+      'pages/nearby/nearby',
       'pages/profile/profile',
     ])
   })
 
-  it('⚠️ 三个 tab 的 iconPath / selectedIconPath 都指向 8 张 PNG 里对应当前 3 个 tab 的那 6 张', () => {
+  it('⚠️ 四个 tab 的 iconPath / selectedIconPath 指向 8 张 PNG 里对应当前 4 个 tab 的那 8 张', () => {
     // #60 产出四组 × 两态共 8 张 81×81 PNG（`miniprogram/assets/tabbar/`）。
-    // #66 先接首页 / 订单 / 我的三项；`nearby` 的两张等 #72 的第四个 tab 再接 ——
-    // **绝不引用不存在的 PNG**（原生 tabBar 会静默不显示图标）。
-    const routes = ['index', 'order-list', 'profile']
+    // #66/#72 把四个 tab 一次接齐 —— **绝不引用不存在的 PNG**（原生 tabBar 会静默不显示图标）。
+    const routes = ['index', 'order-list', 'nearby', 'profile']
     for (const item of appJson.tabBar?.list ?? []) {
       const route = item.pagePath.split('/')[1] ?? ''
       expect(routes, `tabBar 出现了本票未接线的页面：${item.pagePath}`).toContain(route)
@@ -240,11 +240,12 @@ describe('#22 导航形态：自绘导航栏 + 不分包', () => {
   })
 })
 
-describe('#22 页面注册：11 个页面（#66 订单列表已注册）', () => {
-  /** 页面与命名裁决收敛出的 11 个页面（#66 新增订单列表；#72 再加附近）。 */
+describe('#22 页面注册：12 个页面（#66 订单列表 / #72 附近已注册）', () => {
+  /** 页面与命名裁决收敛出的 12 个页面。 */
   const EXPECTED_PAGES = [
     'pages/index/index',
     'pages/order-list/order-list',
+    'pages/nearby/nearby',
     'pages/profile/profile',
     'pages/locker/locker',
     'pages/order-detail/order-detail',
@@ -256,7 +257,7 @@ describe('#22 页面注册：11 个页面（#66 订单列表已注册）', () =>
     'pages/faq/faq',
   ]
 
-  it('⚠️ pages 恰好注册这 11 个，且顺序与页表一致', () => {
+  it('⚠️ pages 恰好注册这 12 个，且顺序与页表一致', () => {
     // ⚠️ 顺序有意义：`pages` 的**第一项是启动页**。启动页是首页，
     // 所以它必须排第一 —— 否则冷启动会落到别的页上。
     expect(appJson.pages).toEqual(EXPECTED_PAGES)
@@ -284,7 +285,7 @@ describe('#22 页面注册：11 个页面（#66 订单列表已注册）', () =>
     expect([...titled].filter((p) => !registered.has(p))).toEqual([])
   })
 
-  it('⚠️ tabBar 的三项都在 pages 里注册过（否则 tabBar 点了没反应）', () => {
+  it('⚠️ tabBar 的四项都在 pages 里注册过（否则 tabBar 点了没反应）', () => {
     for (const item of appJson.tabBar?.list ?? []) {
       expect(appJson.pages).toContain(item.pagePath)
     }
@@ -294,7 +295,7 @@ describe('#22 页面注册：11 个页面（#66 订单列表已注册）', () =>
     // ⚠️ 这一条补的是上面那个豁免留下的缝。
     // `app.json` 的 `tabBar[].text` 是**原生配置**（JSON 引不到 `copy.ts`），
     // 所以文案守卫**必须**放它一马（见 `conventions.test.ts` 里的豁免说明）。
-    // 三个 tab 的短词（首页 / 订单 / 我的）与页面标题（首页 / 订单 / 我的）
+    // 四个 tab 的短词（首页 / 订单 / 附近 / 我的）与页面标题
     // 都是**同一个词，两处写**：一处原生 JSON，一处文案层。
     //
     // ⇒ 判据取**包含关系**而不是相等：tabBar 项是短词，页面标题是页面名。

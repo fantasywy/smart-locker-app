@@ -1,0 +1,165 @@
+<!--
+  附近柜机 —— 只读站点目录（ticket #72 / spec #57 §8）。
+
+  ⚠️ 本文件没有一句用户可见字面量：标题 / 搜索 / 定位横幅 / 列表头 / 四类空态 /
+     城市选择器全部来自 startup/copy.ts，页面 data 只做转手。
+  ⚠️ 四类空态互不混淆：
+       empty     → 附近 3 km 没有柜机（扩大到 10 km / 切换城市）
+       noresult  → 搜索无结果（保留搜索词）
+       neterr    → 网络失败（暂时连不上 / 重试）
+       denied    → 未定位横幅，不是空页；列表仍可用
+  ⚠️ 没有地图 / 列表切换，没有「查看柜机」「下单」「预约」出口。
+-->
+<navigation-bar title="{{ title }}" back="{{false}}" />
+
+<view class="page">
+  <!-- 搜索区：城市永远在搜索框里；提交后才搜。 -->
+  <view wx:if="{{ city }}" class="nearby__search">
+    <view
+      class="nearby__city"
+      bindtap="onOpenCityPicker"
+      hover-class="nearby__city_active"
+      hover-start-time="0"
+      hover-stay-time="0"
+      aria-role="button"
+    >
+      <text class="nearby__city-name">{{ city }}</text>
+      <icon name="nav.disclosure" tone="weak" size="{{14}}" />
+    </view>
+
+    <view class="nearby__search-box">
+      <icon name="action.search" tone="weak" size="{{16}}" />
+      <input
+        class="nearby__input"
+        value="{{ keywordDraft }}"
+        placeholder="{{ searchPlaceholder }}"
+        confirm-type="search"
+        bindinput="onKeywordInput"
+        bindconfirm="onSearch"
+      />
+      <view
+        wx:if="{{ showClear }}"
+        class="nearby__clear"
+        bindtap="onClearSearch"
+        aria-role="button"
+        aria-label="{{ clearSearchLabel }}"
+      >
+        <icon name="action.close" tone="weak" size="{{14}}" />
+      </view>
+      <view
+        class="nearby__search-action"
+        bindtap="onSearch"
+        hover-class="nearby__search-action_active"
+        hover-start-time="0"
+        hover-stay-time="0"
+        aria-role="button"
+      >{{ searchAction }}</view>
+    </view>
+  </view>
+  <view wx:if="{{ city }}" class="nearby__search-hint">{{ searchHint }}</view>
+
+  <!-- 未定位横幅：拒绝 / 类目未批 / 系统不可用都落在这里；列表与搜索照常。 -->
+  <view
+    wx:if="{{ showLocationBanner && city }}"
+    class="nearby__location"
+  >
+    <view class="nearby__location-text">{{ locationBanner }}</view>
+    <view
+      class="nearby__location-action"
+      bindtap="onLocate"
+      hover-class="nearby__location-action_active"
+      hover-start-time="0"
+      hover-stay-time="0"
+      aria-role="button"
+    >{{ locationAction }}</view>
+  </view>
+
+  <!-- 首屏骨架：三张站点卡，纯图形、无文字。 -->
+  <skeleton wx:if="{{ phase === 'loading' }}" variant="nearby" />
+
+  <!-- 首次无城市：城市选择器铺在底部，站点列表不发请求。 -->
+  <view wx:elif="{{ phase === 'citypick' }}" class="nearby__citypick-hold"></view>
+
+  <!-- 网络失败：页内重试块，tabBar 仍可用。 -->
+  <view wx:elif="{{ phase === 'neterr' }}" class="nearby__failed">
+    <view class="nearby__failed-title">{{ networkTitle }}</view>
+    <view class="nearby__failed-detail">{{ networkDetail }}</view>
+    <button
+      class="nearby__failed-action"
+      hover-class="nearby__failed-action_active"
+      bindtap="onRetry"
+    >{{ retryLabel }}</button>
+  </view>
+
+  <!-- 附近无柜机：与搜索无结果分开；扩半径与换城市两个出口。 -->
+  <block wx:elif="{{ phase === 'empty' }}">
+    <empty-state
+      title="{{ emptyTitle }}"
+      hint="{{ emptyHint }}"
+      action-label="{{ emptyActionLabel }}"
+      bind:action="onExpandRadius"
+    />
+    <view
+      class="nearby__switch-city"
+      bindtap="onOpenCityPicker"
+      hover-class="nearby__switch-city_active"
+      hover-start-time="0"
+      hover-stay-time="0"
+      aria-role="button"
+    >{{ switchCityLabel }}</view>
+  </block>
+
+  <!-- 搜索无结果：保留关键词，提示换词 / 换城市。 -->
+  <block wx:elif="{{ phase === 'noresult' }}">
+    <empty-state title="{{ noResultTitle }}" hint="{{ noResultHint }}" />
+    <view
+      class="nearby__switch-city"
+      bindtap="onOpenCityPicker"
+      hover-class="nearby__switch-city_active"
+      hover-start-time="0"
+      hover-stay-time="0"
+      aria-role="button"
+    >{{ switchCityLabel }}</view>
+  </block>
+
+  <!-- 站点列表：服务端顺序原样渲染；卡片唯一动作是导航。 -->
+  <view wx:elif="{{ phase === 'ready' }}" class="nearby__list">
+    <view class="nearby__list-header">{{ listHeader }}</view>
+    <view class="nearby__cards">
+      <station-card
+        wx:for="{{ sites }}"
+        wx:key="siteId"
+        site="{{ item }}"
+        bind:select="onSiteSelect"
+        bind:navigate="onSiteNavigate"
+      />
+    </view>
+  </view>
+
+  <van-toast id="van-toast" />
+</view>
+
+<!-- 城市选择器 —— 数据来自 GET /nearby/cities；首次无城市时不可关闭。 -->
+<view wx:if="{{ showCityPicker }}" class="nearby__overlay">
+  <view class="nearby__sheet">
+    <view class="nearby__sheet-title">{{ cityPickerTitle }}</view>
+    <scroll-view scroll-y class="nearby__city-list">
+      <view
+        wx:for="{{ cities }}"
+        wx:key="*this"
+        class="nearby__city-option {{ item === city ? 'is-selected' : '' }}"
+        data-city="{{ item }}"
+        bindtap="onCitySelect"
+      >{{ item }}</view>
+    </scroll-view>
+    <view
+      wx:if="{{ cityPickerDismissable }}"
+      class="nearby__sheet-cancel"
+      bindtap="onCityPickerClose"
+      hover-class="nearby__sheet-cancel_active"
+      hover-start-time="0"
+      hover-stay-time="0"
+      aria-role="button"
+    >{{ cityPickerCancel }}</view>
+  </view>
+</view>
