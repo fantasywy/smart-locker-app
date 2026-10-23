@@ -25,7 +25,7 @@
 //    ⇒ 闸门**只保留 `kind` 用于诊断**（它来自请求层的统一异常对象，是给日志与测试看的），
 //      **绝不据此分叉 UI**。`8001` 与超时对用户是同一件事：「连不上」。
 //
-// 3. **`BLACKLISTED` 不构成失败**。受限用户的登录**照样成功**，
+// 3. **`status = 2`（受限）不构成失败**。受限用户的登录**照样成功**，
 //    闸门**放行** —— 拦截权只能属于服务端，本地快照会把已解禁用户挡在门外。
 //    本模块因此**根本不看** `user.status`：它连读都不读，所以那条错误分叉在类型上写不出来。
 //
@@ -172,7 +172,7 @@ export function createStartupGate(
       return setState({ phase: 'failed', error: result.error })
     }
 
-    // ⚠️ **不看 `result.data.user.status`** —— `BLACKLISTED` 照样放行。
+    // ⚠️ **不看 `result.data.user.status`** —— `status = 2` 照样放行。
     // 这里连读都不读，所以那条错误分叉在类型上也写不出来（见文件头裁决 3）。
     return setState({ phase: 'ready' })
   }

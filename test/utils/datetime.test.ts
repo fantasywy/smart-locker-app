@@ -86,9 +86,9 @@ describe('#23 七种时间写法', () => {
     expect(formatSlotTime('2026-09-23T14:30:00+08:00')).not.toMatch(/-/)
   })
 
-  it('⑦受限卡 → 「限制开始于 YYYY-MM-DD HH:mm」', () => {
-    // 定稿示例逐字：「**限制开始于 2026-09-22 15:04**」。
-    expect(formatRestrictionSince('2026-09-22T15:04:00+08:00')).toBe('限制开始于 2026-09-22 15:04')
+  it('⑦受限卡 → 「自 YYYY-MM-DD HH:mm 起」', () => {
+    // spec #57 §9 定稿逐字：「自 {createdAt} 起」→「自 2026-09-22 15:04 起」。
+    expect(formatRestrictionSince('2026-09-22T15:04:00+08:00')).toBe('自 2026-09-22 15:04 起')
   })
 })
 

@@ -45,7 +45,11 @@
 // ⚠️ **本模块是纯函数，不碰 `wx.*`** —— 所以 Vitest 里可以直接测（不需要任何桩）。
 // 这也是 `utils/` 的定位：纯函数（如 `resolveLockerCode`）。
 
-import { NOT_YET_STORED_HINT, STORED_TIME_PREFIX } from '../startup/copy'
+import {
+  NOT_YET_STORED_HINT,
+  PROFILE_COPY,
+  STORED_TIME_PREFIX,
+} from '../startup/copy'
 
 /**
  * 服务端回显的时刻串 —— 形如 `2026-04-01T11:30:00+08:00`（**不是** `Date`）。
@@ -259,12 +263,12 @@ export function formatDurationSlot(hours: number): string {
 }
 
 /**
- * **受限卡 · 时间行** —— 「限制开始于 `YYYY-MM-DD HH:mm`」。
+ * **受限卡 · 时间行** —— 「自 `YYYY-MM-DD HH:mm` 起」。
  *
- * 契约：逐字示例「**限制开始于 2026-09-22 15:04**」
- * （「限制开始于 `createdAt`」）。
+ * 契约（spec #57 §9）：「时间行『自 {createdAt} 起』（全站时间格式）」；
+ * 定稿示例「**自 2026-09-22 15:04 起**」。
  *
- * ⚠️ 为什么单独一个函数而不是让页面拼 `'限制开始于 ' + formatFullTime(...)`：
+ * ⚠️ 为什么单独一个函数而不是让页面拼 `'自 ' + formatFullTime(...) + ' 起'`：
  * 那一句是**定稿逐字**，页面自己拼就是把它抄了一份 ——
  * 与 `startup/copy.ts` 存在的理由完全相同（用户可见的每个字只有一个家）。
  *
@@ -277,5 +281,7 @@ export function formatDurationSlot(hours: number): string {
 export function formatRestrictionSince(instant: ServerInstant): string {
   const time = formatFullTime(instant)
   if (time === '') return ''
-  return `限制开始于 ${time}`
+  // ⚠️ 句子本身归文案层（`PROFILE_COPY.restrictedSince`），本函数只负责把时刻填进去 ——
+  // 否则「自 … 起」会在 `copy.ts` 与这里各有一份。
+  return PROFILE_COPY.restrictedSince.replace('{time}', () => time)
 }

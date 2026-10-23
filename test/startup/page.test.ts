@@ -28,7 +28,7 @@ function loginBody(): Record<string, unknown> {
       accessToken: 'ACCESS-1',
       refreshToken: 'REFRESH-1',
       expiresIn: 7200,
-      user: { id: 88, nickname: null, avatar: null, phone: null, score: 100, status: 'NORMAL' },
+      user: { id: 88, nickname: null, avatar: null, phone: null, score: 100, status: 1 },
     },
   }
 }
@@ -180,13 +180,13 @@ describe('#20 首页：闸门接线（重试真的到达闸门、状态真的画
     release()
   })
 
-  it('⚠️ 登录成功且 status 为 BLACKLISTED → 照样画 ready（不阻断）', async () => {
+  it('⚠️ 登录成功且 status 为 2（受限） → 照样画 ready（不阻断）', async () => {
     const wx = installWxStub()
     wx.login.mockImplementation(reply({ code: 'WX-CODE', errMsg: 'login:ok' }))
     const body = loginBody()
-    // 把 user.status 改成 BLACKLISTED —— 登录**照样成功**。
+    // 把 user.status 改成数字码 2（受限） —— 登录**照样成功**。
     const data = body['data'] as Record<string, unknown>
-    ;(data['user'] as Record<string, unknown>)['status'] = 'BLACKLISTED'
+    ;(data['user'] as Record<string, unknown>)['status'] = 2
     wx.request.mockImplementation(respondInOrder([jsonResponse(body)]))
 
     const { definition: def } = await loadPage()

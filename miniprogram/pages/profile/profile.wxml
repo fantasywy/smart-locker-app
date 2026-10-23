@@ -1,19 +1,210 @@
 <!--
-  profile 页 —— **空壳**（issue #22 铺的骨架，页面本身归各自的功能票）。
+  「我的」页 —— 账号页（spec #57 §9 / issue #69）。
 
-  ⚠️ 为什么先落空壳：`app.json` 的 `pages` 是**全局唯一**的注册表，
-     每张页面票各改一次它，必然并发冲突。
-     一次性把 10 个页面注册齐，页面票就只动自己那个目录。
+  版式顺序即口径：身份区 → 受限提示（仅受限时）→ 信用分卡 → 我的服务 → 帮助与支持。
 
-  ⚠️ 标题来自 `startup/copy.ts` 的 `PAGE_TITLES`，**不在本文件里写字面量** ——
-     标题是用户可见的字，归文案层；
-     `test/startup/conventions.test.ts` 有一条守卫会判违规（它在本票第一版抓过一次）。
+  ⚠️ **三条数据纪律在模板上的落点**
+    • 一次 `13.4` 三块共用：身份区与信用分各自骨架 / 各自一行 `blockLoadFailed`；
+      受限卡只在 `restricted` 为真时出现（数据没回来时不出现，也不猜）。
+    • **失败不塌整页**：两块各自一行，下方「我的服务 / 帮助与支持」照常可点。
+    • **不展示手机号**：模板里没有 `phone` 这个字段，也不从 data 读它。
 
-  ⚠️ 这个文件里**没有任何业务内容**，也**不假装**有：
-     不写「敬请期待」、不写占位数据、不写开发者台词。
-     它渲染的只有自绘导航栏（全端统一自绘）与一个空的页面容器。
-     承载它的页面票请**整体替换**本文件，而不是往上叠。
+  ⚠️ **头像位只画本地默认图标**（`icon` 组件，构建期 data URI）：
+     不发网络请求、不出现加载中、不出现上传入口，也**没有**任何编译期开关。
+     上传接线由 #75 接管（#69 落票勘误）。
+
+  ⚠️ **本文件没有一句用户可见字面量**：所有文案来自 `startup/copy.ts`
+     （`PROFILE_COPY` / `STATIC_EXITS` / `PAGE_TITLES`），页面 data 只是转手。
+
+  ⚠️ 我的页是 **tab 页**：自绘导航栏 `back=false`；二级页（我的预约 / 信用分明细 /
+     计费说明 / 常见问题）由页面用 `navigateTo` 打开，它们自己的导航栏显示返回箭头。
 -->
-<navigation-bar title="{{ title }}" back="{{true}}"></navigation-bar>
 
-<view class="page"></view>
+<navigation-bar title="{{ title }}" back="{{ false }}" />
+
+<view class="page">
+  <!--
+    ① 身份区 —— 64px 头像 + 昵称 + 「编辑资料 ›」，整行可点。
+    ⚠️ 读取失败时**不渲染身份行**：没有可信的服务端昵称可预填，拿空串去「编辑」
+       会把「不知道」伪装成「是空的」。
+  -->
+  <view class="profile__section">
+    <skeleton wx:if="{{ phase === 'loading' }}" variant="identity" />
+    <view wx:elif="{{ phase === 'failed' }}" class="profile__block-error">{{ blockLoadFailed }}</view>
+    <view
+      wx:else
+      class="profile__identity"
+      bindtap="onEditProfile"
+      hover-class="profile__identity_active"
+      hover-start-time="0"
+      hover-stay-time="0"
+      aria-role="button"
+    >
+      <view class="profile__avatar">
+        <icon name="profile.avatar" tone="weak" size="{{32}}" />
+      </view>
+      <view class="profile__identity-copy">
+        <view class="profile__nickname">{{ nickname }}</view>
+      </view>
+      <view class="profile__edit-entry">
+        <view class="profile__edit-label">{{ editProfileLabel }}</view>
+        <icon name="nav.disclosure" tone="weak" size="{{16}}" />
+      </view>
+    </view>
+  </view>
+
+  <!--
+    ② 受限提示 —— **仅 `status === 2` 渲染**，常驻不可关闭。
+    文案逐字：标题 / 正文 / 原因（空则整行省略）/ 起始时间 / 客服出口。
+    ⚠️ 不展示 `auto`（系统自动 / 人工拉黑是内部归因）；
+       「联系客服」必须是原生 `open-type="contact"` 按钮，不做运行时降级。
+  -->
+  <view wx:if="{{ restricted }}" class="profile__restricted is-danger">
+    <view class="profile__restricted-title">{{ restrictedTitle }}</view>
+    <view class="profile__restricted-body">{{ restrictedBody }}</view>
+    <view wx:if="{{ restrictionReason }}" class="profile__restricted-meta">
+      {{ restrictionReason }}
+    </view>
+    <view wx:if="{{ restrictionSince }}" class="profile__restricted-meta">
+      {{ restrictionSince }}
+    </view>
+    <button
+      class="profile__contact"
+      open-type="contact"
+      hover-class="profile__contact_active"
+      hover-start-time="0"
+      hover-stay-time="0"
+    >
+      {{ restrictedContact }}
+    </button>
+  </view>
+
+  <!--
+    ③ 信用分卡 —— 「信用分」+ 分数 + 「明细 ›」。
+    ⚠️ 不显示满分 / 档位 / 分母（spec §9）：「明细 ›」进信用分明细页。
+  -->
+  <view class="profile__section">
+    <skeleton wx:if="{{ phase === 'loading' }}" variant="credit" />
+    <view wx:elif="{{ phase === 'failed' }}" class="profile__block-error">{{ blockLoadFailed }}</view>
+    <view
+      wx:else
+      class="profile__credit"
+      bindtap="onScoreLogs"
+      hover-class="profile__credit_active"
+      hover-start-time="0"
+      hover-stay-time="0"
+      aria-role="button"
+    >
+      <icon name="profile.points" tone="primary" size="{{20}}" />
+      <view class="profile__credit-label">{{ creditTitle }}</view>
+      <view class="profile__credit-score">{{ score }}</view>
+      <view class="profile__credit-detail">
+        <view class="profile__credit-detail-label">{{ creditDetail }}</view>
+        <icon name="nav.disclosure" tone="weak" size="{{16}}" />
+      </view>
+    </view>
+  </view>
+
+  <!-- ④ 我的服务 —— 「我的预约」一行，不带数量 / 摘要。 -->
+  <view class="profile__group">
+    <view class="profile__group-title">{{ servicesTitle }}</view>
+    <view class="profile__group-card">
+      <view
+        class="profile__cell"
+        bindtap="onReservations"
+        hover-class="profile__cell_active"
+        hover-start-time="0"
+        hover-stay-time="0"
+        aria-role="button"
+      >
+        <icon name="profile.reservations" tone="sub" size="{{20}}" />
+        <view class="profile__cell-label">{{ reservationsLabel }}</view>
+        <icon name="nav.disclosure" tone="weak" size="{{16}}" />
+      </view>
+    </view>
+  </view>
+
+  <!--
+    ⑤ 帮助与支持 —— 复用 `STATIC_EXITS` 三件套（计费说明 / 常见问题 / 联系客服）。
+    ⚠️ 「联系客服」是原生 `open-type="contact"` 按钮，其余两条按 `id` 选路由；
+       行为选择器用 id，不用 label。
+  -->
+  <view class="profile__group">
+    <view class="profile__group-title">{{ helpTitle }}</view>
+    <view class="profile__group-card">
+      <block wx:for="{{ staticExits }}" wx:key="id">
+        <button
+          wx:if="{{ item.id === contactExitId }}"
+          class="profile__cell profile__cell--button"
+          open-type="contact"
+          hover-class="profile__cell_active"
+          hover-start-time="0"
+          hover-stay-time="0"
+        >
+          <icon name="{{ item.icon }}" tone="sub" size="{{20}}" />
+          <view class="profile__cell-label">{{ item.label }}</view>
+          <icon name="nav.disclosure" tone="weak" size="{{16}}" />
+        </button>
+        <view
+          wx:else
+          class="profile__cell"
+          data-exit-id="{{ item.id }}"
+          bindtap="onStaticExit"
+          hover-class="profile__cell_active"
+          hover-start-time="0"
+          hover-stay-time="0"
+          aria-role="button"
+        >
+          <icon name="{{ item.icon }}" tone="sub" size="{{20}}" />
+          <view class="profile__cell-label">{{ item.label }}</view>
+          <icon name="nav.disclosure" tone="weak" size="{{16}}" />
+        </view>
+      </block>
+    </view>
+  </view>
+</view>
+
+<!--
+  ⑥ 昵称编辑弹层（半屏）。
+  ⚠️ 只有昵称一项：头像本票只读，弹层里不出现头像位 / 上传入口。
+  ⚠️ `input type="nickname"` 让微信提供昵称快捷填写；`maxlength` 不设为 64 ——
+     那样用户永远触发不到「昵称最多 64 个字符」，客户端校验就成了一句摆饰。
+  ⚠️ 保存失败留在弹层内（`nicknameError`），不关弹层、不丢草稿。
+-->
+<van-popup
+  show="{{ popupVisible }}"
+  position="bottom"
+  round
+  root-portal
+  custom-class="app-popup-shadow"
+  bind:close="onCancelEdit"
+>
+  <view class="profile__sheet">
+    <view class="profile__sheet-title">{{ editProfileLabel }}</view>
+    <view class="profile__field">
+      <view class="profile__field-label">{{ nicknameLabel }}</view>
+      <input
+        class="profile__input"
+        type="nickname"
+        value="{{ nicknameDraft }}"
+        bindinput="onNicknameInput"
+      />
+    </view>
+    <view wx:if="{{ nicknameError }}" class="profile__field-error">{{ nicknameError }}</view>
+    <view class="profile__sheet-actions">
+      <van-button class="profile__sheet-cancel" plain block bind:click="onCancelEdit">
+        {{ cancelLabel }}
+      </van-button>
+      <van-button
+        class="profile__sheet-save"
+        type="primary"
+        block
+        loading="{{ saving }}"
+        disabled="{{ saving }}"
+        bind:click="onSaveProfile"
+      >
+        {{ saveLabel }}
+      </van-button>
+    </view>
+  </view>
+</van-popup>
