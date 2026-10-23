@@ -78,7 +78,7 @@ page {
   padding: 0;
   font-size: v.$font-size-title;
   line-height: 88rpx;
-  border-radius: v.$radius-component;
+  border-radius: v.$radius-control;
 
   // 小程序 `<button>` 自带一层边框，reset 掉。
   &::after {
@@ -88,16 +88,16 @@ page {
 
 // 主行动 —— 「重新扫码」。它是这一屏最该被点的那一个（用户手上的码没用了，
 // 而柜机上现在就贴着一张能用的）。
+// 白字压 `$color-primary-active`（#008655，4.62 ≥ AA）；`$color-primary` 原值只做装饰。
 .entry-failed__primary {
   color: v.$color-bg-card;
-  background: v.$color-primary;
+  background: v.$color-primary-active;
 }
 
-// ⚠️ 按下态用 `$color-primary-hover`，不是 `-active` —— 这两个 token 的语义
-// 不同：`-hover` 是「按下态」，`-active` 是「正常/激活档」且同时是绿色文字的 ink。
-// 与 `empty-state__action_active` / `failure-exit__retry` 保持一致。
+// ⚠️ 按下态用 `$color-primary-pressed`（#00744a，白字 5.84），与正常态分开。
+// 与 `empty-state__action_active` / `failure-exit__retry_active` 保持一致。
 .entry-failed__primary_active {
-  background: v.$color-primary-hover;
+  background: v.$color-primary-pressed;
 }
 
 // 次行动 —— 「我的订单」。它退到描边样式：主行动是「再扫一次」，而出口是备选。
@@ -273,7 +273,7 @@ page {
   line-height: 88rpx;
   background: v.$color-bg-card;
   border: 1px solid v.$color-border;
-  border-radius: v.$radius-component;
+  border-radius: v.$radius-control;
 
   &::after {
     border: none;

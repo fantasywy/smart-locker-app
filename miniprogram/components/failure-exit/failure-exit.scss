@@ -43,11 +43,12 @@
 }
 
 .failure-exit__retry {
-  // 主按钮：白字压主色底（`$color-primary` 作底色，绿不新增颜色）。
-  background: v.$color-primary;
+  // 主按钮：白字压 `$color-primary-active`（#008655，4.62 ≥ AA）。
+  // `$color-primary` 原值压白只有 2.66，只能做装饰，不得承载白字。
+  background: v.$color-primary-active;
   color: v.$color-bg-card;
   font-size: v.$font-size-body;
-  border-radius: v.$radius-component;
+  border-radius: v.$radius-control;
   margin-top: v.$spacing-xxl;
   // ⚠️ 按钮宽度按内容 + 内边距，不撑满 —— 失败出口的主动作只有一个，撑满会把
   // 下面三个静态出口压成配角，而它们是并列的三条路。
@@ -56,15 +57,15 @@
   line-height: 44px;
   height: 44px;
 
-  // 小程序里 button 自带边框与背景，按下态用 `-hover` 值（小程序无 hover，
-  // 这个值留给「按下」反馈）。
+  // 小程序里 button 自带边框与背景，按下态交给 `hover-class`（不用 `:active`）。
   &::after {
     border: none;
   }
+}
 
-  &:active {
-    background: v.$color-primary-hover;
-  }
+// 按下态专用填充：白字压 `$color-primary-pressed`（#00744a，5.84 ≥ AA）。
+.failure-exit__retry_active {
+  background: v.$color-primary-pressed;
 }
 
 .failure-exit__statics {

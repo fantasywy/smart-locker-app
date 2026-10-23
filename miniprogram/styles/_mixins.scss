@@ -110,7 +110,7 @@ $all-tones: (ok, info, warn, danger, muted);
   // ⚠️ 纯白，不是 $color-bg-page —— 浅灰面会把三个 ink 全部压破 AA（见上面的实测）。
   background: v.$color-bg-card;
   border: 1px solid v.$color-border;
-  border-radius: v.$radius-component;
+  border-radius: v.$radius-chip;
   color: v.$color-text-sub;
 
   @if list.index($tones, ok) {

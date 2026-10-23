@@ -13,7 +13,11 @@
     <view class="failure-exit__detail">{{ detail }}</view>
   </view>
 
-  <button class="failure-exit__retry" bindtap="onRetry">{{ retryLabel }}</button>
+  <button
+    class="failure-exit__retry"
+    hover-class="failure-exit__retry_active"
+    bindtap="onRetry"
+  >{{ retryLabel }}</button>
 
   <!-- 静态出口三件套 —— 与「我的」页是同一份内容（「两条路一份内容」） -->
   <view class="failure-exit__statics">
