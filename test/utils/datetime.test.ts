@@ -17,6 +17,7 @@ import {
   formatReservationRange,
   formatRestrictionSince,
   formatSlotTime,
+  formatStoredTime,
 } from '../../miniprogram/utils/datetime'
 
 /** 服务端回显的形态：带 `+08:00`（已实测）。 */
@@ -92,6 +93,27 @@ describe('#23 七种时间写法', () => {
   })
 })
 
+describe('#67 首页卡 · 存入时间三档写法', () => {
+  const now = new Date('2026-10-23T12:00:00+08:00')
+
+  it('当天 → `今天 HH:mm`；当年 → `MM-DD HH:mm`；跨年 → `YYYY-MM-DD HH:mm`', () => {
+    expect(formatStoredTime('2026-10-23T09:05:00+08:00', now)).toBe('今天 09:05')
+    expect(formatStoredTime('2026-04-01T09:00:00+08:00', now)).toBe('04-01 09:00')
+    expect(formatStoredTime('2025-04-01T09:00:00+08:00', now)).toBe('2025-04-01 09:00')
+  })
+
+  it('「今天」按服务端时刻的东八区日期判定，不受运行设备时区影响', () => {
+    expect(formatStoredTime('2026-10-23T00:30:00+08:00', now)).toBe('今天 00:30')
+    expect(formatStoredTime('2026-10-22T23:30:00+08:00', now)).toBe('10-22 23:30')
+  })
+
+  it('解析不出时返回空串，不编一个时刻出来', () => {
+    expect(formatStoredTime('', now)).toBe('')
+    expect(formatStoredTime('not-a-date', now)).toBe('')
+    expect(formatStoredTime('2026-10-23T09:05:00+08:00', new Date(Number.NaN))).toBe('')
+  })
+})
+
 describe('#23 时区硬规则：只用服务端回显的值，不用客户端本地时钟重算', () => {
   it('⚠️ 服务端说几点，屏上就是几点 —— 与运行设备的时区无关', () => {
     // 附注逐字：「展示的是**服务端回显**的时刻（响应带 `+08:00`）。
@@ -111,9 +133,13 @@ describe('#23 时区硬规则：只用服务端回显的值，不用客户端本
     expect(formatOrderTime('2026-04-01T09:00:00-05:00')).toBe('04-01 09:00')
   })
 
-  it('⚠️ 本模块不提供任何「取当前时间」的入口 —— 双源真话在类型上就写不出来', () => {
+  it('⚠️ 本模块不提供任何**隐式**「取当前时间」的入口 —— 双源真话在类型上就写不出来', () => {
     // 落地方式不是「记得别这么写」，而是**根本不给这个能力**（见 datetime.ts 文件头规则 1）。
     // 判据取模块的导出清单：多出一个 `formatNow` / `now` 之类的导出就是开了一个口子。
+    //
+    // ⚠️ `formatStoredTime` 需要「现在」来做「今天」判断，但 `now` 是**显式入参**：
+    // 模块自己仍然没有任何 `new Date()` 去猜当前时刻。这是「调用方给参照系」而不是
+    // 「格式化层自己读时钟」—— 后者正是这条纪律要挡的东西。
     //
     // ⚠️ 这份清单是**穷举**的（`toEqual` 而非 `toContain`）—— 所以新增导出时这条会红，
     // 逼着作者回来说明「新增的这个为什么不算一个读时钟的口子」。
@@ -128,6 +154,7 @@ describe('#23 时区硬规则：只用服务端回显的值，不用客户端本
         'formatReservationRange',
         'formatRestrictionSince',
         'formatSlotTime',
+        'formatStoredTime',
       ])
     })
   })

@@ -131,28 +131,92 @@ page {
 }
 
 // ---------------------------------------------------------------------------
-// 订单区占位（过渡期的债，由 #67 接手）
+// 进行中订单区（#67）
 // ---------------------------------------------------------------------------
-.home__orders-placeholder {
-  padding: v.$spacing-xl v.$spacing-lg;
-  background: v.$color-bg-card;
-  border: 1px solid v.$color-border;
-  border-radius: v.$radius-card;
-  text-align: center;
+.home__orders {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-md;
 }
 
-.home__orders-placeholder-title {
+.home__orders-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+}
+
+.home__orders-title {
+  // 分组标题：14px / 600 / sub（spec §2）。
   color: v.$color-text-sub;
   font-size: v.$font-size-body;
   line-height: 1.5;
   font-weight: v.$font-weight-semibold;
 }
 
-.home__orders-placeholder-hint {
-  margin-top: v.$spacing-xs;
+.home__view-all {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-xs;
+  flex-shrink: 0;
+  padding: v.$spacing-xs v.$spacing-sm;
+  border-radius: v.$radius-chip;
+}
+
+.home__view-all_active {
+  background: v.$color-bg-card;
+}
+
+.home__view-all-label {
   color: v.$color-text-sub;
   font-size: v.$font-size-aux;
   line-height: 1.5;
+}
+
+.home__orders-cards {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-md;
+}
+
+// 首屏失败 —— 页内重试块，不是整页失败出口；扫码主行动不受影响。
+.home__orders-failed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: v.$spacing-xl v.$spacing-lg;
+  text-align: center;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+}
+
+.home__orders-failed-title {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.6;
+}
+
+.home__orders-failed-action {
+  width: 100%;
+  height: 80rpx;
+  margin: v.$spacing-lg 0 0;
+  padding: 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-body;
+  line-height: 80rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.home__orders-failed-action_active {
+  color: v.$color-primary-pressed;
+  background: v.$color-bg-page;
 }
 
 // ---------------------------------------------------------------------------

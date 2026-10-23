@@ -30,7 +30,11 @@
 // ⚠️ 本组件是纯展示 + 两个事件：不读 storage、不发请求、不碰 `wx.*`。
 
 import { ORDER_COPY, PICKUP_SHEET_COPY } from '../../startup/copy'
-import { formatOrderTime, formatOrderTimeInProgress } from '../../utils/datetime'
+import {
+  formatOrderTime,
+  formatOrderTimeInProgress,
+  formatStoredTime,
+} from '../../utils/datetime'
 import { formatMoney } from '../../utils/money'
 import { resolveOrderStatus } from '../../utils/order-status'
 import type { OrderStatusBadge } from '../../utils/order-status'
@@ -87,11 +91,29 @@ function variantOf(value: unknown): OrderCardVariant {
   return value === 'home' ? 'home' : value === 'history' ? 'history' : 'active'
 }
 
-/** 第二行 —— 只有时间与格口都确定时才拼接，避免渲染出一个悬空的「·」。 */
-function cellLineOf(order: OrderCardOrder, status: OrderStatusBadge): string {
+/**
+ * 第二行 —— 只有时间与格口都确定时才拼接，避免渲染出一个悬空的「·」。
+ *
+ * ⚠️ **`home` 变体的时间写法与列表不同**（spec §2）：首页卡的格口行是
+ * `cellNo · 今天 HH:mm / MM-DD HH:mm / YYYY-MM-DD HH:mm`，没有「存入」前缀；
+ * 列表卡沿用 `formatOrderTimeInProgress()` 的「存入 MM-DD HH:mm」。
+ * 两种写法都在 `utils/datetime.ts` 里，组件只按变体选函数。
+ */
+function cellLineOf(
+  order: OrderCardOrder,
+  status: OrderStatusBadge,
+  variant: OrderCardVariant,
+): string {
   if (status.key === 'cancelled') return ''
 
   const cellNo = order.cellNo
+
+  if (variant === 'home') {
+    if (order.startAt === null) return cellNo
+    const time = formatStoredTime(order.startAt, new Date())
+    return time === '' ? cellNo : `${cellNo}${CELL_SEPARATOR}${time}`
+  }
+
   if (status.key === 'waitingDrop' || status.key === 'pendingPayment') return cellNo
 
   if (status.key === 'stored' || status.key === 'timeout') {
@@ -195,7 +217,7 @@ function viewOf(order: OrderCardOrder, variant: OrderCardVariant): Partial<Order
     siteName: order.siteName,
     statusLabel: status.label,
     statusTone: status.tone,
-    cellLine: cellLineOf(order, status),
+    cellLine: cellLineOf(order, status, variant),
     showPickupCode: showPickupCodeOf(order, status, variant),
     pickupCodeLabel: ORDER_COPY.pickupCodeLabel,
     pickupCode: order.pickupCode ?? '',

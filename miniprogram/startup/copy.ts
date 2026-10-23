@@ -86,31 +86,6 @@ export const CONTACT_EXIT_ID: StaticExitId = 'contact'
 export const SKELETON_ROW_COUNT = 3
 
 /**
- * 闸门放行后，业务数据区在**订单列表落地之前**的占位文案。
- *
- * ⚠️⚠️ **这是本票唯一一处「占位文案」，且它是一笔明确的债。**
- *
- * 文案纪律：用户可见的每一个字都归文案层。这两句**没有定稿出处** ——
- * 它们不是定稿，是本票为了让「闸门通了」这件事**在真机上可被看见**而临时写下的。
- * 订单列表落地时，这块占位由列表的**空态**取代，
- * 届时这两句**必须一起删掉**（空态的定稿是「还没有订单」+「扫码存件」入口）。
- *
- * ⚠️ 第一版把它们直接写在 `index.wxml` 里，且第二句是「订单列表将在后续票中落地」——
- * 那是一句**开发者台词**（它说的是本仓库的排期，不是用户的事），
- * 而它恰好出现在本票唯一会渲染成功的界面上。review 抓到了这一点，已改。
- * 这里保留的措辞只说用户看得懂的事：**已经连上了**、**内容还没有**。
- */
-export const DATA_AREA_PLACEHOLDER_TITLE = '已连接'
-
-/**
- * 占位块第二行 —— ⚠️ 与标题同属**过渡期债**，见 `DATA_AREA_PLACEHOLDER_TITLE`。
- *
- * 刻意**不提**任何内部排期（「后续票」/「待开发」一类）：那是开发者台词。
- * 用户看到的是「这里暂时是空的」，而不是「你们还没做完」。
- */
-export const DATA_AREA_PLACEHOLDER_HINT = '订单内容稍后在这里出现'
-
-/**
  * **三个列表页的空态** —— 三行**逐字**，`components/empty-state/` 的内容来源。
  *
  * ⚠️ 它们为什么在**这一张表**里、而不是分散在三个页面目录里：三个空态共用一个组件
@@ -174,7 +149,12 @@ export const SCORE_LOGS_COPY = {
  * ⚠️ 逐字依据（spec §2）：
  *   • `wordmark` / `tagline` / `scanButton` —— 品牌区与主按钮定稿；
  *   • `notLockerCode` —— 「这不是柜机码，请扫柜机上的二维码」；
- *   • `scanFailed` —— 「扫码没成功，请重试」。
+ *   • `scanFailed` —— 「扫码没成功，请重试」；
+ *   • `nearbyEntry` —— 附近入口条「附近柜机」；
+ *   • `ordersTitle` —— 分组标题「进行中」；
+ *   • `viewAll` —— 「查看全部 N 个」的模板（N 是过滤后的条数）；
+ *   • `ordersLoadFailed` / `ordersRetry` —— 订单区页内失败块；
+ *   • `refreshFailed` —— 下拉刷新失败 toast。
  *
  * ⚠️ **相机权限不在这张表里，也不在任何界面里**：`wx.scanCode` 不写 `authSetting`，
  * `wx.getSetting()` 无法区分「未请求」与「被拒绝」，所以任何「请开启相机权限」
@@ -201,15 +181,29 @@ export const HOME_PAGE_COPY = {
   nearbyEntry: '附近柜机',
 
   /**
-   * 订单区占位 —— ⚠️ **过渡期的债**（#20 留下、#67 接手）。
+   * 进行中订单区的分组标题 —— 逐字「进行中」。
    *
-   * 首页的订单区在本票仍是占位；这两句沿用 #20 已登记的占位文案，
-   * 让「闸门通了、首页真的渲染出来了」在真机上一眼可见。
-   * ⚠️ #67 落地进行中订单区时，这两句**必须一起删除**（届时由订单区的空态取代），
-   * 不要在首页继续保留一段「已连接」的开发者台词。
+   * ⚠️ 与订单列表的 `ORDER_LIST_COPY.activeGroup` 是**同一个词**：同一个分组在
+   * 首页与列表上不能有两种叫法。这里仍单列一份，是因为首页文案表不反向依赖列表页。
    */
-  ordersPlaceholderTitle: DATA_AREA_PLACEHOLDER_TITLE,
-  ordersPlaceholderHint: DATA_AREA_PLACEHOLDER_HINT,
+  ordersTitle: '进行中',
+
+  /**
+   * 「查看全部」入口 —— 逐字模板「查看全部 {count} 个」。
+   *
+   * ⚠️ `{count}` 是**过滤后的条数**，不是两次查询 `total` 的合计；模板只在
+   * `N > 2` 时渲染。把数字拼进字符串的动作在页面里做，wxml 不写字面量。
+   */
+  viewAll: '查看全部 {count} 个',
+
+  /** 订单区首屏失败标题 —— 逐字「订单加载失败」。 */
+  ordersLoadFailed: '订单加载失败',
+
+  /** 订单区首屏失败的重试按钮 —— 与全站失败出口同一个词。 */
+  ordersRetry: RETRY_LABEL,
+
+  /** 下拉刷新失败 toast —— 逐字；保留旧卡，不清空。 */
+  refreshFailed: '刷新失败，请稍后重试',
 } as const
 
 /**
@@ -514,6 +508,16 @@ export type OrderStatusKey = keyof typeof ORDER_STATUS_LABELS
  * 那不是误报，它正是「同一个词有两个家」的证据。
  */
 export const STORED_TIME_PREFIX = '存入'
+
+/**
+ * 相对今天的日期前缀 —— 逐字「今天」。
+ *
+ * ⚠️ 首页进行中卡的存入时间按「今天 HH:mm / MM-DD HH:mm / YYYY-MM-DD HH:mm」三档
+ * 显示（spec §2 / §14.3）；预约创建页的日期上下文也用同一个词。两处各写一个
+ * 「今天」时，文案守卫会把 `datetime.ts` 里的字面量判成违规 —— 它不是误报，
+ * 而是「同一个词有两个家」的证据。
+ */
+export const TODAY_LABEL = '今天'
 
 /**
  * 订单列表「未存入」行的时间位文案 —— 逐字「关好柜门才算存入」。
@@ -844,8 +848,8 @@ export const RESERVATION_CREATE_COPY = {
   /** 使用时长分组标题。 */
   durationSection: '使用时长',
 
-  /** 日期上下文一 —— 逐字「今天」。 */
-  today: '今天',
+  /** 日期上下文一 —— 逐字「今天」（与首页卡的时间前缀同一个词）。 */
+  today: TODAY_LABEL,
   /** 日期上下文二 —— 逐字「明天」。 */
   tomorrow: '明天',
 

@@ -13,8 +13,6 @@ import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { fileURLToPath } from 'node:url'
 import {
-  DATA_AREA_PLACEHOLDER_HINT,
-  DATA_AREA_PLACEHOLDER_TITLE,
   EMPTY_STATES,
   FAILURE_DETAIL,
   FAILURE_TITLE,
@@ -33,6 +31,7 @@ import {
   ORDER_COPY,
   ORDER_STATUS_LABELS,
   STORED_TIME_PREFIX,
+  TODAY_LABEL,
   NOT_YET_STORED_HINT,
   NO_RESULT_COPY,
   PICKUP_SHEET_COPY,
@@ -119,8 +118,7 @@ const allSources = (): string[] => collect(miniprogramDir, ['.ts', '.wxml', '.sc
  * 但两道网都要有人补，**别再假设它是自动的**。
  *
  * 构成：三个失败出口的字符串常量 + `STATIC_EXITS` 每一项的 `label`
- * + 数据区占位那两句 + `PAGE_TITLES` 的每一个标题 + `EMPTY_STATES` 的每一句
- * + 首页的 `HOME_PAGE_COPY`。
+ * + `PAGE_TITLES` 的每一个标题 + `EMPTY_STATES` 的每一句 + 首页的 `HOME_PAGE_COPY`。
  */
 const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   FAILURE_TITLE,
@@ -130,8 +128,6 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   // 内容页与柜机页都只用常量插值；它若以字面量出现在任何页面里，就是又抄了一份。
   LOAD_FAILED_DETAIL,
   ...STATIC_EXITS.map((exit) => exit.label),
-  DATA_AREA_PLACEHOLDER_TITLE,
-  DATA_AREA_PLACEHOLDER_HINT,
   // ⚠️ `PAGE_TITLES` 的值 —— `#22` 新增的导出（见上方说明：新增导出必须回来补一次）。
   ...Object.values(PAGE_TITLES),
   // ⚠️ `NAVIGATION_COPY` / `CONFIRM_COPY` —— `#59` 新增的导出。
@@ -189,8 +185,9 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   // ⚠️ 单字档名（小 / 中 / 大）在 `flattenCopy` 里会变成「任意源码出现该字就报」的宽判据，
   // 因此下面按长度 ≥2 过滤；档名由同表的「特大」与站卡字段断言继续覆盖。
   ...flattenCopy(NEARBY_COPY).filter((literal) => literal.length >= 2),
-  // ⚠️ `STORED_TIME_PREFIX` —— 从 `datetime.ts` 的字面量提升出来的共享词。
+  // ⚠️ `STORED_TIME_PREFIX` / `TODAY_LABEL` —— 从 `datetime.ts` 的字面量提升出来的共享词。
   STORED_TIME_PREFIX,
+  TODAY_LABEL,
   NOT_YET_STORED_HINT,
   NO_RESULT_COPY,
 ].filter((literal) => literal !== '')
