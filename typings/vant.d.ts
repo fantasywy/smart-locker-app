@@ -7,7 +7,8 @@
 //   `setData` 全部报 TS2339），所以不能把 Vant 的 d.ts 拉进编译图。
 //
 // ⚠️ 这是**边界替身**，不是第二份 Vant 类型：只声明本仓库实际调用的
-//   Toast(options) / Dialog.confirm(options)，其余字段用 index signature 放行。
+//   Toast(options) / Dialog.confirm(options) / Dialog.alert(options)，其余字段用
+//   index signature 放行。
 //   真正的运行时代码仍由开发者工具「构建 npm」从 `@vant/weapp/lib` 解析。
 
 declare module '@vant/weapp/toast/toast' {
@@ -33,6 +34,7 @@ declare module '@vant/weapp/dialog/dialog' {
   }
   const Dialog: {
     (options: DialogOptions): Promise<unknown>
+    alert(options: DialogOptions): Promise<unknown>
     confirm(options: DialogOptions): Promise<unknown>
   }
   export default Dialog

@@ -16,12 +16,15 @@ import { CONFIRM_COPY } from '../../miniprogram/startup/copy'
 const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
   dialogConfirm: vi.fn(),
+  dialogAlert: vi.fn(),
 }))
 
 vi.mock('@vant/weapp/toast/toast', () => ({ default: mocks.toast }))
-vi.mock('@vant/weapp/dialog/dialog', () => ({ default: { confirm: mocks.dialogConfirm } }))
+vi.mock('@vant/weapp/dialog/dialog', () => ({
+  default: { confirm: mocks.dialogConfirm, alert: mocks.dialogAlert },
+}))
 
-import { confirm, showToast } from '../../miniprogram/utils/feedback'
+import { alert, confirm, showToast } from '../../miniprogram/utils/feedback'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
 const miniprogramDir = join(repoRoot, 'miniprogram')
@@ -29,6 +32,7 @@ const miniprogramDir = join(repoRoot, 'miniprogram')
 beforeEach(() => {
   mocks.toast.mockReset()
   mocks.dialogConfirm.mockReset()
+  mocks.dialogAlert.mockReset()
 })
 
 describe('#59 反馈适配层 · 轻提示', () => {
@@ -48,6 +52,25 @@ describe('#59 反馈适配层 · 轻提示', () => {
     mocks.toast.mockReset()
     showToast('订单已取消')
     expect(mocks.toast.mock.calls[0]?.[0]).not.toHaveProperty('duration')
+  })
+})
+
+describe('#63 反馈适配层 · 告知弹窗', () => {
+  it('⚠️ 只有「知道了」一个出口；文案由调用方逐字传入', async () => {
+    mocks.dialogAlert.mockResolvedValue(undefined)
+
+    await alert({
+      title: '取消这单？',
+      message: '柜门已开启，请放入物品后关门，或联系客服',
+    })
+
+    expect(mocks.dialogAlert).toHaveBeenCalledTimes(1)
+    expect(mocks.dialogAlert.mock.calls[0]?.[0]).toMatchObject({
+      title: '取消这单？',
+      message: '柜门已开启，请放入物品后关门，或联系客服',
+      confirmButtonText: CONFIRM_COPY.confirm,
+    })
+    expect(mocks.dialogAlert.mock.calls[0]?.[0]).not.toHaveProperty('showCancelButton')
   })
 })
 
