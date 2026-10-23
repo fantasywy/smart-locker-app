@@ -1,0 +1,110 @@
+// 订单列表页样式 —— 全部走设计 token，零裸 hex。
+//
+// 版式（spec §6）：单列表；组标题 14px / 500 sub；卡片之间 12px；
+// 空态 / 首屏失败 / 加载更多都落在列表区域内部，导航栏与 tabBar 始终可用。
+//
+// ⚠️ 单位：布局几何用 rpx；字号 / 1px 边框 / 圆角用 px。
+// ⚠️ 不写 transition / animation / keyframes / opacity —— 按下反馈只换颜色。
+
+@use '../../styles/variables' as v;
+
+page {
+  min-height: 100vh;
+  // ⚠️ 显式设一次主文字色 —— 页面根节点不得依赖继承。
+  color: v.$color-text-main;
+  background: v.$color-bg-page;
+  font-family: v.$font-family;
+}
+
+.page {
+  padding: v.$spacing-lg v.$spacing-lg v.$spacing-xxxl;
+}
+
+// ---------------------------------------------------------------------------
+// 分组
+// ---------------------------------------------------------------------------
+.order-list__group + .order-list__group {
+  margin-top: v.$spacing-xxl;
+}
+
+.order-list__group-title {
+  margin-bottom: v.$spacing-md;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  font-weight: v.$font-weight-medium;
+  line-height: 1.5;
+}
+
+.order-list__cards {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-md;
+}
+
+// ---------------------------------------------------------------------------
+// 「还有更多」/「加载失败，点击重试」—— 都是列表底部的整行按钮
+// ---------------------------------------------------------------------------
+.order-list__more {
+  width: 100%;
+  height: 88rpx;
+  margin: v.$spacing-md 0 0;
+  padding: 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-body;
+  line-height: 88rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.order-list__more_active {
+  background: v.$color-bg-page;
+}
+
+// 失败态用警示 ink（白底 4.77 ✅），不是语义原值。
+.order-list__more--failed {
+  color: v.$color-warning-ink;
+}
+
+// ---------------------------------------------------------------------------
+// 首屏失败 —— 页内重试块（不是整页失败出口）
+// ---------------------------------------------------------------------------
+.order-list__retry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 120rpx v.$spacing-lg 0;
+  text-align: center;
+}
+
+.order-list__retry-detail {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.6;
+}
+
+.order-list__retry-action {
+  width: 100%;
+  height: 96rpx;
+  margin: v.$spacing-xxl 0 0;
+  padding: 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-title;
+  line-height: 96rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.order-list__retry-action_active {
+  color: v.$color-primary-pressed;
+  background: v.$color-bg-page;
+}

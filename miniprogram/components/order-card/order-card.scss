@@ -1,0 +1,130 @@
+// 订单卡样式 —— 全部走设计 token，零裸 hex。
+//
+// 版式（spec §6）：白底 / 16px 圆角 / 16px 内边距 / 12px 卡间距 / $shadow-card；
+// 首行站点名 16px / 600 + 状态标签；第二行格口与时间 12px sub；
+// 取件码块浅底、28px / 600 / 字距 4px（要照着敲，字距是可用性不是装饰）。
+//
+// ⚠️ 单位：布局几何用 rpx；字号 / 1px 边框 / 圆角用 px。
+// ⚠️ 不写 transition / animation / opacity —— 按下反馈只换背景色。
+
+@use '../../styles/variables' as v;
+@use '../../styles/mixins' as m;
+
+.order-card {
+  display: block;
+  color: v.$color-text-main;
+}
+
+.order-card__surface {
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+}
+
+// 按下反馈只换底色（spec §12 动效白名单第 ③ 条）。
+.order-card__surface_active {
+  background: v.$color-bg-page;
+}
+
+.order-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+}
+
+.order-card__site {
+  min-width: 0;
+  overflow: hidden;
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  font-weight: v.$font-weight-semibold;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-card__status {
+  @include m.tone-chip((ok, warn, muted));
+  flex-shrink: 0;
+}
+
+.order-card__cell {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.order-card__pickup {
+  margin-top: v.$spacing-md;
+  padding: v.$spacing-md;
+  text-align: center;
+  background: v.$color-bg-page;
+  border-radius: v.$radius-chip;
+}
+
+.order-card__pickup-label {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
+}
+
+.order-card__pickup-code {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-main;
+  font-size: v.$font-size-display;
+  line-height: v.$line-height-display;
+  font-weight: v.$font-weight-semibold;
+  // 取件码要照着敲；4px 字距是可用性而不是装饰。
+  letter-spacing: 4px;
+}
+
+.order-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+  margin-top: v.$spacing-md;
+}
+
+.order-card__amount {
+  display: flex;
+  align-items: baseline;
+  gap: v.$spacing-xs;
+}
+
+.order-card__amount-label {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+}
+
+.order-card__amount-value {
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  font-weight: v.$font-weight-semibold;
+}
+
+.order-card__action {
+  height: 72rpx;
+  margin: 0;
+  margin-left: auto;
+  padding: 0 v.$spacing-lg;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-body;
+  line-height: 72rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-primary;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.order-card__action_active {
+  color: v.$color-primary-pressed;
+  background: v.$color-primary-tint;
+}

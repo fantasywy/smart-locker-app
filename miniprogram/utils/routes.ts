@@ -64,9 +64,8 @@ export const RESERVATION_CREATE_PATH = 'pages/reservation-create/reservation-cre
 /**
  * **首页**的页面路径 —— 导航栏栈深 1 时左侧「首页」出口的目标。
  *
- * ⚠️ 与 `ORDER_LIST_PATH` 分开命名：`#66` 之前两者恰好都指向 `pages/index/index`
- * （首页暂时承载订单列表）；`#66` 之后订单列表迁到独立 tab，两者会分开。
- * 现在就把语义分开，`home()` 与 `orders()` 才不会在迁移时被一起改错 ——
+ * ⚠️ 与 `ORDER_LIST_PATH` 分开命名：`HOME_PATH` 是首页，`ORDER_LIST_PATH`
+ * 是独立的订单 tab。语义分开，`home()` 与 `orders()` 才不会在改路径时被一起改错 ——
  * `wx.switchTab` 的目标写错是**静默失败**，正是本模块存在的理由。
  *
  * ⚠️ 必须保持为 `app.json` 的 `tabBar.list[].pagePath` 之一；守卫见
@@ -92,3 +91,12 @@ export const BILLING_INFO_PATH: PagePath = 'pages/billing-info/billing-info'
  * 用途与 `BILLING_INFO_PATH` 相同：登录链失败时也要能打开。
  */
 export const FAQ_PATH: PagePath = 'pages/faq/faq'
+
+/**
+ * **订单详情页**的路径 —— 订单列表卡与首页进行中卡的目的地。
+ *
+ * 用途：整卡点击时 `wx.navigateTo` 叠到当前列表 / 首页之上，返回键回到来源页。
+ * ⚠️ 列表是 tab 页，**不能** `redirectTo`（会把 tab 页从栈里拆掉）；
+ * 详情 → 等待页才用 `redirectTo`（spec §1 导航规则 4 / 5）。
+ */
+export const ORDER_DETAIL_PATH: PagePath = 'pages/order-detail/order-detail'
