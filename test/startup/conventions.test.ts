@@ -26,6 +26,7 @@ import {
   CONFIRM_COPY,
   LOCKER_PAGE_COPY,
   WAITING_PAGE_COPY,
+  LOAD_FAILED_DETAIL,
   STATIC_EXITS,
 } from '../../miniprogram/startup/copy'
 
@@ -111,6 +112,9 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   FAILURE_TITLE,
   FAILURE_DETAIL,
   RETRY_LABEL,
+  // ⚠️ `LOAD_FAILED_DETAIL` —— `#68` 从柜机页提升出来的共用句。
+  // 内容页与柜机页都只用常量插值；它若以字面量出现在任何页面里，就是又抄了一份。
+  LOAD_FAILED_DETAIL,
   ...STATIC_EXITS.map((exit) => exit.label),
   DATA_AREA_PLACEHOLDER_TITLE,
   DATA_AREA_PLACEHOLDER_HINT,

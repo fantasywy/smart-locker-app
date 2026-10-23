@@ -36,9 +36,22 @@
 import { createStartupGate } from '../../startup/gate'
 import type { StartupGate, StartupState } from '../../startup/gate'
 import { HOME_PAGE_COPY } from '../../startup/copy'
+import type { StaticExitId } from '../../startup/copy'
 import { showToast } from '../../utils/feedback'
 import { resolveLockerCode } from '../../utils/locker-code'
-import { LOCKER_PATH } from '../../utils/routes'
+import { BILLING_INFO_PATH, FAQ_PATH, LOCKER_PATH } from '../../utils/routes'
+
+/**
+ * 失败出口里「本地内容页」两类静态出口的落点 —— 行为 id → 路由常量。
+ *
+ * ⚠️ **映射的键是 `id`，不是文案**：`STATIC_EXITS` 把「行为」与「措辞」解耦，
+ * 页面若按 `label` 选目标，改词就会让跳转静默失效。`contact` 不在这张表里 ——
+ * 它由 failure-exit 的 `open-type="contact"` 原生承载，页面不做任何降级。
+ */
+const STATIC_EXIT_PATHS: Partial<Record<StaticExitId, string>> = {
+  billing: BILLING_INFO_PATH,
+  faq: FAQ_PATH,
+}
 
 /**
  * 闸门实例 —— **模块级的单例**，不是 `data` 里的一员。
@@ -161,14 +174,20 @@ Component({
     /**
      * 静态出口里「计费说明」/「常见问题」的点击。
      *
-     * ⚠️ **一期没有这两个页面**（本地内容页不在本票范围）。
-     * 这里**刻意什么都不做** —— 不假装跳转、不弹「敬请期待」
-     * （后者是一句文案，而文案层还没有为它定稿）。
-     * 「联系客服」不走这里：它是 `open-type="contact"`，由微信原生承载
-     * （不做运行时降级、不做电话双出口）。
+     * ✅ #68 起两页都已实现：按 `detail.exitId` 选路由常量，`navigateTo` 到内容页。
+     * 内容端点**免鉴权**，所以即便此刻登录链是失败的，这两页也能真的打开。
+     *
+     * ⚠️ **按 id 选目标，不按 label**：`STATIC_EXITS` 的 id 是行为选择器；
+     * 用文案当选择器会在改词那天让入口静默失效。
+     * ⚠️ 「联系客服」不走这里：它是 `open-type="contact"`，由微信原生承载
+     * （不做运行时降级、不做电话双出口）。未知 / 客服 id 到这里就是什么都不做。
      */
-    onStaticExit(): void {
-      // 有意为空 —— 见方法的注释。
+    onStaticExit(event: WechatMiniprogram.CustomEvent<{ exitId?: string }>): void {
+      const exitId = event.detail?.exitId
+      if (exitId !== 'billing' && exitId !== 'faq') return
+      const target = STATIC_EXIT_PATHS[exitId]
+      if (target === undefined) return
+      wx.navigateTo({ url: `/${target}` })
     },
 
     /**
