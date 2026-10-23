@@ -716,6 +716,7 @@ describe('#63 等待页 · 取件停滞重新开门', () => {
     await tickPolls(timers, 20)
     expect(viewOf(page).phase).toBe('stalled')
     expect(viewOf(page).showReopen).toBe(true)
+    expect(viewOf(page).showCancel).toBe(false)
 
     ;(page.onReopen as () => void)()
     await timers.settle()
