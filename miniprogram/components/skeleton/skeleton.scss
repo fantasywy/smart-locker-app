@@ -152,3 +152,65 @@
   border: 1px solid v.$color-border;
   border-radius: v.$radius-card;
 }
+
+// ---------------------------------------------------------------------------
+// 详情骨架（#64）—— 状态块 / 取件码块 / 两行信息 / 时间轴
+// ---------------------------------------------------------------------------
+// ⚠️ 形状对照订单详情页：首屏加载时布局不能跳，否则内容一到位整页重排。
+// 仍然只用中性 token，不染语义档 —— 此刻还不知道这笔订单是什么状态。
+.skeleton--detail {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-lg;
+  padding: v.$spacing-lg;
+}
+
+.skeleton__detail-status,
+.skeleton__detail-card {
+  display: flex;
+  flex-direction: column;
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+}
+
+.skeleton__detail-status {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.skeleton__detail-time {
+  width: 40%;
+  height: 12px;
+}
+
+.skeleton__detail-code-label {
+  width: 30%;
+  height: 12px;
+  margin: 0 auto;
+}
+
+.skeleton__detail-code-value {
+  width: 50%;
+  height: 32px;
+  margin: v.$spacing-md auto 0;
+}
+
+.skeleton__detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: v.$spacing-sm 0;
+}
+
+.skeleton__detail-row-label {
+  width: 30%;
+  height: 14px;
+}
+
+.skeleton__detail-row-time {
+  width: 30%;
+  height: 12px;
+}

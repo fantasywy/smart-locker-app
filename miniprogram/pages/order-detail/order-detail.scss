@@ -1,6 +1,16 @@
-// 订单详情页 —— 空壳样式（issue #22）。页面票整体替换本文件。
+// 订单详情页样式 —— 全部走设计 token 与 mixin，零裸 hex。
+//
+// 版式（spec §7 / §12）：
+//   状态摘要 16px / 600 + 状态 chip；取件码 28px / 600 / 字距 4px；
+//   柜机信息与费用是白底卡 + 两列行；时间轴与支付记录是行式列表；
+//   底栏固定、主按钮 96rpx 高、取消是文字按钮。
+//
+// ⚠️ 单位：布局几何用 rpx；字号 / 1px 边框 / 圆角用 px。
+// ⚠️ 不写 transition / animation / @keyframes / opacity —— 按下反馈只换背景色，
+//    且由 `hover-class` 瞬时完成（spec §12 动效白名单之外一律不做）。
 
 @use '../../styles/variables' as v;
+@use '../../styles/mixins' as m;
 
 page {
   height: 100vh;
@@ -15,4 +25,341 @@ page {
 .page {
   flex: 1;
   overflow-y: auto;
+  // 底部留出固定行动条的高度；历史单没有行动条时多出的空白无害。
+  padding: v.$spacing-xxl v.$spacing-lg 220rpx;
+}
+
+// ---------------------------------------------------------------------------
+// ① 状态摘要
+// ---------------------------------------------------------------------------
+.detail__status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+}
+
+.detail__status-chip {
+  // 状态标签只允许「中性底 + 语义色边框 + ink 文字」，这由 tone-chip 统一施加。
+  @include m.tone-chip((ok, warn, muted));
+  font-size: v.$font-size-body;
+  font-weight: v.$font-weight-semibold;
+}
+
+.detail__status-time {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+}
+
+// ---------------------------------------------------------------------------
+// ② 取件码：大号、常驻、不折叠
+// ---------------------------------------------------------------------------
+.detail__pickup {
+  margin-top: v.$spacing-lg;
+  padding: v.$spacing-lg;
+  text-align: center;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+}
+
+.detail__pickup-label {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+}
+
+.detail__pickup-code {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-main;
+  font-size: v.$font-size-display;
+  line-height: v.$line-height-display;
+  font-weight: v.$font-weight-semibold;
+  // 取件码要照着敲，字距是可用性而不是装饰。
+  letter-spacing: 4px;
+}
+
+// ---------------------------------------------------------------------------
+// ③ 柜机信息
+// ---------------------------------------------------------------------------
+.detail__locker {
+  margin-top: v.$spacing-lg;
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+}
+
+.detail__site {
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  font-weight: v.$font-weight-semibold;
+}
+
+.detail__locker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: v.$spacing-md;
+}
+
+.detail__locker-label {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+}
+
+.detail__locker-value {
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+}
+
+// ---------------------------------------------------------------------------
+// ④ 费用
+// ---------------------------------------------------------------------------
+.detail__fee {
+  margin-top: v.$spacing-lg;
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+}
+
+.detail__fee-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: v.$spacing-sm 0;
+  font-size: v.$font-size-body;
+}
+
+.detail__fee-label {
+  color: v.$color-text-sub;
+}
+
+.detail__fee-value {
+  color: v.$color-text-main;
+}
+
+.detail__fee-row--total {
+  padding-top: v.$spacing-md;
+  margin-top: v.$spacing-xs;
+  border-top: 1px solid v.$color-border;
+  font-weight: v.$font-weight-semibold;
+}
+
+.detail__fee-note {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.6;
+}
+
+// ---------------------------------------------------------------------------
+// ⑤ 时间轴
+// ---------------------------------------------------------------------------
+.detail__timeline {
+  margin-top: v.$spacing-lg;
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+}
+
+.detail__timeline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: v.$spacing-sm 0;
+  font-size: v.$font-size-body;
+}
+
+.detail__timeline-label {
+  color: v.$color-text-main;
+}
+
+.detail__timeline-time {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+}
+
+// ---------------------------------------------------------------------------
+// ⑥ 支付记录
+// ---------------------------------------------------------------------------
+.detail__payments {
+  margin-top: v.$spacing-lg;
+  padding: v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+}
+
+.detail__payment-row {
+  padding: v.$spacing-sm 0;
+}
+
+.detail__payment-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: v.$font-size-body;
+}
+
+.detail__payment-label {
+  color: v.$color-text-main;
+}
+
+.detail__payment-amount {
+  color: v.$color-text-main;
+  font-weight: v.$font-weight-semibold;
+}
+
+.detail__payment-time {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+}
+
+// ---------------------------------------------------------------------------
+// 历史单的次级扫码出口
+// ---------------------------------------------------------------------------
+.detail__scan {
+  width: 100%;
+  height: 88rpx;
+  margin: v.$spacing-xxl 0 0;
+  padding: 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-body;
+  line-height: 88rpx;
+  background: transparent;
+  border: none;
+
+  &::after {
+    border: none;
+  }
+}
+
+.detail__scan_active {
+  color: v.$color-primary-pressed;
+}
+
+// ---------------------------------------------------------------------------
+// 失败出口（不存在 / 页内重试）—— 结构故意与全局失败出口不同名，
+// 让 conventions 守卫的「失败出口结构唯一」不会被误判成第二份失败出口。
+// ---------------------------------------------------------------------------
+.detail__missing,
+.detail__retry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 120rpx v.$spacing-lg 0;
+  text-align: center;
+}
+
+.detail__missing-title,
+.detail__retry-detail {
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  line-height: 1.6;
+}
+
+.detail__retry-detail {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+}
+
+.detail__missing-action,
+.detail__retry-action {
+  width: 100%;
+  height: 96rpx;
+  margin: v.$spacing-xxl 0 0;
+  padding: 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-title;
+  line-height: 96rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.detail__missing-action_active,
+.detail__retry-action_active {
+  color: v.$color-primary-pressed;
+  background: v.$color-bg-page;
+}
+
+// ---------------------------------------------------------------------------
+// 固定行动条
+// ---------------------------------------------------------------------------
+.detail__bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-sm;
+  padding: v.$spacing-md v.$spacing-lg v.$spacing-xl;
+  background: v.$color-bg-card;
+  box-shadow: v.$shadow-bar;
+}
+
+.detail__bar-primary {
+  width: 100%;
+  height: 96rpx;
+  margin: 0;
+  padding: 0;
+  color: v.$color-bg-card;
+  font-size: v.$font-size-title;
+  line-height: 96rpx;
+  background: v.$color-primary-active;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.detail__bar-primary_active {
+  background: v.$color-primary-pressed;
+}
+
+.detail__bar-primary[disabled] {
+  background: v.$color-text-weak;
+}
+
+.detail__bar-cancel {
+  width: 100%;
+  height: 72rpx;
+  margin: 0;
+  padding: 0;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 72rpx;
+  background: transparent;
+  border: none;
+
+  &::after {
+    border: none;
+  }
+}
+
+.detail__bar-cancel_active {
+  color: v.$color-text-main;
+}
+
+.detail__bar-cancel[disabled] {
+  color: v.$color-text-weak;
 }

@@ -39,6 +39,39 @@
 </view>
 
 <!--
+  详情骨架（#64）—— 状态块 / 取件码块 / 两行信息 / 时间轴。
+  形状对照订单详情页的六块，让首屏加载不跳版；仍然只有中性块，没有文字。
+-->
+<view
+  wx:elif="{{ variant === 'detail' }}"
+  class="skeleton skeleton--detail"
+  aria-role="skeleton"
+>
+  <view class="skeleton__detail-status">
+    <view class="skeleton__chip"></view>
+    <view class="skeleton__block skeleton__detail-time"></view>
+  </view>
+
+  <view class="skeleton__detail-card">
+    <view class="skeleton__block skeleton__detail-code-label"></view>
+    <view class="skeleton__block skeleton__detail-code-value"></view>
+  </view>
+
+  <view class="skeleton__detail-card">
+    <view class="skeleton__block skeleton__block--title"></view>
+    <view class="skeleton__block skeleton__block--meta"></view>
+    <view class="skeleton__block skeleton__block--meta"></view>
+  </view>
+
+  <view class="skeleton__detail-card">
+    <view class="skeleton__detail-row" wx:for="{{ rows }}" wx:key="*this">
+      <view class="skeleton__block skeleton__detail-row-label"></view>
+      <view class="skeleton__block skeleton__detail-row-time"></view>
+    </view>
+  </view>
+</view>
+
+<!--
   列表骨架 —— 形状对照真实版式：列表行 = 色条 + 两行短块 + 状态标签位。
 -->
 <view wx:else class="skeleton" aria-role="skeleton">
