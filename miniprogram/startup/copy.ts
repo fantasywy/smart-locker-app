@@ -607,6 +607,155 @@ export const LOCKER_PAGE_COPY = {
 // 版面分隔符本来就不需要是个常量：需要时在 wxml 里排就是了。
 
 /**
+ * **预约状态标签** —— 预约列表的五种显示态（spec #57 §10）。
+ *
+ * ⚠️ **五个标签逐字定稿，一个都不能改**：`PENDING` 待使用 / `USED` 已使用 /
+ * `CANCELLED` 已取消 / `NOSHOW` 已爽约 / `EXPIRED` 已失效。
+ *
+ * ⚠️ 键是**状态语义**，不是后端数字码 —— 数字码 → 语义的唯一判定在
+ * `utils/reservation-status.ts`。这样列表与将来的任何消费方不会各写一遍
+ * 「`1` 是待使用」这种映射。
+ *
+ * ⚠️ 色档不在这张表里：`PENDING` 正常（ok）/ `NOSHOW` 危险（danger）/
+ * 其余中性（muted），与标签同住在 `utils/reservation-status.ts`。
+ */
+export const RESERVATION_STATUS_LABELS = {
+  pending: '待使用',
+  used: '已使用',
+  cancelled: '已取消',
+  noshow: '已爽约',
+  expired: '已失效',
+} as const
+
+/** 预约状态语义键 —— `RESERVATION_STATUS_LABELS` 的键。 */
+export type ReservationStatusKey = keyof typeof RESERVATION_STATUS_LABELS
+
+/**
+ * **我的预约页**的全部用户可见文案 —— spec #57 §10。
+ *
+ * ⚠️ 两个二次确认是**逐字定稿**：标题 / 说明 / 两个按钮都必须与 spec 一致。
+ * 说明句里「预约不可恢复」是事实（`13.15` 转单不可逆、`13.14` 释放格口后不可回退），
+ * 不是吓唬话术。
+ *
+ * ⚠️ `windowRejected` 是 `6202`（窗口外 / 状态已变）在**动作点**的唯一说法：
+ * **不写分钟数、不置灰、不倒计时**。使用窗口的两个端点（`holdMinutes` /
+ * `noShowMinutes`）不在 C 端契约里，客户端算不出来 —— 任何「还有 N 分钟」都是编的。
+ *
+ * ⚠️ 爽约与失效**分开讲**：`NOSHOW` 是用户没去（已扣信用分），`EXPIRED` 是柜机故障
+ * （不扣信用分）。两者混用会让用户去查一个根本没被扣过的信用分，或者以为自己爽约了。
+ *
+ * ⚠️ 本表**没有预约单号 / 订单 ID / 分钟数 / 扣分数**：这些要么对用户无意义，
+ * 要么 C 端根本拿不到。
+ */
+export const RESERVATION_LIST_COPY = {
+  /** 分组标题一 —— 逐字「待使用」（与状态标签同一个词，引用它）。 */
+  groupPending: RESERVATION_STATUS_LABELS.pending,
+  /** 分组标题二 —— 逐字「已结束」。 */
+  groupEnded: '已结束',
+  /** 五种状态标签 —— 与全局表同一份。 */
+  statusLabels: RESERVATION_STATUS_LABELS,
+
+  /** 待使用行的主行动 —— 逐字「开始使用」。 */
+  startAction: '开始使用',
+  /** 待使用行的次行动 —— 逐字「取消预约」。 */
+  cancelAction: '取消预约',
+  /** 已使用且有订单时的入口 —— 逐字「查看订单」。 */
+  viewOrderAction: '查看订单',
+
+  /** 开始使用二次确认 · 标题 —— 逐字。 */
+  startTitle: '开始使用？',
+  /** 开始使用二次确认 · 说明 —— 逐字。 */
+  startMessage: '开始使用后会生成存件订单，柜门将打开；预约不可恢复。',
+  /** 开始使用二次确认 · 取消按钮 —— 逐字「取消」。 */
+  startDismiss: CONFIRM_COPY.cancel,
+  /** 开始使用二次确认 · 确认按钮 —— 逐字「开始使用」。 */
+  startConfirm: '开始使用',
+
+  /** 取消预约二次确认 · 标题 —— 逐字。 */
+  cancelTitle: '取消预约？',
+  /** 取消预约二次确认 · 说明 —— 逐字。 */
+  cancelMessage: '取消后格口会被释放，预约不可恢复。',
+  /** 取消预约二次确认 · 取消按钮 —— 逐字「再想想」。 */
+  cancelDismiss: '再想想',
+  /** 取消预约二次确认 · 确认按钮 —— 逐字「取消预约」。 */
+  cancelConfirm: '取消预约',
+
+  /**
+   * `6202` 的动作点提示 —— 逐字。
+   *
+   * ⚠️ 只陈述「现在不行、时段前后再试」，不猜窗口端点、不给倒计时。
+   */
+  windowRejected: '现在还不能开始使用，请在预约时段前后再试',
+
+  /** `NOSHOW` 卡内说明 —— 逐字；用户责任，已扣分。 */
+  noshowNote: '爽约，已扣信用分',
+  /** `EXPIRED` 卡内说明 —— 逐字；柜机责任，不扣分。 */
+  expiredNote: '柜机故障，预约已失效，不扣信用分',
+
+  /** 转单 `4004` —— 格口已分配给这个预约，换不了，只能联系客服。 */
+  lockerUnavailable: '预约的柜机暂时不可用，请联系客服',
+
+  /** 页内失败句 —— 全站共用（`LOAD_FAILED_DETAIL`）。 */
+  loadFailed: LOAD_FAILED_DETAIL,
+  /** 页内重试按钮 —— 全站共用（`RETRY_LABEL`）。 */
+  retry: RETRY_LABEL,
+  /** 其他动作失败的兜底（服务端没给 message 时）—— 不承诺动作发生过。 */
+  actionFailed: NO_RESULT_COPY,
+} as const
+
+/**
+ * **预约创建页**的全部用户可见文案 —— spec #57 §10（结构级）+ 契约 `13.12`。
+ *
+ * ⚠️ 本页只让用户回答两个他能答的问题：**什么时候开始** + **要占多久**。
+ * 结束时刻由两者相加得出，不让用户面对「结束时刻」这个抽象问题。
+ *
+ * ⚠️ **下单前不显示金额**：契约 `13.12` 没有价格字段，本表也**没有**
+ * 「参考金额 / 预计价格」之类的任何一个字。预订不是下单，费用在取件时结算。
+ *
+ * ⚠️ `8007` / `8002` 的句子按既有定稿引用；`8006` 是竞态兜底，按服务端
+ * `message` 直出（正常路径上档位形态让三条规则都不可触发）。
+ */
+export const RESERVATION_CREATE_COPY = {
+  /** 档位分组标题。 */
+  cellTypeSection: '格口档位',
+  /** 开始时间分组标题。 */
+  startSection: '开始时间',
+  /** 使用时长分组标题。 */
+  durationSection: '使用时长',
+
+  /** 日期上下文一 —— 逐字「今天」。 */
+  today: '今天',
+  /** 日期上下文二 —— 逐字「明天」。 */
+  tomorrow: '明天',
+
+  /** 今天已过完所有档位时的说明 —— 指路到明天，不编一个不存在的档。 */
+  noSlotsToday: '今天没有可预约的时段，请选明天',
+
+  /** 提交按钮 —— 逐字「确定预约」。 */
+  submit: '确定预约',
+  /** 提交中 —— 逐字「正在预约…」。 */
+  submitting: '正在预约…',
+
+  /** 本地校验：三个必选项没选齐。 */
+  selectRequired: '请选择格口、开始时间和使用时长',
+
+  /** 入口参数缺失 —— 预约只能从柜机页扫码进入。 */
+  invalidEntry: '请从柜机页扫码进入',
+
+  /** 提交失败兜底（网络 / 未知业务码且无 message）。 */
+  submitFailed: '预约失败，请重试',
+
+  /** `8002` 无空闲格口 —— 定稿口径：换类型或换柜机。 */
+  cellTypeFull: '该类型格口已满，换一种类型或换一台柜机',
+
+  /** `8007` 同时段已有 `PENDING` 预约 —— 逐字定稿。 */
+  duplicate: '你在这个时段已经有一个预约了',
+
+  /** `4004` 柜机不可用 —— 与柜机页同一句（同一种处境只有一个名字）。 */
+  lockerUnavailable: LOCKER_PAGE_COPY.lockerUnavailableReason,
+} as const
+
+/**
  * **等待关门页**的全部用户可见文案 —— spec #57 §4「逐字文案」表。
  *
  * ⚠️ 这张表是**契约逐字**的落点：主陈述、停滞说明、手动核对、取消弹窗、

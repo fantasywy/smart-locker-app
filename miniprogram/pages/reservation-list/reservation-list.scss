@@ -1,6 +1,15 @@
-// 我的预约页 —— 空壳样式（issue #22）。页面票整体替换本文件。
+// 我的预约页样式 —— 全部走设计 token 与 mixin，零裸 hex、零动效。
+//
+// 版式（spec #57 §10）：
+//   组头 → 卡片（站点 + 柜机码 / 档名 + cellNo / 时段 / 状态标签 / 动作）。
+//   左缘 3px 语义色条由 `tone-card` 承担：待使用 ok / 已爽约 danger / 其余 muted。
+//
+// ⚠️ 单位：布局几何用 rpx；字号 / 1px 边框 / 圆角用 px。
+// ⚠️ 不做 transition / animation / opacity —— 按下反馈只换背景色。
+// ⚠️ **没有倒计时 / 分钟数的任何位置**：这一页不展示使用窗口。
 
 @use '../../styles/variables' as v;
+@use '../../styles/mixins' as m;
 
 page {
   height: 100vh;
@@ -15,4 +24,166 @@ page {
 .page {
   flex: 1;
   overflow-y: auto;
+  padding: v.$spacing-lg;
+  box-sizing: border-box;
+}
+
+// ---------------------------------------------------------------------------
+// 页内失败
+// ---------------------------------------------------------------------------
+.reservation-list__failed {
+  @include m.card;
+  margin-top: v.$spacing-lg;
+}
+
+.reservation-list__failed-detail {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 22px;
+}
+
+.reservation-list__failed-action {
+  width: 100%;
+  height: 96rpx;
+  margin: v.$spacing-xxl 0 0;
+  padding: 0;
+  color: v.$color-primary-active;
+  font-size: v.$font-size-title;
+  line-height: 96rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.reservation-list__failed-action_active {
+  color: v.$color-primary-pressed;
+  background: v.$color-bg-page;
+}
+
+// ---------------------------------------------------------------------------
+// 分组
+// ---------------------------------------------------------------------------
+.reservation-list__group + .reservation-list__group {
+  margin-top: v.$spacing-xxl;
+}
+
+.reservation-list__group-title {
+  margin-bottom: v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  font-weight: v.$font-weight-medium;
+  line-height: 18px;
+}
+
+// ---------------------------------------------------------------------------
+// 卡片 —— 白底 + 语义色条 + 状态 chip
+// ---------------------------------------------------------------------------
+.reservation-list__card {
+  @include m.tone-card((ok, danger, muted));
+  margin-bottom: v.$spacing-md;
+}
+
+.reservation-list__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+}
+
+.reservation-list__site {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  font-weight: v.$font-weight-semibold;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reservation-list__status {
+  @include m.tone-chip((ok, danger, muted));
+  flex: none;
+}
+
+.reservation-list__meta {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-sm;
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 18px;
+}
+
+.reservation-list__locker {
+  color: v.$color-text-sub;
+}
+
+.reservation-list__cell {
+  color: v.$color-text-sub;
+}
+
+.reservation-list__time {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  line-height: 22px;
+}
+
+.reservation-list__note {
+  margin-top: v.$spacing-sm;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 18px;
+}
+
+// ---------------------------------------------------------------------------
+// 行内动作 —— 主「开始使用」/ 次「取消预约」/「查看订单」
+// ⚠️ 按钮高度 88rpx（44px）—— 可点目标下限。
+// ---------------------------------------------------------------------------
+.reservation-list__actions {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-sm;
+  margin-top: v.$spacing-md;
+}
+
+.reservation-list__action {
+  min-width: 160rpx;
+  height: 88rpx;
+  margin: 0;
+  padding: 0 v.$spacing-lg;
+  font-size: v.$font-size-body;
+  line-height: 88rpx;
+  border-radius: v.$radius-control;
+
+  &::after {
+    border: none;
+  }
+}
+
+.reservation-list__action--primary {
+  color: v.$color-bg-card;
+  background: v.$color-primary-active;
+}
+
+.reservation-list__action--primary_active {
+  background: v.$color-primary-pressed;
+}
+
+.reservation-list__action--secondary {
+  color: v.$color-text-sub;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+}
+
+.reservation-list__action--secondary_active {
+  color: v.$color-text-main;
+  background: v.$color-bg-page;
 }
