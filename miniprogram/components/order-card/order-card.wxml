@@ -1,0 +1,45 @@
+<!--
+  订单卡 —— 首页（home）/ 进行中（active）/ 已结束（history）三种变体。
+
+  ⚠️ **本文件没有一句用户可见字面量**：站点名 / 状态标签 / 格口行 / 取件码 /
+  金额词与主行动词全部来自 `startup/copy.ts` 与页面传入的订单行。
+
+  ⚠️ **整卡与主行动都用 catchtap**：主行动不冒泡，否则点「取件开门」会先跳详情；
+  整卡自身也 catchtap，避免原生 tap 与组件自定义 `tap` 事件在宿主处重复触发。
+
+  ⚠️ 组件不导航：这里只有两个本地事件，去向由订单列表 / 首页决定。
+-->
+<view class="order-card order-card--{{ variant }}">
+  <view
+    class="order-card__surface"
+    hover-class="order-card__surface_active"
+    hover-start-time="0"
+    hover-stay-time="0"
+    catchtap="onCardTap"
+  >
+    <view class="order-card__head">
+      <view class="order-card__site">{{ siteName }}</view>
+      <view class="order-card__status is-{{ statusTone }}">{{ statusLabel }}</view>
+    </view>
+
+    <view wx:if="{{ cellLine }}" class="order-card__cell">{{ cellLine }}</view>
+
+    <view wx:if="{{ showPickupCode }}" class="order-card__pickup">
+      <view class="order-card__pickup-label">{{ pickupCodeLabel }}</view>
+      <view class="order-card__pickup-code">{{ pickupCode }}</view>
+    </view>
+
+    <view wx:if="{{ showAmount || showAction }}" class="order-card__foot">
+      <view wx:if="{{ showAmount }}" class="order-card__amount">
+        <text class="order-card__amount-label">{{ amountLabel }}</text>
+        <text class="order-card__amount-value">{{ amount }}</text>
+      </view>
+      <button
+        wx:if="{{ showAction }}"
+        class="order-card__action"
+        hover-class="order-card__action_active"
+        catchtap="onCardAction"
+      >{{ actionLabel }}</button>
+    </view>
+  </view>
+</view>

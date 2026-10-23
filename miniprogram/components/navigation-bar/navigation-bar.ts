@@ -18,8 +18,8 @@
 // ⚠️ **`home()` 与 `orders()` 的目标是常量，不是本文件里的字面量。**
 // `wx.switchTab` 的 url 必须是 `app.json` 的 `tabBar.list[].pagePath` 之一，
 // 差一个字符就是**静默失败**（不跳转、不报错）—— 与死按钮同一个用户症状，只是更难查。
-// 两个目标在 #66 之前恰好都指向 `pages/index/index`，但语义已经分开：
-// `HOME_PATH` 是「首页」，`ORDER_LIST_PATH` 是「订单列表」；#66 迁移订单列表时只改后者。
+// 两个目标在 #66 之前恰好都指向 `pages/index/index`，现在已分开：
+// `HOME_PATH` 是「首页」，`ORDER_LIST_PATH` 是独立的订单 tab；改路径只改对应常量。
 //
 // ⚠️ **颜色 / 背景入参已删除。** 导航栏的颜色只从 token 写死（`navigation-bar.scss`），
 // 页面传入任意色值会让主题层出现第二个事实源，且 AA 对比度不再受 token 守卫保护。

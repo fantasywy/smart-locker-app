@@ -100,6 +100,13 @@ export interface WxNavigateToOptions {
   complete?: () => void
 }
 
+/** `wx.stopPullDownRefresh` 的 options —— 列表页下拉刷新结束。 */
+export interface WxStopPullDownRefreshOptions {
+  success?: (res: { errMsg: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
 /** `wx.navigateBack` 的 options —— 导航栏 `back()` 的缺省行为。 */
 export interface WxNavigateBackOptions {
   delta?: number
@@ -177,6 +184,7 @@ export interface WxStub {
   navigateTo: Mock<(options: WxNavigateToOptions) => void>
   redirectTo: Mock<(options: WxNavigateToOptions) => void>
   navigateBack: Mock<(options?: WxNavigateBackOptions) => void>
+  stopPullDownRefresh: Mock<(options?: WxStopPullDownRefreshOptions) => void>
   scanCode: Mock<(options: WxScanCodeOptions) => void>
   getSystemInfoSync: Mock<() => WxSystemInfo>
   getMenuButtonBoundingClientRect: Mock<() => WxMenuButtonRect>
@@ -287,6 +295,9 @@ export function installWxStub(): InstalledWxStub {
     redirectTo: unstubbed<[WxNavigateToOptions]>('redirectTo'),
     // 导航栏的「返回」是缺省行为：未编排即抛错，避免把「没实现」伪装成「调了但无栈可退」。
     navigateBack: unstubbed<[WxNavigateBackOptions | undefined]>('navigateBack'),
+    // 列表页下拉刷新结束 —— 与其它 API 同一条纪律：未编排即抛错，
+    // 免得「没实现」被一个静默空调用伪装成「转圈已结束」。
+    stopPullDownRefresh: unstubbed<[WxStopPullDownRefreshOptions | undefined]>('stopPullDownRefresh'),
     scanCode: unstubbed<[WxScanCodeOptions]>('scanCode'),
     // 导航栏 attached 的胶囊几何来源 —— 与其它 API 一样「未编排即失败」，
     // 免得几何算成 0 还静默通过（标题会压到胶囊底下）。

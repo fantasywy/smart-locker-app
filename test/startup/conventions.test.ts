@@ -36,6 +36,7 @@ import {
   NOT_YET_STORED_HINT,
   NO_RESULT_COPY,
   PICKUP_SHEET_COPY,
+  ORDER_LIST_COPY,
   RESERVATION_CREATE_COPY,
   RESERVATION_LIST_COPY,
   RESERVATION_STATUS_LABELS,
@@ -167,6 +168,9 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   // ⚠️ `PICKUP_SHEET_COPY` —— `#65` 新增的导出。取件层的三条金额说明、
   // 成功三态与五类失败归因全部是用户可见的字；漏加一次，组件里写字面量就会一路绿灯。
   ...flattenCopy(PICKUP_SHEET_COPY),
+  // ⚠️ `ORDER_LIST_COPY` —— `#66` 新增的导出。组标题 / 进行中「还有更多」/
+  // 首屏失败与加载更多失败都是用户可见的字；漏加一次，列表页里写字面量就会一路绿灯。
+  ...flattenCopy(ORDER_LIST_COPY),
   // ⚠️ `RESERVATION_STATUS_LABELS` / `RESERVATION_LIST_COPY` / `RESERVATION_CREATE_COPY`
   // —— `#70` 新增的导出。五个预约状态标签、两个二次确认、爽约 / 失效归因与
   // 创建页的分组标题 / 校验句全部是用户可见的字；漏加一次，预约两页里写字面量
@@ -509,11 +513,13 @@ describe('#23 `wx.switchTab` 的目标确实是 tabBar 的一项', () => {
     }
     const tabPaths = appJson.tabBar.list.map((item) => item.pagePath)
 
-    expect(tabPaths, '订单必须是 tabBar 的第一项').toContain(ORDER_LIST_PATH)
+    expect(tabPaths, '订单必须是 tabBar 的第二项（首页 / 订单 / 我的）').toContain(
+      ORDER_LIST_PATH,
+    )
     expect(appJson.pages, 'ORDER_LIST_PATH 不在 pages 注册表里').toContain(ORDER_LIST_PATH)
     // ⚠️ `wx.switchTab` 的 url 拼成 `/${ORDER_LIST_PATH}` —— 断言拼出来的那个串
     // 与 app.json 里的字面路径**逐字相同**（而不是「归一化之后相同」）。
-    expect(`/${ORDER_LIST_PATH}`).toBe(`/${tabPaths[0]}`)
+    expect(`/${ORDER_LIST_PATH}`).toBe(`/${tabPaths[1]}`)
   })
 
   it('⚠️ **`wx.switchTab` 的 url**不得由别处拼出来 —— 那是最像静默失败的一处', () => {
