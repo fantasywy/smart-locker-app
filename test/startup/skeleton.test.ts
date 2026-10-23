@@ -304,6 +304,17 @@ describe('#22 页面注册：10 个页面一次配齐', () => {
     for (const item of appJson.tabBar?.list ?? []) {
       const pageTitle = titles[item.pagePath]
       expect(pageTitle, `${item.pagePath} 缺 PAGE_TITLES`).toBeDefined()
+
+      // ⚠️ **过渡态例外（#61 → #66）**：`#61` 把首页的页面标题改成了「首页」，
+      // 但订单 tab 还临时挂在 `pages/index/index` 上（订单列表页由 #66 才新增）。
+      // 这一段时间里，「tabBar 的订单 ↔ 首页标题」注定对不上 —— 等 #66 把订单 tab
+      // 指向 `pages/order-list/order-list` 后，这个例外连同 `continue` 一起删除，
+      // 下面的包含关系会重新覆盖全部 tab。
+      if (item.pagePath === 'pages/index/index') {
+        expect(pageTitle, '#61 起首页的页面标题必须是「首页」').toBe('首页')
+        continue
+      }
+
       expect(
         pageTitle?.includes(item.text),
         `tabBar 写「${item.text}」，而 ${item.pagePath} 的标题是「${pageTitle}」—— 两者已经对不上了`,

@@ -1,5 +1,5 @@
 <!--
-  骨架屏 —— 形状对照真实版式：列表行 = 色条 + 两行短块 + 状态标签位。
+  骨架屏 —— 形状对照真实版式。
 
   ⚠️ 纯图形占位，**无文字**。本文件里不得出现任何文本节点 / 「加载中」字样 ——
      这是逐字禁令（「不得放『加载中』文字盖住骨架」）。
@@ -8,7 +8,40 @@
      骨架块是**中性**的（$color-border），不带任何语义档 —— 此刻我们还不知道
      这些行将来是什么状态，染上任何一档都是在替数据说话。
 -->
-<view class="skeleton" aria-role="skeleton">
+
+<!--
+  首页同构骨架 —— 品牌块 / 圆按钮 / 一卡 / 入口条（#61）。
+  它只描述首页的形状，不携带任何数据；颜色同样只用中性 token。
+-->
+<view wx:if="{{ variant === 'home' }}" class="skeleton skeleton--home" aria-role="skeleton">
+  <view class="skeleton__home-brand">
+    <view class="skeleton__home-mark"></view>
+    <view class="skeleton__home-brand-copy">
+      <view class="skeleton__block skeleton__home-wordmark"></view>
+      <view class="skeleton__block skeleton__home-tagline"></view>
+    </view>
+  </view>
+
+  <view class="skeleton__home-scan">
+    <view class="skeleton__home-scan-circle"></view>
+    <view class="skeleton__block skeleton__home-scan-label"></view>
+  </view>
+
+  <view class="skeleton__row skeleton__home-card">
+    <view class="skeleton__body">
+      <view class="skeleton__block skeleton__block--title"></view>
+      <view class="skeleton__block skeleton__block--meta"></view>
+    </view>
+    <view class="skeleton__chip"></view>
+  </view>
+
+  <view class="skeleton__home-entry"></view>
+</view>
+
+<!--
+  列表骨架 —— 形状对照真实版式：列表行 = 色条 + 两行短块 + 状态标签位。
+-->
+<view wx:else class="skeleton" aria-role="skeleton">
   <view class="skeleton__row" wx:for="{{ rows }}" wx:key="*this">
     <view class="skeleton__bar"></view>
     <view class="skeleton__body">

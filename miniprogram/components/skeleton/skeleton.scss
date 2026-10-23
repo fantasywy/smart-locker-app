@@ -73,3 +73,82 @@
   margin-left: v.$spacing-md;
   flex-shrink: 0;
 }
+
+// ---------------------------------------------------------------------------
+// 首页同构骨架（#61）
+// ---------------------------------------------------------------------------
+// ⚠️ 与首页同样：左右 16px、区块间距 24px；形状依次是品牌块 / 圆按钮 / 一卡 / 入口条。
+// 颜色仍只允许中性 token（$color-border / $color-bg-card），不染任何语义档。
+.skeleton--home {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-xxl;
+  padding: v.$spacing-lg;
+}
+
+.skeleton__home-brand {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-md;
+}
+
+.skeleton__home-mark {
+  // 40px 品牌方块 = 80rpx；圆角与真版式同一个 control 档。
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: v.$radius-control;
+  background: v.$color-border;
+  flex-shrink: 0;
+}
+
+.skeleton__home-brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-sm;
+  flex: 1;
+  min-width: 0;
+}
+
+.skeleton__home-wordmark {
+  width: 50%;
+  height: 24px;
+}
+
+.skeleton__home-tagline {
+  width: 34%;
+  height: 12px;
+}
+
+.skeleton__home-scan {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: v.$spacing-md;
+}
+
+.skeleton__home-scan-circle {
+  // 112px 圆按钮 = 224rpx。
+  width: 224rpx;
+  height: 224rpx;
+  border-radius: 50%;
+  background: v.$color-border;
+}
+
+.skeleton__home-scan-label {
+  width: 120rpx;
+  height: 16px;
+}
+
+.skeleton__home-card {
+  // 列表行的类复用一卡形状；首页骨架只有这一张，间距交给父级 gap。
+  margin-bottom: 0;
+}
+
+.skeleton__home-entry {
+  // 56px 入口条 = 112rpx。
+  width: 100%;
+  height: 112rpx;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+}

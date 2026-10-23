@@ -37,6 +37,19 @@ import type { PagePath } from '../startup/copy'
 export const WAITING_PATH = 'pages/waiting/waiting'
 
 /**
+ * **柜机页**的页面路径 —— 首页扫码通道 B 的落点。
+ *
+ * 用途：首页 `wx.scanCode` 解析出柜机码后，`wx.navigateTo` 叠到当前栈上并带 `code`。
+ * ⚠️ 必须是 **`navigateTo`**，不是 `redirectTo` / `switchTab`：柜机页不是 tabBar 页，
+ * 而用户从首页出发，返回键应当回到首页（而不是退出小程序）。通道 A（微信扫一扫
+ * 冷启动直达）由平台负责，不走这个常量。
+ *
+ * ⚠️ 与其它路径同样，不在页面里写字面量 —— `wx.*To` 拿到不存在的路径是**静默失败**，
+ * 与「点了没反应」是同一个用户症状。`app.json` 里的注册由测试比对。
+ */
+export const LOCKER_PATH = 'pages/locker/locker'
+
+/**
  * 预约创建页的页面路径 —— `app.json` 已注册。
  *
  * 用途：柜机页的「预约」次要入口（「创建入口**只在柜机页**」——
