@@ -229,14 +229,14 @@ describe('#66 订单列表 · 分组与排序', () => {
 // ---------------------------------------------------------------------------
 
 describe('#66 订单列表 · tab 与路径常量', () => {
-  it('⚠️ 订单列表路径常量指向本页，且是 tabBar 的第二项（首页 / 订单 / 我的）', () => {
+  it('⚠️ 订单列表路径常量指向本页，且是 tabBar 的第二项（首页 / 订单 / 附近 / 我的）', () => {
     expect(ORDER_LIST_PATH).toBe('pages/order-list/order-list')
     const appJson = JSON.parse(
       readFileSync(join(repoRoot, 'miniprogram', 'app.json'), 'utf8'),
     ) as { pages: string[]; tabBar: { list: { pagePath: string; text: string }[] } }
 
     expect(appJson.pages).toContain(ORDER_LIST_PATH)
-    expect(appJson.tabBar.list.map((item) => item.text)).toEqual(['首页', '订单', '我的'])
+    expect(appJson.tabBar.list.map((item) => item.text)).toEqual(['首页', '订单', '附近', '我的'])
     expect(appJson.tabBar.list[1]?.pagePath).toBe(ORDER_LIST_PATH)
   })
 })

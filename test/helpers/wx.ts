@@ -141,6 +141,59 @@ export interface WxScanCodeOptions {
   complete?: () => void
 }
 
+/** `wx.getLocation` 的成功结果 —— 只需本仓库用到的字段。 */
+export interface WxGetLocationSuccessResult {
+  latitude: number
+  longitude: number
+  speed?: number
+  accuracy?: number
+  altitude?: number
+  verticalAccuracy?: number
+  horizontalAccuracy?: number
+  errMsg?: string
+}
+
+/**
+ * `wx.getLocation` 的 options。
+ *
+ * ⚠️ `type` 必须是 `gcj02` 才与 `<map>` / `wx.openLocation` 同一坐标基准；
+ * 测试通过断言它来钉住这一点。
+ */
+export interface WxGetLocationOptions {
+  type?: 'wgs84' | 'gcj02'
+  altitude?: boolean
+  isHighAccuracy?: boolean
+  highAccuracyExpireTime?: number
+  success?: (res: WxGetLocationSuccessResult) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `wx.openLocation` 的 options —— 站点导航；无定位授权也可用。 */
+export interface WxOpenLocationOptions {
+  latitude: number
+  longitude: number
+  scale?: number
+  name?: string
+  address?: string
+  success?: (res: { errMsg: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `wx.getSetting` / `wx.openSetting` 的授权快照。 */
+export interface WxAuthSetting {
+  authSetting: Record<string, boolean | undefined>
+  errMsg?: string
+}
+
+/** `wx.openSetting` / `wx.getSetting` 的 options。 */
+export interface WxSettingOptions {
+  success?: (res: WxAuthSetting) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
 /**
  * `wx.showModal` / `wx.showToast` 的 options。
  *
@@ -186,6 +239,10 @@ export interface WxStub {
   navigateBack: Mock<(options?: WxNavigateBackOptions) => void>
   stopPullDownRefresh: Mock<(options?: WxStopPullDownRefreshOptions) => void>
   scanCode: Mock<(options: WxScanCodeOptions) => void>
+  getLocation: Mock<(options: WxGetLocationOptions) => void>
+  openLocation: Mock<(options: WxOpenLocationOptions) => void>
+  getSetting: Mock<(options?: WxSettingOptions) => void>
+  openSetting: Mock<(options?: WxSettingOptions) => void>
   getSystemInfoSync: Mock<() => WxSystemInfo>
   getMenuButtonBoundingClientRect: Mock<() => WxMenuButtonRect>
   showModal: Mock<(options: WxShowModalOptions) => void>
@@ -299,6 +356,13 @@ export function installWxStub(): InstalledWxStub {
     // 免得「没实现」被一个静默空调用伪装成「转圈已结束」。
     stopPullDownRefresh: unstubbed<[WxStopPullDownRefreshOptions | undefined]>('stopPullDownRefresh'),
     scanCode: unstubbed<[WxScanCodeOptions]>('scanCode'),
+    // 定位只由用户点击触发 —— 未编排即抛错，让「页面自动请求定位」当场暴露。
+    getLocation: unstubbed<[WxGetLocationOptions]>('getLocation'),
+    // 导航与定位授权是两条独立路径：导航不需要位置授权。
+    openLocation: unstubbed<[WxOpenLocationOptions]>('openLocation'),
+    // 设置页只在用户点击「开启定位」时打开；未编排即抛错同样防自动调用。
+    getSetting: unstubbed<[WxSettingOptions | undefined]>('getSetting'),
+    openSetting: unstubbed<[WxSettingOptions | undefined]>('openSetting'),
     // 导航栏 attached 的胶囊几何来源 —— 与其它 API 一样「未编排即失败」，
     // 免得几何算成 0 还静默通过（标题会压到胶囊底下）。
     getSystemInfoSync: unstubbed<[]>('getSystemInfoSync'),
