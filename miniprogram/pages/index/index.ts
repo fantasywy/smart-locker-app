@@ -41,9 +41,10 @@ import { createStartupGate } from '../../startup/gate'
 import type { StartupGate, StartupState } from '../../startup/gate'
 import { HOME_PAGE_COPY, NEARBY_PATH, ORDER_LIST_PATH } from '../../startup/copy'
 import { showToast } from '../../utils/feedback'
-import { resolveLockerCode } from '../../utils/locker-code'
 import { mergeActiveOrders } from '../../utils/order-active'
-import { LOCKER_PATH, ORDER_DETAIL_PATH, STATIC_EXIT_PATHS } from '../../utils/routes'
+import { cardOrderOf } from '../../utils/order-card'
+import { ORDER_DETAIL_PATH, STATIC_EXIT_PATHS } from '../../utils/routes'
+import { scanToLocker } from '../../utils/scan-locker'
 import type { OrderCardOrder, OrderSummary } from '../../types/orders'
 
 /**
@@ -130,25 +131,9 @@ function runtimeOf(page: IndexPageInstance): OrdersRuntime {
   return runtime
 }
 
-/** 卡片只接收自己的子集 —— `orderNo` / `lockerId` / `cellType` 不进渲染模型。 */
-function cardOrderOf(order: OrderSummary): OrderCardOrder {
-  return {
-    id: order.id,
-    status: order.status,
-    startAt: order.startAt,
-    endAt: order.endAt,
-    payAmount: order.payAmount,
-    estimatedAmount: order.estimatedAmount,
-    pickupCode: order.pickupCode,
-    siteName: order.siteName,
-    lockerNo: order.lockerNo,
-    cellNo: order.cellNo,
-  }
-}
-
 /** 把过滤后的条数填进「查看全部」模板 —— N 不是两次查询 `total` 的合计。 */
 function viewAllLabelOf(count: number): string {
-  return HOME_PAGE_COPY.viewAll.replace('{count}', String(count))
+  return HOME_PAGE_COPY.viewAll.replace('{count}', () => String(count))
 }
 
 /**
@@ -440,53 +425,13 @@ Component({
     /**
      * 扫码主行动 —— **唯一入口**。
      *
-     * ⚠️ **不传 `onlyFromCamera`**：spec §2 要求默认允许相册选码。
-     * 相机权限不做任何探测或引导（见文件头）。
-     *
-     * ⚠️ 回调里只做「收敛 → 分流」两件事，不在这里写任何文案字面量；
-     * 提示语从 `HOME_PAGE_COPY` 来，走统一的反馈适配层。
+     * ⚠️ 链路本体（`wx.scanCode` → 收敛 → 柜机页 + 两句反馈）在
+     * `utils/scan-locker.ts`：首页、订单列表、订单详情、等待页、预约列表走的是
+     * **同一条**，各写一遍必然出现「某一页忘了取消静默」这类分叉。
+     * 本页只回答一个问题：柜机页**叠在首页上**（`navigate`）。
      */
     onScan(): void {
-      wx.scanCode({
-        success: (res) => {
-          this.handleScanResult(res.result)
-        },
-        fail: (err) => {
-          this.handleScanFailure(err.errMsg)
-        },
-      })
-    },
-
-    /**
-     * 扫到了东西 —— 用 `resolveLockerCode()` 收敛成柜机码。
-     *
-     * ⚠️ **解析不出就留在首页**（不跳柜机页的入口失效页）：入口失效页是给
-     * 「从冷启动通道带着一个坏码进来」的用户的；首页扫码的用户就站在这里，
-     * 让他重扫一次比把他带到一个「这个码没用」的页面更直接。
-     */
-    handleScanResult(result: string): void {
-      const code = resolveLockerCode({ scanResult: result })
-      if (code === null) {
-        showToast(HOME_PAGE_COPY.notLockerCode)
-        return
-      }
-
-      wx.navigateTo({
-        // ⚠️ 路径来自常量；`code` 做一次编码，避免柜机码里的保留字符破坏查询串。
-        url: `/${LOCKER_PATH}?code=${encodeURIComponent(code)}`,
-      })
-    },
-
-    /**
-     * 扫码失败 —— **取消静默，其余一句提示**。
-     *
-     * ⚠️ 用户主动取消不是失败：弹一句「扫码没成功」会把用户的主动返回说成事故。
-     * 其余成因（相机不可用 / 系统错误 / 权限被拒）**不按成因分叉** —— 用户对成因
-     * 无能为力，一句「请重试」就是全部可行动信息。
-     */
-    handleScanFailure(errMsg: string): void {
-      if (errMsg.includes('cancel')) return
-      showToast(HOME_PAGE_COPY.scanFailed)
+      scanToLocker('navigate')
     },
   },
 })

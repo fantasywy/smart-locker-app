@@ -1,14 +1,15 @@
 <!--
   预约创建页（结构级）—— spec #57 §10 / 契约 13.12。
 
-  ⚠️ **本文件没有一句用户可见字面量**：分组标题 / 档位 / 日期 / 时长 / 提交与
+  ⚠️ **本文件没有一句用户可见字面量**：分组标题 / 档位 / 日期 / 占位符 / 提交与
   校验提示全部来自 `startup/copy.ts` 与 `LOCKER_PAGE_COPY.cellTypeLabels`。
 
   ⚠️ **没有金额输入、也没有金额展示**：`13.12` 没有价格字段，费用在取件时结算。
      任何人想在这里加「预计价格」之前，先去看契约 —— 客户端编不出一个服务端会认的价。
 
-  ⚠️ 表单只让用户选「开始档位 + 时长」，`planEndAt` 由页面相加得出。
-     档位只渲染未来；今天的档位用完后指路到明天。
+  ⚠️ 表单只让用户给出契约里的两个时刻：**开始时间**与**结束时间**，用原生
+     `<picker mode="time">`（平台自带的时间选择器）。页面不自造档位表 ——
+     早先的「30 分钟档位 + 1/2/4/8 小时时长」不在 `13.12` 里，已删除。
 -->
 <navigation-bar title="{{ title }}" back="{{true}}" />
 
@@ -37,7 +38,7 @@
       </view>
     </view>
 
-    <!-- ② 开始时间 —— 今天 / 明天 + 30 分钟档位。 -->
+    <!-- ② 日期上下文 —— 今天 / 明天；两个时刻本身与日期无关。 -->
     <view class="reservation-create__section">
       <view class="reservation-create__label">{{ startSection }}</view>
       <view class="reservation-create__options">
@@ -53,37 +54,33 @@
           aria-role="button"
         >{{ item.label }}</view>
       </view>
-      <view class="reservation-create__options reservation-create__options--slots">
-        <view
-          wx:for="{{ slotOptions }}"
-          wx:key="value"
-          class="reservation-create__chip reservation-create__chip--slot {{ selectedSlot === item.value ? 'is-selected' : '' }}"
-          hover-class="reservation-create__chip_active"
-          hover-start-time="0"
-          hover-stay-time="0"
-          data-value="{{ item.value }}"
-          bindtap="onSelectSlot"
-          aria-role="button"
-        >{{ item.label }}</view>
-      </view>
-      <view wx:if="{{ showEmptySlotHint }}" class="reservation-create__hint">{{ emptySlotHint }}</view>
     </view>
 
-    <!-- ③ 使用时长 —— 1 / 2 / 4 / 8 小时。 -->
+    <!-- ③ 开始 / 结束时间 —— 原生时间选择器；`value` 为空时显示占位符。 -->
     <view class="reservation-create__section">
-      <view class="reservation-create__label">{{ durationSection }}</view>
-      <view class="reservation-create__options">
-        <view
-          wx:for="{{ durationOptions }}"
-          wx:key="hours"
-          class="reservation-create__chip {{ selectedHours === item.hours ? 'is-selected' : '' }}"
-          hover-class="reservation-create__chip_active"
-          hover-start-time="0"
-          hover-stay-time="0"
-          data-value="{{ item.hours }}"
-          bindtap="onSelectDuration"
-          aria-role="button"
-        >{{ item.label }}</view>
+      <view class="reservation-create__row">
+        <picker
+          mode="time"
+          class="reservation-create__picker"
+          value="{{ startTime }}"
+          bindchange="onPickStart"
+        >
+          <view class="reservation-create__field">
+            <text class="reservation-create__field-label">{{ startSection }}</text>
+            <text class="reservation-create__field-value {{ startTime === '' ? 'is-placeholder' : '' }}">{{ startTime === '' ? pickTime : startTime }}</text>
+          </view>
+        </picker>
+        <picker
+          mode="time"
+          class="reservation-create__picker"
+          value="{{ endTime }}"
+          bindchange="onPickEnd"
+        >
+          <view class="reservation-create__field">
+            <text class="reservation-create__field-label">{{ endSection }}</text>
+            <text class="reservation-create__field-value {{ endTime === '' ? 'is-placeholder' : '' }}">{{ endTime === '' ? pickTime : endTime }}</text>
+          </view>
+        </picker>
       </view>
     </view>
 

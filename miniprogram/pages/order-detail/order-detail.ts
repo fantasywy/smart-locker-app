@@ -35,7 +35,6 @@
 
 import { cancelOrder, getOrderDetail } from '../../api/orders'
 import {
-  HOME_PAGE_COPY,
   LOCKER_PAGE_COPY,
   ORDER_CANCEL_COPY,
   ORDER_COPY,
@@ -44,11 +43,11 @@ import {
   PICKUP_SHEET_COPY,
 } from '../../startup/copy'
 import { alert, confirm, showToast } from '../../utils/feedback'
-import { formatFullTime } from '../../utils/datetime'
-import { resolveLockerCode } from '../../utils/locker-code'
+import { formatFullTime, formatOrderTime } from '../../utils/datetime'
 import { formatMoney } from '../../utils/money'
-import { resolveOrderStatus } from '../../utils/order-status'
-import { LOCKER_PATH, WAITING_PATH } from '../../utils/routes'
+import { canPickupOrder, isEndedOrder, resolveOrderStatus } from '../../utils/order-status'
+import { WAITING_PATH } from '../../utils/routes'
+import { scanToLocker } from '../../utils/scan-locker'
 import type {
   OrderDetailOrder,
   OrderDetailResponse,
@@ -185,17 +184,19 @@ function runtimeOf(page: OrderDetailPageInstance): DetailRuntime {
  *   • 已存入 / 已超时未取件：存入时刻；
  *   • 历史单：取件时刻。
  *
- * ⚠️ 只用服务端回显的时刻，不读客户端时钟（`utils/datetime.ts` 的纪律）。
+ * ⚠️ 写法用**全站三档选择器**（spec §14.3：今天 / 当年 / 跨年），不是无条件的
+ * `YYYY-MM-DD HH:mm` —— 后者会在「今天刚存的单」上凭空多出一个年份。
+ * `now` 由调用方在渲染时传入，本页与格式化层都不读时钟（`utils/datetime.ts` 的纪律）。
  */
-function keyTimeOf(order: OrderDetailOrder): string {
+function keyTimeOf(order: OrderDetailOrder, now: Date): string {
   if (order.status === 1) return ''
   if (order.status === 2) {
-    return order.startAt === null ? '' : formatFullTime(order.startAt)
+    return order.startAt === null ? '' : formatOrderTime(order.startAt, now)
   }
   if (order.status === 4 && order.endAt === null) {
-    return order.startAt === null ? '' : formatFullTime(order.startAt)
+    return order.startAt === null ? '' : formatOrderTime(order.startAt, now)
   }
-  return order.endAt === null ? '' : formatFullTime(order.endAt)
+  return order.endAt === null ? '' : formatOrderTime(order.endAt, now)
 }
 
 /** ③ 柜机信息 —— 已取消订单不显示格口（格口已释放，spec §14.6）。 */
@@ -303,17 +304,11 @@ function paymentsOf(detail: OrderDetailResponse): PaymentRow[] {
 
 /** 主行动 / 取消 / 历史单出口 —— 每个判定只算一次，避免「按钮文案」与「点击去向」分叉。 */
 function actionsOf(order: OrderDetailOrder): Partial<OrderDetailPageData> {
-  const canPickup =
-    (order.status === 2 || order.status === 4) &&
-    order.startAt !== null &&
-    order.endAt === null
+  // ⚠️ 三个判定都来自 `utils/order-status.ts` 的唯一实现：取件入口与共享取件层同一条，
+  // 「历史单」就是「不在进行中」（`isActiveOrder` 的补集），本页不再抄状态码。
+  const canPickup = canPickupOrder(order)
   const canCancel = order.status === 2 && order.startAt === null
-  const isHistory =
-    order.status === 3 ||
-    order.status === 5 ||
-    order.status === 6 ||
-    order.status === 7 ||
-    (order.status === 4 && order.endAt !== null)
+  const isHistory = isEndedOrder(order)
 
   // 取件入口只按「超时单 → 补缴 / 普通单 → 取件」分两档；两者打开同一个弹层。
   const primaryAction: OrderDetailPageData['primaryAction'] = canPickup
@@ -371,7 +366,7 @@ function renderDetail(page: OrderDetailPageInstance, detail: OrderDetailResponse
     phase: 'ready',
     statusLabel: status.label,
     statusTone: status.tone,
-    statusTime: keyTimeOf(order),
+    statusTime: keyTimeOf(order, new Date()),
     pickupCodeLabel: ORDER_COPY.pickupCodeLabel,
     pickupCode: order.pickupCode ?? '',
     showPickupCode: order.pickupCode !== null,
@@ -528,21 +523,7 @@ async function cancel(page: OrderDetailPageInstance): Promise<void> {
 
 /** 历史单的次级出口 —— 与首页完全相同的扫码链路。 */
 function scanEntry(): void {
-  wx.scanCode({
-    success: (result) => {
-      const code = resolveLockerCode({ scanResult: result.result })
-      if (code === null) {
-        showToast(HOME_PAGE_COPY.notLockerCode)
-        return
-      }
-      wx.navigateTo({ url: `/${LOCKER_PATH}?code=${encodeURIComponent(code)}` })
-    },
-    fail: (error) => {
-      // 用户主动取消不是失败；其余成因不按成因分叉。
-      if (error.errMsg.includes('cancel')) return
-      showToast(HOME_PAGE_COPY.scanFailed)
-    },
-  })
+  scanToLocker('navigate')
 }
 
 /** 固定的「返回订单列表」出口 —— 订单列表是 tab 页，只能 `switchTab`。 */

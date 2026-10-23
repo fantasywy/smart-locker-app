@@ -270,6 +270,8 @@ describe('#66 order-card · 字段 / 金额 / 主行动矩阵', () => {
   })
 
   it('⚠️ 已存入（未支付）：格口 · 存入时间、取件码、参考金额、主行动「取件开门」', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-23T12:00:00+08:00'))
     const instance = await render(
       order({
         status: 2,
@@ -280,7 +282,8 @@ describe('#66 order-card · 字段 / 金额 / 主行动矩阵', () => {
       'active',
     )
 
-    expect(instance.data.cellLine).toBe('S03 · 存入 04-01 09:00')
+    // ⚠️ 时间写法全站一套（spec §14.3）：跨年 → 补全年份，前缀「存入」。
+    expect(instance.data.cellLine).toBe('S03 · 存入 2025-04-01 09:00')
     expect(instance.data.showPickupCode).toBe(true)
     expect(instance.data.pickupCode).toBe('385214')
     expect(instance.data.showAmount).toBe(true)
@@ -288,6 +291,29 @@ describe('#66 order-card · 字段 / 金额 / 主行动矩阵', () => {
     expect(instance.data.amount).toBe('¥18.00')
     expect(instance.data.showAction).toBe(true)
     expect(instance.data.actionLabel).toBe(PICKUP_SHEET_COPY.pickupAction)
+  })
+
+  it('⚠️ 列表卡的存入时间也走三档写法（今天 / 当年 / 跨年），不是只省年份', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-23T12:00:00+08:00'))
+
+    const today = await render(
+      order({ status: 2, startAt: '2026-10-23T09:05:00+08:00', pickupCode: '385214' }),
+      'active',
+    )
+    expect(today.data.cellLine).toBe('S03 · 存入 今天 09:05')
+
+    const sameYear = await render(
+      order({ status: 2, startAt: '2026-04-01T09:00:00+08:00', pickupCode: '385214' }),
+      'active',
+    )
+    expect(sameYear.data.cellLine).toBe('S03 · 存入 04-01 09:00')
+
+    const crossYear = await render(
+      order({ status: 3, startAt: '2025-04-01T09:00:00+08:00', endAt: '2025-04-01T10:30:00+08:00' }),
+      'history',
+    )
+    expect(crossYear.data.cellLine).toBe('S03 · 2025-04-01 10:30')
   })
 
   it('⚠️ 已存入（已支付）：金额词是「实付」，不是「已付」', async () => {
@@ -310,6 +336,8 @@ describe('#66 order-card · 字段 / 金额 / 主行动矩阵', () => {
   })
 
   it('⚠️ 已超时（未取件）：格口 · 存入时间、取件码、参考金额、主行动「取件开门」', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-23T12:00:00+08:00'))
     const instance = await render(
       order({
         status: 4,
@@ -321,7 +349,7 @@ describe('#66 order-card · 字段 / 金额 / 主行动矩阵', () => {
       'active',
     )
 
-    expect(instance.data.cellLine).toBe('S03 · 存入 04-01 09:00')
+    expect(instance.data.cellLine).toBe('S03 · 存入 2025-04-01 09:00')
     expect(instance.data.showPickupCode).toBe(true)
     expect(instance.data.amountLabel).toBe(ORDER_COPY.referenceLabel)
     expect(instance.data.amount).toBe('¥24.00')
@@ -329,6 +357,8 @@ describe('#66 order-card · 字段 / 金额 / 主行动矩阵', () => {
   })
 
   it('⚠️ 已完成：格口 · 取件时间、无取件码、实付、无行动', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-23T12:00:00+08:00'))
     const instance = await render(
       order({
         status: 3,
@@ -340,7 +370,7 @@ describe('#66 order-card · 字段 / 金额 / 主行动矩阵', () => {
       'history',
     )
 
-    expect(instance.data.cellLine).toBe('S03 · 04-01 10:30')
+    expect(instance.data.cellLine).toBe('S03 · 2025-04-01 10:30')
     expect(instance.data.showPickupCode).toBe(false)
     expect(instance.data.amountLabel).toBe(ORDER_COPY.paidLabel)
     expect(instance.data.amount).toBe('¥15.00')

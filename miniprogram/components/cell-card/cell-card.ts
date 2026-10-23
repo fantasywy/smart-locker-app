@@ -45,7 +45,9 @@ function availabilityTextOf(available: unknown, state: unknown): string {
   if (state === 'soldout') return LOCKER_PAGE_COPY.soldOut
   if (state === 'offline') return LOCKER_PAGE_COPY.unavailable
   const count = typeof available === 'number' ? available : Number(available)
-  return LOCKER_PAGE_COPY.remaining.replace('{count}', String(Number.isFinite(count) ? count : 0))
+  return LOCKER_PAGE_COPY.remaining.replace('{count}', () =>
+    String(Number.isFinite(count) ? count : 0),
+  )
 }
 
 Component({

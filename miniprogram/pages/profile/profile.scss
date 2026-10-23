@@ -35,7 +35,7 @@ page {
   @include m.card;
   color: v.$color-text-sub;
   font-size: v.$font-size-body;
-  line-height: 22px;
+  line-height: 1.57;
 }
 
 .profile__identity {
@@ -73,7 +73,7 @@ page {
   color: v.$color-text-main;
   font-size: v.$font-size-title;
   font-weight: v.$font-weight-semibold;
-  line-height: 24px;
+  line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -89,7 +89,7 @@ page {
   margin-right: v.$spacing-xs;
   color: v.$color-text-sub;
   font-size: v.$font-size-aux;
-  line-height: 18px;
+  line-height: 1.5;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,21 +105,21 @@ page {
   color: v.$color-danger-ink;
   font-size: v.$font-size-title;
   font-weight: v.$font-weight-semibold;
-  line-height: 24px;
+  line-height: 1.5;
 }
 
 .profile__restricted-body {
   margin-top: v.$spacing-sm;
   color: v.$color-text-main;
   font-size: v.$font-size-body;
-  line-height: 22px;
+  line-height: 1.57;
 }
 
 .profile__restricted-meta {
   margin-top: v.$spacing-sm;
   color: v.$color-text-sub;
   font-size: v.$font-size-aux;
-  line-height: 18px;
+  line-height: 1.5;
 }
 
 // 原生 `open-type="contact"` 按钮 —— 重置原生外观，只留一行可点的文字。
@@ -131,7 +131,7 @@ page {
   background: transparent;
   color: v.$color-primary-active;
   font-size: v.$font-size-body;
-  line-height: 22px;
+  line-height: 1.57;
   text-align: left;
 }
 
@@ -161,7 +161,7 @@ page {
   margin-left: v.$spacing-sm;
   color: v.$color-text-main;
   font-size: v.$font-size-body;
-  line-height: 22px;
+  line-height: 1.57;
 }
 
 .profile__credit-score {
@@ -182,7 +182,7 @@ page {
   margin-right: v.$spacing-xs;
   color: v.$color-text-sub;
   font-size: v.$font-size-aux;
-  line-height: 18px;
+  line-height: 1.5;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +196,7 @@ page {
   margin: 0 v.$spacing-xs v.$spacing-sm;
   color: v.$color-text-sub;
   font-size: v.$font-size-aux;
-  line-height: 18px;
+  line-height: 1.5;
 }
 
 .profile__group-card {
@@ -226,7 +226,7 @@ page {
   margin-left: v.$spacing-sm;
   color: v.$color-text-main;
   font-size: v.$font-size-body;
-  line-height: 22px;
+  line-height: 1.57;
 }
 
 // 「联系客服」是原生 button —— 重置它的默认外观，行为仍是 width:100% 的整行。
@@ -235,7 +235,7 @@ page {
   border: none;
   border-radius: 0;
   font-size: v.$font-size-body;
-  line-height: 22px;
+  line-height: 1.57;
   text-align: left;
 }
 
@@ -265,7 +265,7 @@ page {
 .profile__field-label {
   color: v.$color-text-sub;
   font-size: v.$font-size-aux;
-  line-height: 18px;
+  line-height: 1.5;
 }
 
 .profile__input {
@@ -276,14 +276,14 @@ page {
   border-radius: v.$radius-control;
   color: v.$color-text-main;
   font-size: v.$font-size-body;
-  line-height: 22px;
+  line-height: 1.57;
 }
 
 .profile__field-error {
   margin-top: v.$spacing-sm;
   color: v.$color-danger-ink;
   font-size: v.$font-size-aux;
-  line-height: 18px;
+  line-height: 1.5;
 }
 
 .profile__sheet-actions {

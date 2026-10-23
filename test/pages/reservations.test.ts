@@ -118,8 +118,8 @@ interface PageInstance {
   onScan?: () => void
   onSelectCellType?: (event: { currentTarget: { dataset: Record<string, unknown> } }) => void
   onSelectDate?: (event: { currentTarget: { dataset: Record<string, unknown> } }) => void
-  onSelectSlot?: (event: { currentTarget: { dataset: Record<string, unknown> } }) => void
-  onSelectDuration?: (event: { currentTarget: { dataset: Record<string, unknown> } }) => void
+  onPickStart?: (event: { detail?: { value?: unknown } }) => void
+  onPickEnd?: (event: { detail?: { value?: unknown } }) => void
   onSubmit?: () => void
   [name: string]: unknown
 }
@@ -513,29 +513,16 @@ describe('#70 我的预约 · 工程约束', () => {
 // 预约创建页
 // ---------------------------------------------------------------------------
 
-interface SlotOption {
-  value: string
-  label: string
-}
-
-interface DurationOption {
-  hours: number
-  label: string
-}
-
-function slotOptionsOf(page: PageInstance): SlotOption[] {
-  return (page.data.slotOptions as SlotOption[] | undefined) ?? []
-}
-
-function durationOptionsOf(page: PageInstance): DurationOption[] {
-  return (page.data.durationOptions as DurationOption[] | undefined) ?? []
-}
-
 function eventOf(value: string | number): { currentTarget: { dataset: Record<string, unknown> } } {
   return { currentTarget: { dataset: { value } } }
 }
 
-/** 默认「现在」—— 2026-09-23 13:10 本地时间，今天的下一个档位是 13:30。 */
+/** 原生 `<picker mode="time">` 的 change 事件。 */
+function pickOf(value: string): { detail: { value: string } } {
+  return { detail: { value } }
+}
+
+/** 默认「现在」—— 2026-09-23 13:10 本地时间。 */
 function defaultNow(): Date {
   return new Date(2026, 8, 23, 13, 10, 0, 0)
 }
@@ -557,18 +544,11 @@ async function mountCreate(
   return { wx, page }
 }
 
-/** 选齐三项 —— 档位 / 开始档位 / 时长。 */
-function selectAll(
-  page: PageInstance,
-  cellType = 2,
-  slotLabel = '14:00',
-  hours = 2,
-): void {
+/** 选齐三项 —— 档位 / 开始时间 / 结束时间（两个时刻由原生 picker 给出）。 */
+function selectAll(page: PageInstance, cellType = 2, start = '14:00', end = '16:00'): void {
   page.onSelectCellType?.(eventOf(cellType))
-  const slot = slotOptionsOf(page).find((option) => option.label === slotLabel)
-  if (slot === undefined) throw new Error(`测试时段里没有 ${slotLabel}`)
-  page.onSelectSlot?.(eventOf(slot.value))
-  page.onSelectDuration?.(eventOf(hours))
+  page.onPickStart?.(pickOf(start))
+  page.onPickEnd?.(pickOf(end))
 }
 
 describe('#70 预约创建 · 结构与字段', () => {
@@ -586,44 +566,46 @@ describe('#70 预约创建 · 结构与字段', () => {
     expect(wx.request).not.toHaveBeenCalled()
   })
 
-  it('开始档位：30 分钟步长、只渲染未来档位；档位值是「无偏移本地 ISO」', async () => {
+  it('⚠️ 只认契约里的两个时刻：开始 / 结束各是一个原生 time picker，不再自造档位表', async () => {
     const { page } = await mountCreate([])
+    const wxml = pageWxml('reservation-create')
 
-    const slots = slotOptionsOf(page)
-    expect(slots[0]?.label).toBe('13:30')
-    expect(slots.some((slot) => slot.label === '13:00')).toBe(false)
-    // 请求口径：无偏移本地 ISO（响应才带 +08:00）—— 不是契约示例里的带偏移串。
-    expect(slots.every((slot) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00$/.test(slot.value))).toBe(true)
-    expect(slots[0]?.value).toBe('2026-09-23T13:30:00')
+    // 两个原生时间选择器；没有「30 分钟档位」「1/2/4/8 小时时长」这两张编出来的表。
+    expect(wxml.match(/mode="time"/g)).toHaveLength(2)
+    expect(wxml).toContain('bindchange="onPickStart"')
+    expect(wxml).toContain('bindchange="onPickEnd"')
+    expect(page.data.startTime).toBe('')
+    expect(page.data.endTime).toBe('')
+    expect(page.data.pickTime).toBe(RESERVATION_CREATE_COPY.pickTime)
+    expect(page.data).not.toHaveProperty('slotOptions')
+    expect(page.data).not.toHaveProperty('durationOptions')
+    expect(pageWxml('reservation-create')).not.toContain('slotOptions')
+    expect(pageWxml('reservation-create')).not.toContain('durationOptions')
   })
 
-  it('时长档位：1 / 2 / 4 / 8 小时（单位写「小时」，不用 h）', async () => {
+  it('⚠️ 时间取值照抄 picker 交出来的 `HH:mm`；非法形态直接忽略', async () => {
     const { page } = await mountCreate([])
 
-    expect(durationOptionsOf(page).map((option) => option.label)).toEqual([
-      '1小时',
-      '2小时',
-      '4小时',
-      '8小时',
-    ])
+    page.onPickStart?.(pickOf('09:30'))
+    expect(page.data.startTime).toBe('09:30')
+    page.onPickEnd?.(pickOf('11:00'))
+    expect(page.data.endTime).toBe('11:00')
+
+    page.onPickStart?.(pickOf('9:30'))
+    expect(page.data.startTime).toBe('09:30')
+    page.onPickEnd?.({ detail: { value: 1100 } })
+    expect(page.data.endTime).toBe('11:00')
   })
 
-  it('今天档位已过完 → 说明指向明天；切到明天拿到整天的档位', async () => {
-    const { page } = await mountCreate([], { lockerId: '11' }, new Date(2026, 8, 23, 23, 40))
-
-    expect(slotOptionsOf(page)).toHaveLength(0)
-    expect(page.data.showEmptySlotHint).toBe(true)
-    expect(page.data.emptySlotHint).toBe(RESERVATION_CREATE_COPY.noSlotsToday)
+  it('切到明天只改日期上下文，不清掉用户已经选好的两个时刻', async () => {
+    const { page } = await mountCreate([])
+    selectAll(page, 2, '14:00', '16:00')
 
     page.onSelectDate?.(eventOf(1))
-    await settle()
 
-    const tomorrow = slotOptionsOf(page)
-    expect(tomorrow).toHaveLength(48)
-    expect(tomorrow[0]?.label).toBe('00:00')
-    expect(tomorrow[tomorrow.length - 1]?.label).toBe('23:30')
-    expect(page.data.showEmptySlotHint).toBe(false)
-    expect(page.data.selectedSlot).toBe('')
+    expect(page.data.selectedDate).toBe(1)
+    expect(page.data.startTime).toBe('14:00')
+    expect(page.data.endTime).toBe('16:00')
   })
 })
 
@@ -650,10 +632,41 @@ describe('#70 预约创建 · 校验与提交', () => {
     expect(wx.request).not.toHaveBeenCalled()
 
     page.onSelectCellType?.(eventOf(2))
+    page.onPickStart?.(pickOf('14:00'))
     page.onSubmit?.()
     await settle()
     expect(page.data.submitError).toBe(RESERVATION_CREATE_COPY.selectRequired)
     expect(wx.request).not.toHaveBeenCalled()
+  })
+
+  it('结束不晚于开始 → 本地拦下，不发请求（契约要求 end > start）', async () => {
+    const { wx, page } = await mountCreate([])
+
+    selectAll(page, 2, '16:00', '14:00')
+    page.onSubmit?.()
+    await settle()
+    expect(page.data.submitError).toBe(RESERVATION_CREATE_COPY.endBeforeStart)
+
+    selectAll(page, 2, '16:00', '16:00')
+    page.onSubmit?.()
+    await settle()
+    expect(page.data.submitError).toBe(RESERVATION_CREATE_COPY.endBeforeStart)
+    expect(wx.request).not.toHaveBeenCalled()
+  })
+
+  it('今天的开始时刻已经过去 → 指路到明天；切到明天同样的时刻可以提交', async () => {
+    const { wx, page } = await mountCreate([okBody({ reservationId: 301, cellNo: 'M05' })])
+
+    selectAll(page, 2, '09:00', '11:00')
+    page.onSubmit?.()
+    await settle()
+    expect(page.data.submitError).toBe(RESERVATION_CREATE_COPY.startInPast)
+    expect(wx.request).not.toHaveBeenCalled()
+
+    page.onSelectDate?.(eventOf(1))
+    page.onSubmit?.()
+    await settle()
+    expect(sentRequests(wx.request)).toHaveLength(1)
   })
 
   it('选齐后提交：13.12 请求体恰好四字段（cellType 数字码 + 本地时段）→ 回预约列表', async () => {
@@ -661,7 +674,7 @@ describe('#70 预约创建 · 校验与提交', () => {
       okBody({ reservationId: 301, resvNo: 'R20250401001', cellNo: 'M05' }),
     ])
 
-    selectAll(page, 2, '14:00', 2)
+    selectAll(page, 2, '14:00', '16:00')
     page.onSubmit?.()
     await settle()
 
@@ -677,6 +690,27 @@ describe('#70 预约创建 · 校验与提交', () => {
     expect(wx.redirectTo.mock.calls.map((call) => (call[0] as { url: string }).url)).toEqual([
       `/${RESERVATION_LIST_PATH}`,
     ])
+  })
+
+  it('选「明天」时请求体带明天的日期（跨月由平台进位，不手拼字符串）', async () => {
+    const endOfMonth = new Date(2026, 8, 30, 13, 10, 0, 0)
+    const { wx, page } = await mountCreate(
+      [okBody({ reservationId: 301, cellNo: 'M05' })],
+      { lockerId: '11' },
+      endOfMonth,
+    )
+
+    page.onSelectCellType?.(eventOf(2))
+    page.onSelectDate?.(eventOf(1))
+    page.onPickStart?.(pickOf('14:00'))
+    page.onPickEnd?.(pickOf('16:00'))
+    page.onSubmit?.()
+    await settle()
+
+    expect(sentRequests(wx.request)[0]?.data).toMatchObject({
+      planStartAt: '2026-10-01T14:00:00',
+      planEndAt: '2026-10-01T16:00:00',
+    })
   })
 
   it('提交中防重复：连点两次只发一次 13.12', async () => {

@@ -37,6 +37,45 @@ export const RETRY_LABEL = '重试'
 export const LOAD_FAILED_DETAIL = '加载失败，请重试'
 
 /**
+ * **扫码 → 柜机页**这条链路的两句反馈 —— `utils/scan-locker.ts` 的文案来源。
+ *
+ * ⚠️ 它们**不在任何一张页面表里**：首页、订单列表、订单详情、等待页四处走的是
+ * **同一条链路**（`wx.scanCode` → `resolveLockerCode` → 柜机页），
+ * 而「非柜机码」与「扫码失败」是**两句不同的话**（一个说「你扫错了」，
+ * 一个说「这次没扫成」）。散在四张表里时，复制粘贴最容易让两条失败路径共用一句 ——
+ * 那正是要区分的两件事。⇒ 两句各一个家，四个页面与 `utils/scan-locker.ts` 都引这里。
+ *
+ * ⚠️ 逐字依据（spec §2）：
+ *   • `notLockerCode` —— 「这不是柜机码，请扫柜机上的二维码」；
+ *   • `scanFailed` —— 「扫码没成功，请重试」。
+ *
+ * ⚠️ **相机权限不在这张表里，也不在任何界面里**：`wx.scanCode` 不写 `authSetting`，
+ * `wx.getSetting()` 无法区分「未请求」与「被拒绝」，所以任何「请开启相机权限」
+ * 都是假归因（spec §2 末段）。将来若真需要，唯一可靠的路是自绘 `<camera>` 扫码页。
+ */
+export const SCAN_COPY = {
+  /** 扫到非柜机码时的提示 —— 逐字；留在原地、可立刻重扫。 */
+  notLockerCode: '这不是柜机码，请扫柜机上的二维码',
+  /** 扫码失败（取消之外）的提示 —— 逐字；不按成因分叉。 */
+  scanFailed: '扫码没成功，请重试',
+} as const
+
+/**
+ * **确认弹窗的默认按钮** —— 反馈适配层（`utils/feedback.ts`）的兜底文案。
+ *
+ * ⚠️ 页面有更具体的动作词时（「确认存件」「取消订单」「开始使用」），必须由页面
+ * 从 `copy.ts` 传入；这里只兜底最中性的两个词，避免 Vant 默认值成为第二文案源。
+ * 确认弹窗的标题 / 说明句永远由调用方传入（不同动作的后果不同，不能有默认值）。
+ *
+ * ⚠️ 定义位置在**各页面表之前**：`cancel` 是好几张表都要引用的词
+ * （资料弹层 / 取件确认弹层 / 重新开门弹窗），它必须先存在。
+ */
+export const CONFIRM_COPY = {
+  confirm: '确认',
+  cancel: '取消',
+} as const
+
+/**
  * 静态出口三件套 —— 定稿逐字。
  *
  * ⚠️ **「两条路一份内容」**：这里的三个出口与「我的」页的静态出口
@@ -142,23 +181,19 @@ export const SCORE_LOGS_COPY = {
  * **首页**的全部用户可见文案 —— spec #57 §2「逐字文案」表里属于首页的那几行。
  *
  * ⚠️ 为什么首页的文案要单独成表：首页是**唯一主行动**的承载页，品牌区、主按钮与
- * 两条扫码反馈都挤在第一屏。把它们散在页面 `data` 与 wxml 里，改一句就要翻三处；
- * 更糟的是「非柜机码」与「扫码失败」是**两句不同的提示**，散写最容易在复制粘贴时
- * 让两条失败路径共用同一句话 —— 而那正是票面要区分的两件事。
+ * 两条扫码反馈都挤在第一屏。把它们散在页面 `data` 与 wxml 里，改一句就要翻三处。
+ *
+ * ⚠️ **两条扫码反馈不在这张表里**（`notLockerCode` / `scanFailed`）：它们是
+ * 「扫码 → 柜机页」这条链路的反馈，首页、订单列表、订单详情、等待页四处共用，
+ * 唯一家在 `SCAN_COPY`（链路本身在 `utils/scan-locker.ts`）。
  *
  * ⚠️ 逐字依据（spec §2）：
  *   • `wordmark` / `tagline` / `scanButton` —— 品牌区与主按钮定稿；
- *   • `notLockerCode` —— 「这不是柜机码，请扫柜机上的二维码」；
- *   • `scanFailed` —— 「扫码没成功，请重试」；
  *   • `nearbyEntry` —— 附近入口条「附近柜机」；
  *   • `ordersTitle` —— 分组标题「进行中」；
  *   • `viewAll` —— 「查看全部 N 个」的模板（N 是过滤后的条数）；
  *   • `ordersLoadFailed` / `ordersRetry` —— 订单区页内失败块；
  *   • `refreshFailed` —— 下拉刷新失败 toast。
- *
- * ⚠️ **相机权限不在这张表里，也不在任何界面里**：`wx.scanCode` 不写 `authSetting`，
- * `wx.getSetting()` 无法区分「未请求」与「被拒绝」，所以任何「请开启相机权限」
- * 都是假归因（spec §2 末段）。将来若真需要，唯一可靠的路是自绘 `<camera>` 扫码页。
  */
 export const HOME_PAGE_COPY = {
   /** 品牌 wordmark —— 逐字。24px / 600，收敛到 `$font-size-hero`。 */
@@ -167,24 +202,21 @@ export const HOME_PAGE_COPY = {
   tagline: '扫码存件，随时取走',
   /** 扫码主按钮 —— 逐字；同时是整颗圆形按钮的 `aria-label`。 */
   scanButton: '扫码存件',
-  /** 扫到非柜机码时的提示 —— 逐字；留在首页、可立刻重扫。 */
-  notLockerCode: '这不是柜机码，请扫柜机上的二维码',
-  /** 扫码失败（取消之外）的提示 —— 逐字；不按成因分叉。 */
-  scanFailed: '扫码没成功，请重试',
 
   /**
    * 首页附近入口条的唯一一句 —— 逐字「附近柜机」。
    *
    * ⚠️ 入口条**不带距离 / 余位 / 任何动态数据**：它只是一条指路，数据在附近 tab 里。
    * 点击走 `switchTab`，目标取 `NEARBY_PATH`。
+   * ⚠️ 它同时是附近页的**页面标题**（`PAGE_TITLES`）—— 一个页面一个名字，不写两遍。
    */
   nearbyEntry: '附近柜机',
 
   /**
    * 进行中订单区的分组标题 —— 逐字「进行中」。
    *
-   * ⚠️ 与订单列表的 `ORDER_LIST_COPY.activeGroup` 是**同一个词**：同一个分组在
-   * 首页与列表上不能有两种叫法。这里仍单列一份，是因为首页文案表不反向依赖列表页。
+   * ⚠️ 它也是订单列表那一组的标题（`ORDER_LIST_COPY.activeGroup` 按引用取值）：
+   * 同一个分组在首页与列表上不能有两种叫法，所以那个词只有这一个家。
    */
   ordersTitle: '进行中',
 
@@ -268,8 +300,8 @@ export const PROFILE_COPY = {
   /** 弹层主按钮 —— 逐字「保存」。 */
   save: '保存',
 
-  /** 弹层次按钮 —— 逐字「取消」。 */
-  cancel: '取消',
+  /** 弹层次按钮 —— 引用共享的取消词（同一个「取消」不写第二遍）。 */
+  cancel: CONFIRM_COPY.cancel,
 
   /** 昵称校验：trim 后为空 —— 逐字「昵称不能为空」。 */
   nicknameEmpty: '昵称不能为空',
@@ -306,18 +338,6 @@ export const NAVIGATION_COPY = {
   back: '返回',
 } as const
 
-/**
- * **确认弹窗的默认按钮** —— 反馈适配层（`utils/feedback.ts`）的兜底文案。
- *
- * ⚠️ 页面有更具体的动作词时（「确认存件」「取消订单」「开始使用」），必须由页面
- * 从 `copy.ts` 传入；这里只兜底最中性的两个词，避免 Vant 默认值成为第二文案源。
- * 确认弹窗的标题 / 说明句永远由调用方传入（不同动作的后果不同，不能有默认值）。
- */
-export const CONFIRM_COPY = {
-  confirm: '确认',
-  cancel: '取消',
-} as const
-
 /** 空态文案的形状 —— 键见 `EMPTY_STATES`。 */
 export type EmptyStateCopy = (typeof EMPTY_STATES)[keyof typeof EMPTY_STATES]
 
@@ -344,12 +364,14 @@ export type EmptyStateCopy = (typeof EMPTY_STATES)[keyof typeof EMPTY_STATES]
 export const PAGE_TITLES = {
   'pages/index/index': '首页',
   'pages/order-list/order-list': '订单',
-  'pages/nearby/nearby': '附近柜机',
+  // ⚠️ 与首页入口条是**同一个名字**（同一个目的地只有一个叫法），按引用取值。
+  'pages/nearby/nearby': HOME_PAGE_COPY.nearbyEntry,
   'pages/profile/profile': '我的',
   'pages/locker/locker': '储物柜',
   'pages/order-detail/order-detail': '订单详情',
   'pages/waiting/waiting': '等待关门',
-  'pages/reservation-list/reservation-list': '我的预约',
+  // ⚠️ 与「我的」页那一行是**同一个名字**，按引用取值。
+  'pages/reservation-list/reservation-list': PROFILE_COPY.reservations,
   'pages/reservation-create/reservation-create': '预约存件',
   'pages/score-logs/score-logs': '信用分明细',
   'pages/billing-info/billing-info': '计费说明',
@@ -557,6 +579,14 @@ export const ORDER_CANCEL_COPY = {
 export const NO_RESULT_COPY = '没收到结果，请稍后重试'
 
 /**
+ * 四档全满那一句 —— 底栏第一行与预约入口的置灰原因**说的都是它**。
+ *
+ * ⚠️ 同一个事实在两处出现时，第二处必须按引用取值：各写一遍的后果是
+ * 改了一处漏了另一处，界面上出现两种说法（「暂无可存格口」/「没有空位」）。
+ */
+const ALL_SOLD_OUT_HINT = '暂无可存格口'
+
+/**
  * **柜机页**的全部文案 —— 动作词表、失败与重试表，以及柜机页专有文案。
  *
  * ⚠️ **本表没有任何自编字符串**：票面验收逐字要求「文案逐条有据可查，
@@ -631,8 +661,8 @@ export const LOCKER_PAGE_COPY = {
   /** 确认按钮 —— **逐字**「确认存件」。 */
   confirmAction: '确认存件',
 
-  /** 取消按钮 —— **逐字**「取消」。 */
-  cancel: '取消',
+  /** 取消按钮 —— **逐字**「取消」，引用共享词。 */
+  cancel: CONFIRM_COPY.cancel,
 
   /** 提交中 —— **逐字**「正在下单…」。 */
   submitting: '正在下单…',
@@ -659,13 +689,13 @@ export const LOCKER_PAGE_COPY = {
   loadFailedDetail: LOAD_FAILED_DETAIL,
 
   /** 四档全满时的底栏第一行 —— **逐字**「暂无可存格口」。 */
-  allSoldOutBarTitle: '暂无可存格口',
+  allSoldOutBarTitle: ALL_SOLD_OUT_HINT,
 
   /** 四档全满时的底栏第二行 —— **逐字**「可以换一台柜机」。 */
   allSoldOutBarHint: '可以换一台柜机',
 
-  /** 预约入口在四档全满时的置灰原因 —— **逐字**「暂无可存格口」。 */
-  allSoldOutReserveReason: '暂无可存格口',
+  /** 预约入口在四档全满时的置灰原因 —— 与底栏第一行**同一句**（同一个事实两处出现），按引用取值。 */
+  allSoldOutReserveReason: ALL_SOLD_OUT_HINT,
 
   /** 柜机离线时的底栏第一行 —— **逐字**「柜机暂不可用」。 */
   offlineBarTitle: '柜机暂不可用',
@@ -831,38 +861,50 @@ export const RESERVATION_LIST_COPY = {
 /**
  * **预约创建页**的全部用户可见文案 —— spec #57 §10（结构级）+ 契约 `13.12`。
  *
- * ⚠️ 本页只让用户回答两个他能答的问题：**什么时候开始** + **要占多久**。
- * 结束时刻由两者相加得出，不让用户面对「结束时刻」这个抽象问题。
+ * ⚠️ 本页只让用户回答两个他能答的问题：**什么时候开始** + **什么时候结束** ——
+ * 这正是 `13.12` 的两个字段（`planStartAt` / `planEndAt`）。早先那版让用户选
+ * 「30 分钟档位 + 1/2/4/8 小时时长」，两个形态都不在契约里，是**编出来的业务选择**，
+ * 已按 spec §10「表单字段与校验严格按 `13.12` 契约」改成原生时间选择器。
  *
  * ⚠️ **下单前不显示金额**：契约 `13.12` 没有价格字段，本表也**没有**
  * 「参考金额 / 预计价格」之类的任何一个字。预订不是下单，费用在取件时结算。
  *
+ * ⚠️ 本页的校验句（`selectRequired` / `endBeforeStart` / `startInPast`）**不是 spec 逐字**：
+ * spec §10 明确「本 spec 只定结构，不编逐字文案与字段级视觉；详细文案 / 校验留实现票」，
+ * 所以这三句归实现票。它们只描述用户刚做的动作，不猜服务端事实。
+ *
  * ⚠️ `8007` / `8002` 的句子按既有定稿引用；`8006` 是竞态兜底，按服务端
- * `message` 直出（正常路径上档位形态让三条规则都不可触发）。
+ * `message` 直出（正常路径上「结束晚于开始、开始晚于现在」两条本地校验让三条规则都不可触发）。
  */
 export const RESERVATION_CREATE_COPY = {
   /** 档位分组标题。 */
   cellTypeSection: '格口档位',
   /** 开始时间分组标题。 */
   startSection: '开始时间',
-  /** 使用时长分组标题。 */
-  durationSection: '使用时长',
+  /** 结束时间分组标题 —— 与开始时间是同一次选择的两个端点，不是「时长」。 */
+  endSection: '结束时间',
 
   /** 日期上下文一 —— 逐字「今天」（与首页卡的时间前缀同一个词）。 */
   today: TODAY_LABEL,
   /** 日期上下文二 —— 逐字「明天」。 */
   tomorrow: '明天',
 
-  /** 今天已过完所有档位时的说明 —— 指路到明天，不编一个不存在的档。 */
-  noSlotsToday: '今天没有可预约的时段，请选明天',
+  /** 原生时间选择器尚未选值时的占位 —— 只说明「还没选」，不编一个默认时刻。 */
+  pickTime: '请选择',
 
   /** 提交按钮 —— 逐字「确定预约」。 */
   submit: '确定预约',
   /** 提交中 —— 逐字「正在预约…」。 */
   submitting: '正在预约…',
 
-  /** 本地校验：三个必选项没选齐。 */
-  selectRequired: '请选择格口、开始时间和使用时长',
+  /** 本地校验：三个必选项（格口 / 开始时间 / 结束时间）没选齐。 */
+  selectRequired: '请选择格口、开始时间和结束时间',
+
+  /** 本地校验：结束不晚于开始 —— 契约要求 `end > start`。 */
+  endBeforeStart: '结束时间要晚于开始时间',
+
+  /** 本地校验：今天的开始时刻已经过去 —— 改选明天，或把开始时间往后挪。 */
+  startInPast: '开始时间要晚于现在，或改选明天',
 
   /** 入口参数缺失 —— 预约只能从柜机页扫码进入。 */
   invalidEntry: '请从柜机页扫码进入',
@@ -996,8 +1038,8 @@ export const WAITING_PAGE_COPY = {
   /** 重新开门二次确认的说明 —— 逐字。 */
   reopenMessage: '将再次向柜机发出开门指令，请确认您仍在柜机前。',
 
-  /** 重新开门二次确认的取消按钮 —— 逐字。 */
-  reopenCancel: '取消',
+  /** 重新开门二次确认的取消按钮 —— 逐字，引用共享词。 */
+  reopenCancel: CONFIRM_COPY.cancel,
 
   /** 重新开门二次确认的确认按钮 —— 逐字。 */
   reopenAction: '重新开门',
@@ -1124,8 +1166,12 @@ export const PICKUP_SHEET_COPY = {
   /** 成功态标题（首次支付 / 超时补缴）—— 逐字。 */
   successTitle: '支付成功',
 
-  /** 成功态标题（幂等重开）—— 逐字。它只是「指令已发出」，不是「门开了」。 */
-  reopenSuccessTitle: '已发出开门指令',
+  /**
+   * 成功态标题（幂等重开）—— 与等待页主陈述**同一句**（同一件事只有一个说法），按引用取值。
+   *
+   * ⚠️ 它只是「指令已发出」，不是「门开了」。
+   */
+  reopenSuccessTitle: WAITING_PAGE_COPY.mainStatement,
 
   /** 成功态的金额词 —— 只给首次支付用（引用详情页同一个词）。 */
   successAmountLabel: ORDER_COPY.paymentLabel,
@@ -1166,8 +1212,8 @@ export const PICKUP_SHEET_COPY = {
  * 所以这里没有「共 N 单」「N 个进行中」一类的模板。
  */
 export const ORDER_LIST_COPY = {
-  /** 进行中分组标题 —— 逐字。 */
-  activeGroup: '进行中',
+  /** 进行中分组标题 —— 与首页那一组**同一个词**，按引用取值（不写第二遍）。 */
+  activeGroup: HOME_PAGE_COPY.ordersTitle,
   /** 已结束分组标题 —— 逐字。 */
   historyGroup: '已结束',
 
@@ -1178,8 +1224,8 @@ export const ORDER_LIST_COPY = {
    */
   moreActive: '还有更多进行中订单',
 
-  /** 首屏失败标题 —— 逐字（页内重试块，不是整页失败出口）。 */
-  loadFailed: '订单加载失败',
+  /** 首屏失败标题 —— 与首页订单区**同一句**（同一个失败只有一种说法），按引用取值。 */
+  loadFailed: HOME_PAGE_COPY.ordersLoadFailed,
   /** 首屏失败的重试按钮 —— 与全局失败出口同一个词。 */
   retry: RETRY_LABEL,
   /** 加载更多失败 —— 逐字；点击重试，已加载项保留。 */

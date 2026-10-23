@@ -31,17 +31,13 @@
 // ⚠️ 不缓存业务数据：每次 `onShow` / 下拉刷新都重置两条流，从 `api/` 重新取。
 
 import { getOrders } from '../../api/orders'
-import {
-  EMPTY_STATES,
-  HOME_PAGE_COPY,
-  ORDER_LIST_COPY,
-  PAGE_TITLES,
-} from '../../startup/copy'
+import { EMPTY_STATES, ORDER_LIST_COPY, PAGE_TITLES } from '../../startup/copy'
 import { showToast } from '../../utils/feedback'
-import { resolveLockerCode } from '../../utils/locker-code'
 import { mergeActiveOrders } from '../../utils/order-active'
-import { resolveOrderStatus } from '../../utils/order-status'
-import { LOCKER_PATH, ORDER_DETAIL_PATH, WAITING_PATH } from '../../utils/routes'
+import { cardOrderOf } from '../../utils/order-card'
+import { isEndedOrder, resolveOrderStatus } from '../../utils/order-status'
+import { ORDER_DETAIL_PATH, WAITING_PATH } from '../../utils/routes'
+import { scanToLocker } from '../../utils/scan-locker'
 import type { PageOf } from '../../utils/pagination'
 import type { OrderCardOrder, OrderSummary, PickupOrder } from '../../types/orders'
 
@@ -153,16 +149,12 @@ function runtimeOf(page: OrderListPageInstance): OrderListRuntime {
   return runtime
 }
 
-/** 终局判定 —— 与卡片状态表同一口径：3/5/6/7，或 4 且 `endAt` 有值。 */
-function isEnded(order: OrderSummary): boolean {
-  return (
-    order.status === 3 ||
-    order.status === 5 ||
-    order.status === 6 ||
-    order.status === 7 ||
-    (order.status === 4 && order.endAt !== null)
-  )
-}
+/**
+ * 终局判定 —— 与首页进行中组是同一件事的两面。
+ *
+ * ⚠️ 实现**不在这里**：`isEndedOrder` 就是 `isActiveOrder` 的补集，唯一家在
+ * `utils/order-status.ts`。本页只消费它，不再抄一遍 `3 / 5 / 6 / 7 /（4 且 endAt 有值）`。
+ */
 
 /** 同一组内按 `id` 去重，保留首个。 */
 function dedupe(orders: readonly OrderSummary[]): OrderSummary[] {
@@ -192,22 +184,6 @@ function activeStreamOf(page: PageOf<OrderSummary>, status: 2 | 4): ActiveStream
       : order.status === 4 && order.endAt === null,
   )
   return { items: dedupe(items), total: page.total, page: 1 }
-}
-
-/** 卡片入参 —— 只挑卡片需要的字段，`orderNo` / `lockerId` / `cellType` 不进入渲染模型。 */
-function cardOrderOf(order: OrderSummary): OrderCardOrder {
-  return {
-    id: order.id,
-    status: order.status,
-    startAt: order.startAt,
-    endAt: order.endAt,
-    payAmount: order.payAmount,
-    estimatedAmount: order.estimatedAmount,
-    pickupCode: order.pickupCode,
-    siteName: order.siteName,
-    lockerNo: order.lockerNo,
-    cellNo: order.cellNo,
-  }
 }
 
 /** 取件层入参 —— 列表行天然满足 `PickupOrder`，只做子集裁剪（不含取件码）。 */
@@ -291,7 +267,7 @@ async function fetchHistoryBatch(
 
     total = result.data.total
     for (const order of result.data.records) {
-      if (!isEnded(order)) continue
+      if (!isEndedOrder(order)) continue
       if (shownIds.has(order.id)) continue
       shownIds.add(order.id)
       items.push(order)
@@ -444,21 +420,7 @@ function onCardAction(page: OrderListPageInstance, event: { detail?: { id?: numb
 
 /** 空态主行动 —— 与首页完全相同的扫码链路。 */
 function scanEntry(): void {
-  wx.scanCode({
-    success: (result) => {
-      const code = resolveLockerCode({ scanResult: result.result })
-      if (code === null) {
-        showToast(HOME_PAGE_COPY.notLockerCode)
-        return
-      }
-      wx.navigateTo({ url: `/${LOCKER_PATH}?code=${encodeURIComponent(code)}` })
-    },
-    fail: (error) => {
-      // 用户主动取消不是失败；其余成因不按成因分叉。
-      if (error.errMsg.includes('cancel')) return
-      showToast(HOME_PAGE_COPY.scanFailed)
-    },
-  })
+  scanToLocker('navigate')
 }
 
 interface OrderListPageMethods {

@@ -37,7 +37,7 @@ page {
 .score-logs__failed-detail {
   color: v.$color-text-sub;
   font-size: v.$font-size-body;
-  line-height: 22px;
+  line-height: 1.57;
 }
 
 .score-logs__failed-action {
@@ -91,7 +91,7 @@ page {
   overflow: hidden;
   color: v.$color-text-main;
   font-size: v.$font-size-body;
-  line-height: 22px;
+  line-height: 1.57;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -100,7 +100,7 @@ page {
   margin-top: v.$spacing-xs;
   color: v.$color-text-sub;
   font-size: v.$font-size-aux;
-  line-height: 18px;
+  line-height: 1.5;
 }
 
 .score-logs__delta {

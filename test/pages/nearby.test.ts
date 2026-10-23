@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { installWxStub, jsonResponse, networkFailure, seedStorage } from '../helpers/wx'
-import { respondInOrder, sentRequests } from '../helpers/http'
+import { respondByRoute, sentRequests } from '../helpers/http'
 import { installFakeTimers } from '../helpers/timers'
 import type { InstalledWxStub, WxRequestSuccessResult } from '../helpers/wx'
 import { BASE_URL } from '../../miniprogram/request/config'
@@ -81,8 +81,47 @@ function siteUrl(query: string): string {
   return `${BASE_URL}${NEARBY_SITES_ENDPOINT}?${query}`
 }
 
+/**
+ * 地图流的请求特征 —— spec §8 的 `pageSize=100`。
+ *
+ * ⚠️ 本页有**两条流**：列表（`pageSize=20`，可上拉追加）与地图（`pageSize=100`，一次取）。
+ * 下面把两条流分开看，各自按自己的顺序断言 —— 混在一起数「第几次请求」会在
+ * 任何一次流的调整上假失败。
+ */
+const MAP_QUERY = 'pageSize=100'
+
+/** 列表 / 城市流的 URL（按发出顺序）。 */
 function requestUrls(wx: InstalledWxStub): string[] {
-  return sentRequests(wx.request).map((request) => request.url)
+  return sentRequests(wx.request)
+    .map((request) => request.url)
+    .filter((url) => !url.includes(MAP_QUERY))
+}
+
+/** 地图流的 URL（按发出顺序）—— 需要时（如断言只发了一发）直接用它。 */
+function mapUrls(wx: InstalledWxStub): string[] {
+  return sentRequests(wx.request)
+    .map((request) => request.url)
+    .filter((url) => url.includes(MAP_QUERY))
+}
+
+/**
+ * 两条流的响应编排。
+ *
+ * ⚠️ 地图流的**默认**是「每次列表取数都回一份空地图」：它只是为了让「列表 / 城市」
+ * 用例不必逐条补地图响应（地图流自己的行为在下面那条用例与 `nearby-map.test.ts` 里验）。
+ * 需要地图内容的用例显式传第二个参数。
+ */
+function routes(
+  list: Parameters<typeof respondByRoute>[0][number]['results'],
+  map?: Parameters<typeof respondByRoute>[0][number]['results'],
+): ReturnType<typeof respondByRoute> {
+  return respondByRoute([
+    {
+      match: (options) => options.url.includes(MAP_QUERY),
+      results: map ?? list.map(() => siteBody([])),
+    },
+    { match: () => true, results: list },
+  ])
 }
 
 let definition: Record<string, unknown> | null = null
@@ -143,12 +182,12 @@ async function settle(): Promise<void> {
 }
 
 async function mount(
-  responses: Parameters<typeof respondInOrder>[0],
+  responses: Parameters<typeof respondByRoute>[0][number]["results"],
   city: string | null = '北京',
 ): Promise<{ wx: InstalledWxStub; page: PageInstance }> {
   const wx = installWxStub()
   if (city !== null) seedStorage('nearby.city', city)
-  wx.request.mockImplementation(respondInOrder(responses))
+  wx.request.mockImplementation(routes(responses))
   const def = await loadPage()
   const page = instantiate(def)
   page.onShow?.()
@@ -185,8 +224,11 @@ describe('#72 附近页 · 定位', () => {
     expect(page.data.locationBanner).toBe(NEARBY_COPY.locationBanner)
     expect(page.data.locationAction).toBe(NEARBY_COPY.enableLocation)
     expect(requestUrls(wx)).toEqual([
-      siteUrl('radiusMeters=3000&city=%E5%8C%97%E4%BA%AC&page=1&pageSize=20'),
+      // ⚠️ 没有坐标就不发半径（城市列表没有中心点）—— spec §8 的参数口径。
+      siteUrl('city=%E5%8C%97%E4%BA%AC&page=1&pageSize=20'),
     ])
+    // 地图流是另一发，按 spec §8 取满 100 条。
+    expect(mapUrls(wx)).toEqual([siteUrl('city=%E5%8C%97%E4%BA%AC&page=1&pageSize=100')])
     // 未定位时服务端即使回了距离也不上屏。
     expect(sitesOf(page)[0]?.distanceMeters).toBeNull()
   })
@@ -296,7 +338,7 @@ describe('#72 附近页 · 城市', () => {
     expect(page.data.showCityPicker).toBe(false)
     expect(page.data.phase).toBe('ready')
     expect(requestUrls(wx)[1]).toBe(
-      siteUrl('radiusMeters=3000&city=%E4%B8%8A%E6%B5%B7&page=1&pageSize=20'),
+      siteUrl('city=%E4%B8%8A%E6%B5%B7&page=1&pageSize=20'),
     )
   })
 
@@ -356,7 +398,7 @@ describe('#72 附近页 · 搜索', () => {
     expect(page.data.activeKeyword).toBe('')
     expect(page.data.showClear).toBe(false)
     expect(requestUrls(wx)[2]).toBe(
-      siteUrl('radiusMeters=3000&city=%E5%8C%97%E4%BA%AC&page=1&pageSize=20'),
+      siteUrl('city=%E5%8C%97%E4%BA%AC&page=1&pageSize=20'),
     )
   })
 
@@ -379,23 +421,47 @@ describe('#72 附近页 · 搜索', () => {
 })
 
 describe('#72 附近页 · 空态 / 网络失败', () => {
-  it('附近 3 km 无站点 → empty；扩大到 10 km 后按 10000 重取', async () => {
-    const { wx, page } = await mount([
-      siteBody([], 0),
-      siteBody([site({ distanceMeters: 8200 })]),
-    ])
+  it('附近无站点 → empty；未定位时不给「扩大到 10 公里」（没有中心点的半径没有意义）', async () => {
+    const { wx, page } = await mount([siteBody([], 0)])
 
     expect(page.data.phase).toBe('empty')
     expect(page.data.emptyTitle).toBe(NEARBY_COPY.emptyTitle)
     expect(page.data.emptyHint).toBe(NEARBY_COPY.emptyHint)
+    expect(page.data.emptyActionLabel).toBe('')
+
+    page.onExpandRadius?.()
+    await settle()
+
+    // ⚠️ 未定位时半径**不进请求**（spec §8：城市列表没有中心点），所以扩大也不重取。
+    expect(requestUrls(wx)).toHaveLength(1)
+    expect(requestUrls(wx).every((url) => !url.includes('radiusMeters'))).toBe(true)
+  })
+
+  it('已定位且附近无站点 → 给「扩大到 10 公里」，点后按 10000 重取', async () => {
+    const { wx, page } = await mount([
+      siteBody([], 0),
+      siteBody([], 0),
+      siteBody([site({ distanceMeters: 8200 })]),
+    ])
+    wx.getLocation.mockImplementation((options) => {
+      options.success?.({ latitude: 39.996, longitude: 116.481, errMsg: 'getLocation:ok' })
+    })
+
+    page.onLocate?.()
+    await settle()
+
+    expect(page.data.phase).toBe('empty')
     expect(page.data.emptyActionLabel).toBe(NEARBY_COPY.expandRadius)
+    expect(requestUrls(wx)[1]).toBe(
+      siteUrl('lat=39.996&lng=116.481&radiusMeters=3000&city=%E5%8C%97%E4%BA%AC&page=1&pageSize=20'),
+    )
 
     page.onExpandRadius?.()
     await settle()
 
     expect(page.data.radiusMeters).toBe(10000)
-    expect(requestUrls(wx)[1]).toBe(
-      siteUrl('radiusMeters=10000&city=%E5%8C%97%E4%BA%AC&page=1&pageSize=20'),
+    expect(requestUrls(wx)[2]).toBe(
+      siteUrl('lat=39.996&lng=116.481&radiusMeters=10000&city=%E5%8C%97%E4%BA%AC&page=1&pageSize=20'),
     )
     expect(page.data.phase).toBe('ready')
   })
@@ -465,7 +531,7 @@ describe('#72 附近页 · 分页', () => {
     expect(page.data.page).toBe(2)
     expect(sitesOf(page).map((entry) => entry.siteId)).toEqual([1, 2, 3, 4])
     expect(requestUrls(wx)[1]).toBe(
-      siteUrl('radiusMeters=3000&city=%E5%8C%97%E4%BA%AC&page=2&pageSize=20'),
+      siteUrl('city=%E5%8C%97%E4%BA%AC&page=2&pageSize=20'),
     )
   })
 })

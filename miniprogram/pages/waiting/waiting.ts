@@ -39,16 +39,11 @@
 
 import { cancelOrder, getOrderDetail, payOrder } from '../../api/orders'
 import type { OrderDetailOrder, OrderDetailResponse } from '../../types/orders'
-import {
-  HOME_PAGE_COPY,
-  ORDER_LIST_PATH,
-  PAGE_TITLES,
-  WAITING_PAGE_COPY,
-} from '../../startup/copy'
+import { ORDER_LIST_PATH, PAGE_TITLES, WAITING_PAGE_COPY } from '../../startup/copy'
 import { alert, confirm, showToast } from '../../utils/feedback'
-import { resolveLockerCode } from '../../utils/locker-code'
 import { formatMoney } from '../../utils/money'
-import { LOCKER_PATH } from '../../utils/routes'
+import { resolveOrderStatus } from '../../utils/order-status'
+import { scanToLocker } from '../../utils/scan-locker'
 
 /** 轮询间隔 —— spec §4 逐字：每 3 秒一次。 */
 const POLL_INTERVAL_MS = 3000
@@ -227,8 +222,10 @@ function syncChrome(
   patch: Partial<WaitingPageData> = {},
 ): void {
   const runtime = runtimeOf(page)
-  const inProgress =
-    phase === 'waiting' || phase === 'checking' || phase === 'stalled' || phase === 'trouble'
+  // ⚠️ 取消**不在 `trouble` 出现**（spec §4 状态机：`trouble` 只允许「手动核对」）。
+  // `inProgress` 含 `trouble`，拿它当开关会让「网络不太顺、正在重试」这一屏上
+  // 同时挂着一个可点的「取消订单」—— 而那一屏的语义就是「还没拿到可信事实」。
+  const cancelAllowed = phase === 'waiting' || phase === 'checking' || phase === 'stalled'
   const checking = phase === 'checking'
   page.setData({
     phase,
@@ -242,7 +239,7 @@ function syncChrome(
       (checking && runtime.manualVisible),
     manualCheckDisabled: checking,
     manualCheckLabel: checking ? WAITING_PAGE_COPY.checking : WAITING_PAGE_COPY.manualCheck,
-    showCancel: inProgress && runtime.canCancel,
+    showCancel: cancelAllowed && runtime.canCancel,
     cancelDisabled: checking || runtime.cancelling,
     showReopen: phase === 'stalled' && runtime.direction === 'pickup',
     reopenDisabled: runtime.reopening,
@@ -338,10 +335,12 @@ function renderDetail(
   const runtime = runtimeOf(page)
   const order = detail.order
   applyDirection(page, order)
-  runtime.canCancel =
-    order.status === 2 && order.startAt === null && runtime.direction === 'drop'
+  // ⚠️ 三个判定都走共享实现：可取消 = `waitingDrop`（待存入且方向为存入），
+  // 终局分流也不再按状态码裸 switch —— 那正是「同一张单在列表与等待页分组不同」的来源。
+  const statusKey = resolveOrderStatus(order.status, order.startAt, order.endAt).key
+  runtime.canCancel = statusKey === 'waitingDrop' && runtime.direction === 'drop'
 
-  if (order.status === 7) {
+  if (statusKey === 'cancelled') {
     enterTerminal(page, {
       phase: 'cancelled',
       title: WAITING_PAGE_COPY.cancelledTitle,
@@ -352,7 +351,7 @@ function renderDetail(
     return
   }
 
-  if (order.status === 3) {
+  if (statusKey === 'completed') {
     const amount = amountOf(order, WAITING_PAGE_COPY.paidLabel)
     enterTerminal(page, {
       phase: 'picked',
@@ -364,7 +363,7 @@ function renderDetail(
     return
   }
 
-  if (order.status === 4 && order.endAt !== null) {
+  if (statusKey === 'timeoutEnd') {
     const amount = amountOf(order, WAITING_PAGE_COPY.timeoutPaidLabel)
     enterTerminal(page, {
       phase: 'timeoutEnd',
@@ -377,8 +376,8 @@ function renderDetail(
     return
   }
 
-  if (order.status === 5 || order.status === 6) {
-    const refunded = order.status === 6
+  if (statusKey === 'ended' || statusKey === 'refunded') {
+    const refunded = statusKey === 'refunded'
     enterTerminal(page, {
       phase: 'ended',
       title: refunded ? WAITING_PAGE_COPY.refundedTitle : WAITING_PAGE_COPY.endedTitle,
@@ -388,7 +387,7 @@ function renderDetail(
     return
   }
 
-  if (order.status === 2 && order.startAt !== null) {
+  if (statusKey === 'stored') {
     enterTerminal(page, {
       phase: 'stored',
       title: WAITING_PAGE_COPY.storedTitle,
@@ -650,21 +649,7 @@ async function reopen(page: WaitingPageInstance): Promise<void> {
 /** 终局的「重新扫码」—— 与首页同一条解析链路，但用 `redirectTo` 替换等待页。 */
 function rescan(page: WaitingPageInstance): void {
   if (page.data.phase !== 'cancelled') return
-  wx.scanCode({
-    success: (result) => {
-      const code = resolveLockerCode({ scanResult: result.result })
-      if (code === null) {
-        showToast(HOME_PAGE_COPY.notLockerCode)
-        return
-      }
-      wx.redirectTo({ url: `/${LOCKER_PATH}?code=${encodeURIComponent(code)}` })
-    },
-    fail: (error) => {
-      // 用户主动取消不是失败；其余成因不按成因分叉。
-      if (error.errMsg.includes('cancel')) return
-      showToast(HOME_PAGE_COPY.scanFailed)
-    },
-  })
+  scanToLocker('redirect')
 }
 
 /** 固定的「回订单列表」出口 —— 订单列表是 tab 页，只能 `switchTab`。 */
