@@ -45,7 +45,11 @@
 // ⚠️ **本模块是纯函数，不碰 `wx.*`** —— 所以 Vitest 里可以直接测（不需要任何桩）。
 // 这也是 `utils/` 的定位：纯函数（如 `resolveLockerCode`）。
 
-import { PROFILE_COPY } from '../startup/copy'
+import {
+  NOT_YET_STORED_HINT,
+  PROFILE_COPY,
+  STORED_TIME_PREFIX,
+} from '../startup/copy'
 
 /**
  * 服务端回显的时刻串 —— 形如 `2026-04-01T11:30:00+08:00`（**不是** `Date`）。
@@ -124,7 +128,8 @@ export function formatOrderTime(instant: ServerInstant): string {
 export function formatOrderTimeInProgress(instant: ServerInstant): string {
   const time = formatOrderTime(instant)
   if (time === '') return ''
-  return `存入 ${time}`
+  // 前缀只有 `copy.ts` 一个家（时间轴 `OPENED` 用的是同一个词）。
+  return `${STORED_TIME_PREFIX} ${time}`
 }
 
 /**
@@ -140,7 +145,7 @@ export function formatOrderTimeInProgress(instant: ServerInstant): string {
  * **不代表**门没关）。「关好柜门才算存入」只说条件，不断言现状。
  */
 export function formatNotYetStored(): string {
-  return '关好柜门才算存入'
+  return NOT_YET_STORED_HINT
 }
 
 /**

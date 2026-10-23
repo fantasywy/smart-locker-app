@@ -357,6 +357,81 @@ export type PagePath = keyof typeof PAGE_TITLES
 export const ORDER_LIST_PATH: PagePath = 'pages/index/index'
 
 /**
+ * **订单状态标签** —— 订单列表与订单详情共用的一张表（spec §6「状态标签」）。
+ *
+ * ⚠️ **九个标签逐字定稿，一个都不能改**：列表卡与详情页的状态摘要必须说同一句话。
+ * 后端枚举名不上屏（「强制结束」只存在于管理端）；`4` 闭单不写「已超时」。
+ *
+ * ⚠️ 键是**状态语义**，不是后端数字码。数字码 → 语义的判定（`startAt` / `endAt`
+ * 参与）只有一处：`utils/order-status.ts`。这样列表与详情不会各写一遍
+ * 「`4` 且 `endAt` 有值算超时结束」这种分叉。
+ *
+ * ⚠️ 色档不在这张表里 —— 它是样式决策，与文案同住在 `utils/order-status.ts`
+ * （`ok` / `warn` / `muted` 直接对应 `tone-chip` 的三个档）。
+ */
+export const ORDER_STATUS_LABELS = {
+  pendingPayment: '待支付',
+  waitingDrop: '待存入',
+  stored: '已存入',
+  timeout: '已超时',
+  timeoutEnd: '超时结束',
+  completed: '已完成',
+  ended: '已结束',
+  refunded: '已退款',
+  cancelled: '已取消',
+} as const
+
+/** 状态语义键 —— `ORDER_STATUS_LABELS` 的键。 */
+export type OrderStatusKey = keyof typeof ORDER_STATUS_LABELS
+
+/**
+ * 订单时间行的「存入」前缀 —— 列表在途行与详情时间轴的 `OPENED` 是**同一个词**。
+ *
+ * ⚠️ 它不是新文案，而是那个词唯一的家：`utils/datetime.ts` 的
+ * `formatOrderTimeInProgress()` 与 `ORDER_COPY.timeline.OPENED` 都从这里取。
+ * 两处各写一个「存入」时，文案守卫会把 `datetime.ts` 里的字面量判成违规 ——
+ * 那不是误报，它正是「同一个词有两个家」的证据。
+ */
+export const STORED_TIME_PREFIX = '存入'
+
+/**
+ * 订单列表「未存入」行的时间位文案 —— 逐字「关好柜门才算存入」。
+ *
+ * ⚠️ 它原本写在 `utils/datetime.ts` 的 `formatNotYetStored()` 里。`#64` 把
+ * 「存入」收进文案层（时间轴 `OPENED` 与列表前缀共用）之后，这条守卫第一次
+ * 照到了它：那句话里含「存入」，却不在 `copy.ts` —— 正是「同一个词两个家」。
+ * ⇒ 它从此归文案层，`datetime.ts` 只负责按状态选函数。
+ */
+export const NOT_YET_STORED_HINT = '关好柜门才算存入'
+
+/**
+ * **取消未开门订单**的文案 —— 等待页与订单详情页**同一套**（spec §4 / §7）。
+ *
+ * ⚠️ 同一个动作在全局只能有一个名字：两页各自写一份「取消这单？」「再想想」
+ * 就是两套文案的开始，而这两页取消的是**同一件事**（`13.10`）。
+ * 等待页的取消字段直接引用本表，详情页也引用本表 —— 改一处两页一起变。
+ *
+ * ⚠️ `rejected` 是契约逐字（`13.10` 的 `3002`）：
+ * 「柜门已开启，请放入物品后关门，或联系客服」。
+ */
+export const ORDER_CANCEL_COPY = {
+  title: '取消这单？',
+  message: '取消后格口会释放，不会产生费用。',
+  dismiss: '再想想',
+  action: '取消订单',
+  success: '订单已取消',
+  rejected: '柜门已开启，请放入物品后关门，或联系客服',
+} as const
+
+/**
+ * 通用的「没收到结果」提示 —— 取消订单（详情页）与重新开门（等待页）失败共用。
+ *
+ * ⚠️ 两处说的都是同一件事：**请求发出去了，但没拿到结果**，所以既不能承诺动作发生、
+ * 也不能说成「失败」。同一句话不各写一份，改一处两处一起变。
+ */
+export const NO_RESULT_COPY = '没收到结果，请稍后重试'
+
+/**
  * **柜机页**的全部文案 —— 动作词表、失败与重试表，以及柜机页专有文案。
  *
  * ⚠️ **本表没有任何自编字符串**：票面验收逐字要求「文案逐条有据可查，
@@ -620,23 +695,23 @@ export const WAITING_PAGE_COPY = {
   /** 订单不存在 / 非本人 / 已删除 —— 统一一句，逐字。 */
   missingTitle: '订单不存在或已删除',
 
-  /** 取消二次确认的标题 —— 逐字。 */
-  cancelTitle: '取消这单？',
+  /** 取消二次确认的标题 —— 引用共享的取消文案（与订单详情页同一套）。 */
+  cancelTitle: ORDER_CANCEL_COPY.title,
 
-  /** 取消二次确认的说明 —— 逐字。 */
-  cancelMessage: '取消后格口会释放，不会产生费用。',
+  /** 取消二次确认的说明 —— 引用共享的取消文案。 */
+  cancelMessage: ORDER_CANCEL_COPY.message,
 
-  /** 取消二次确认的取消按钮 —— 逐字（「再想想」，不是中性的「取消」）。 */
-  cancelDismiss: '再想想',
+  /** 取消二次确认的取消按钮 —— 引用共享的取消文案（「再想想」，不是中性的「取消」）。 */
+  cancelDismiss: ORDER_CANCEL_COPY.dismiss,
 
-  /** 取消二次确认的确认按钮 —— 逐字。 */
-  cancelAction: '取消订单',
+  /** 取消二次确认的确认按钮 —— 引用共享的取消文案。 */
+  cancelAction: ORDER_CANCEL_COPY.action,
 
-  /** 取消成功轻提示 —— 逐字。 */
-  cancelSuccess: '订单已取消',
+  /** 取消成功轻提示 —— 引用共享的取消文案。 */
+  cancelSuccess: ORDER_CANCEL_COPY.success,
 
-  /** 服务端 `3002`（开门指令已回执）—— 契约逐字。 */
-  cancelRejected: '柜门已开启，请放入物品后关门，或联系客服',
+  /** 服务端 `3002`（开门指令已回执）—— 契约逐字，引用共享的取消文案。 */
+  cancelRejected: ORDER_CANCEL_COPY.rejected,
 
   /** 取件停滞的重新开门入口 —— 逐字。 */
   reopenLink: '柜门没有反应？重新开门',
@@ -657,5 +732,76 @@ export const WAITING_PAGE_COPY = {
   reopenSuccess: '已重新发出开门指令',
 
   /** 重新开门失败轻提示 —— 逐字（没有收到结果，不承诺门开了）。 */
-  reopenFailed: '没收到结果，请稍后重试',
+  reopenFailed: NO_RESULT_COPY,
+} as const
+
+/**
+ * **订单详情页**的全部用户可见文案 —— spec §7「六块」+ §14 金额 / 时间口径。
+ *
+ * ⚠️ 这里只放**详情页专属**的字：状态标签在 `ORDER_STATUS_LABELS`，取件码标签与
+ * 金额四词在 `WAITING_PAGE_COPY`（同一个东西只有一个名字），取消文案在
+ * `ORDER_CANCEL_COPY`。本表引用它们，而不是各抄一份。
+ *
+ * ⚠️ **金额四词**：`referenceLabel` 永远带「参考」；`paidLabel` 是普通单的「实付」；
+ * `timeoutPaidLabel` 是 `TIMEOUT` 单的「已付」；`paymentLabel` 只用于支付记录。
+ * 详情页不写「应付 / 预估价 / 锁定价 / 已付清 / 还需支付」。
+ *
+ * ⚠️ **时间轴只消费事件码**：`timeline` 把 `13.9` 的六个 `event` 值翻成本地文案，
+ * 后端下发的 `title` 一律不上屏（那是第二文案源）。`FINISHED` 与 `FORCE_ENDED`
+ * 在这里都是「结束」—— 后端枚举的差别对用户没有意义。
+ */
+export const ORDER_COPY = {
+  /** 取件码标签 —— 与等待页同一个词（同一个东西只有一个名字）。 */
+  pickupCodeLabel: WAITING_PAGE_COPY.pickupCodeLabel,
+
+  /** 未支付 / `TIMEOUT` 未取件时的金额词 —— **永远带「参考」**。 */
+  referenceLabel: '参考金额',
+
+  /** 未支付时唯一的一句说明 —— 不必自己算，也不必说「还需支付」。 */
+  referenceNote: '以取件支付时服务端计算为准',
+
+  /** 已支付明细的三行标签。 */
+  baseFeeLabel: '基础费',
+  overtimeFeeLabel: '超时费',
+  discountLabel: '优惠',
+
+  /** 普通单的累计实收词。 */
+  paidLabel: WAITING_PAGE_COPY.paidLabel,
+
+  /** `TIMEOUT` 单的累计实收词（不得写「已付清」）。 */
+  timeoutPaidLabel: WAITING_PAGE_COPY.timeoutPaidLabel,
+
+  /** 支付记录每行的金额词 —— 只出现在详情页（首次支付成功态用同一个词）。 */
+  paymentLabel: '本次支付',
+
+  /** 柜机信息的两行标签。 */
+  lockerNoLabel: '柜机码',
+  cellLabel: '格口',
+
+  /** 待存入的主行动 —— 回等待页继续等关门。 */
+  continueWaiting: '继续等待关门',
+
+  /** 历史单底部的次级出口 —— 与首页同一个动作，沿用首页的叫法。 */
+  scanEntry: HOME_PAGE_COPY.scanButton,
+
+  /** 订单不存在 / 非本人 / 已删除 —— 与等待页统一一句，不区分成因。 */
+  missingTitle: WAITING_PAGE_COPY.missingTitle,
+
+  /** 缺失 / 失败出口的动作词。 */
+  backToOrders: WAITING_PAGE_COPY.backToOrders,
+  loadFailed: LOAD_FAILED_DETAIL,
+  retry: RETRY_LABEL,
+
+  /** 取消的通用失败（非 `3002`）—— 「没收到结果」不承诺动作发生过。 */
+  cancelFailed: NO_RESULT_COPY,
+
+  /** 时间轴事件码 → 本地文案（六码，逐字）。 */
+  timeline: {
+    CREATED: '下单',
+    OPENED: STORED_TIME_PREFIX,
+    FINISHED: '结束',
+    CANCELLED: '取消',
+    FORCE_ENDED: '结束',
+    REFUNDED: '退款',
+  },
 } as const

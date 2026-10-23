@@ -29,6 +29,12 @@ import {
   LOAD_FAILED_DETAIL,
   PROFILE_COPY,
   STATIC_EXITS,
+  ORDER_CANCEL_COPY,
+  ORDER_COPY,
+  ORDER_STATUS_LABELS,
+  STORED_TIME_PREFIX,
+  NOT_YET_STORED_HINT,
+  NO_RESULT_COPY,
 } from '../../miniprogram/startup/copy'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -148,6 +154,16 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   // 手动核对 / 取消与重新开门弹窗 / 九种终局 / 金额四词全部是用户可见的字；
   // 漏掉它们，等待页 wxml 或页面 data 里写字面量就会一路绿灯。
   ...flattenCopy(WAITING_PAGE_COPY),
+  // ⚠️ `ORDER_STATUS_LABELS` / `ORDER_CANCEL_COPY` / `ORDER_COPY` —— `#64` 新增的导出。
+  // 九个状态标签、取消弹窗与详情页的金额词 / 时间轴文案 / 失败出口全部是用户可见的字；
+  // 漏加一次，订单详情（以及 #66 的列表卡）里写字面量就会一路绿灯。
+  ...flattenCopy(ORDER_STATUS_LABELS),
+  ...flattenCopy(ORDER_CANCEL_COPY),
+  ...flattenCopy(ORDER_COPY),
+  // ⚠️ `STORED_TIME_PREFIX` —— 从 `datetime.ts` 的字面量提升出来的共享词。
+  STORED_TIME_PREFIX,
+  NOT_YET_STORED_HINT,
+  NO_RESULT_COPY,
 ].filter((literal) => literal !== '')
 
 describe('#20 失败出口是唯一的一份', () => {
