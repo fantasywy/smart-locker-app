@@ -18,6 +18,7 @@ import {
   EMPTY_STATES,
   FAILURE_DETAIL,
   FAILURE_TITLE,
+  HOME_PAGE_COPY,
   PAGE_TITLES,
   RETRY_LABEL,
   ORDER_LIST_PATH,
@@ -102,7 +103,8 @@ const allSources = (): string[] => collect(miniprogramDir, ['.ts', '.wxml', '.sc
  * 但两道网都要有人补，**别再假设它是自动的**。
  *
  * 构成：三个失败出口的字符串常量 + `STATIC_EXITS` 每一项的 `label`
- * + 数据区占位那两句 + `PAGE_TITLES` 的每一个标题 + `EMPTY_STATES` 的每一句。
+ * + 数据区占位那两句 + `PAGE_TITLES` 的每一个标题 + `EMPTY_STATES` 的每一句
+ * + 首页的 `HOME_PAGE_COPY`。
  */
 const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   FAILURE_TITLE,
@@ -128,6 +130,10 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   // 四档档名 / 底栏 / 确认弹层 / 置灰原因 / 事实行 / 入口失效文案全部是用户可见的字；
   // 漏掉它们，柜机页或 cell-card 里写字面量就会一路绿灯。
   ...flattenCopy(LOCKER_PAGE_COPY),
+  // ⚠️ `HOME_PAGE_COPY` 的每一句 —— `#61` 新增的导出。品牌 wordmark / tagline、
+  // 扫码主按钮与两条扫码反馈都是用户可见的字；漏加一次，首页 wxml 或页面 data
+  // 里写字面量就会一路绿灯（而首页恰好是唯一主行动的那一屏）。
+  ...Object.values(HOME_PAGE_COPY),
 ].filter((literal) => literal !== '')
 
 describe('#20 失败出口是唯一的一份', () => {

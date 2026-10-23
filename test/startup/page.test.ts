@@ -294,12 +294,20 @@ describe('#20 首页：闸门接线（重试真的到达闸门、状态真的画
     await vi_wait()
 
     expect(page.data.phase).toBe('failed')
-    // `data` 里只有 phase、导航栏标题与占位文案 —— 没有 error / code / message 任何一项。
-    // ⚠️ `title` 是 `#22` 加的：首页的自绘导航栏标题改从 `PAGE_TITLES` 取
-    // （原先写死在 wxml 里，与其余 9 个空壳页形状不一致）。它是**文案**，不是错误对象，
-    // 不在本断言要挡的东西里 —— 本断言的判据仍是「没有任何一项来自 `UnifiedError`」。
+    // `data` 里只有 phase、首页文案（品牌 / 按钮）与订单区占位文案 ——
+    // 没有 error / code / message 任何一项。
+    // ⚠️ `#61` 起导航栏标题留空（不再从 `PAGE_TITLES` 绑定），首页 data 里的
+    // wordmark / tagline / scanLabel 是**文案**，不是错误对象；
+    // 本断言的判据仍是「没有任何一项来自 `UnifiedError`」。
     expect(Object.keys(page.data).sort()).toEqual(
-      ['dataAreaHint', 'dataAreaTitle', 'phase', 'title'].sort(),
+      [
+        'ordersPlaceholderHint',
+        'ordersPlaceholderTitle',
+        'phase',
+        'scanLabel',
+        'tagline',
+        'wordmark',
+      ].sort(),
     )
   })
 })

@@ -1,15 +1,16 @@
-// 首页 —— **启动闸门的承载页**。
+// 首页 —— **启动闸门的承载页 + 唯一主行动（扫码存件）**。
 //
-// ## 本票（#20）在这里做什么、不做什么
+// ## 本页的两件事
 //
-// 交付的是**闸门形态**：页面结构（骨架屏）先出现，业务数据区在登录完成前不渲染；
-// 登录失败落全局失败出口；重试重跑启动链。
-//
-// ⚠️ **不实现订单列表本身**（订单列表归 D3）。所以「数据区」在这里是一个
-// **显式的占位块**，而不是一个真的列表 —— 本票的验收标准是「业务数据区在登录完成前
-// 不渲染」，那件事成立与否与数据区长什么样无关。
-// 用占位块交付它，是为了让「闸门通了」这件事**在真机上可被看见、可被 demo**
-// （本票 What to build 的原文），而不是一个只有测试知道的状态机。
+// 1. **闸门**：登录链跑完之前画首页同构骨架；登录失败落全局失败出口；成功后进首页。
+//    闸门的形态是 #20 的交付物，本票（#61）**不改它的行为**，只把 ready 的占位
+//    换成真正的首页版式。
+// 2. **扫码主行动**：`wx.scanCode` → `resolveLockerCode()` → 柜机页。
+//    四种结果各走各的路（spec §2）：
+//       • 解析出柜机码 → `navigateTo` 柜机页，带 `code`；
+//       • 非柜机码     → 留在首页，一句提示，可立刻重扫；
+//       • 用户取消     → 静默；
+//       • 其他失败     → 一句「扫码没成功，请重试」，不按成因分叉。
 //
 // ## 三条纪律
 //
@@ -18,23 +19,26 @@
 // 3. **失败态不在页面数据区里再写一份**：失败落到 `components/failure-exit/`，
 //    页面只负责把它 `wx:if` 出来 —— 「唯一」由那个组件承担。
 //
+// ## 本票刻意不做的事
+//
+// - **不做相机权限探测 / 引导**（spec §2 末段）：`wx.scanCode` 不写 `authSetting`，
+//   `wx.getSetting()` 无法区分「未请求」与「被拒绝」，任何「请开启相机权限」都是假归因。
+// - **不做进行中订单区与附近入口**：订单区在本票仍是占位，由 #67 接手；附近入口
+//   随 #72 的同一次发版露出。提前做一个假入口会违反「不造假入口」。
+// - **不写页面路径字面量**：柜机页路径来自 `utils/routes.ts` 的 `LOCKER_PATH`。
+//   `wx.*To` 拿到不存在的路径是**静默失败** —— 与「点了没反应」同一个症状。
+//
 // ⚠️ 用的是 `Component()` 而不是 `Page()` —— 全端 10 个页面都按这一形态落地
 // （出处是 quickstart 的既有写法，`pages/logs` 那处残留已由 #22 删除），
 // 且 `Component` 的 `lifetimes` 让「订阅在 `attached`、退订在 `detached`」这件事
 // 有明确的挂载点。
-//
-// ⚠️ quickstart 骨架里的头像昵称示例（`getUserProfile` / `chooseAvatar`）**刻意删掉**：
-// 那些能力的正确落点是「我的」页（入口只在那里，且不阻塞任何流程），
-// 首页留一份会误导后来者以为首页要承担资料填写。它与 #18 删掉 quickstart 里那段
-// 「取到 code 只 console.log」是同一取向 —— 入口文件不该存在一份错误的示范。
 
 import { createStartupGate } from '../../startup/gate'
 import type { StartupGate, StartupState } from '../../startup/gate'
-import {
-  DATA_AREA_PLACEHOLDER_HINT,
-  DATA_AREA_PLACEHOLDER_TITLE,
-  PAGE_TITLES,
-} from '../../startup/copy'
+import { HOME_PAGE_COPY } from '../../startup/copy'
+import { showToast } from '../../utils/feedback'
+import { resolveLockerCode } from '../../utils/locker-code'
+import { LOCKER_PATH } from '../../utils/routes'
 
 /**
  * 闸门实例 —— **模块级的单例**，不是 `data` 里的一员。
@@ -74,34 +78,33 @@ interface IndexPageInstance {
 Component({
   data: {
     /**
-     * 自绘导航栏标题 —— 唯一的家是 `startup/copy.ts` 的 `PAGE_TITLES`。
-     *
-     * ⚠️ 与 9 个空壳页同一个形状。本页原先在 wxml 里写死「我的订单」字面量，
-     * 而 `#22` 刚把这个字符串收进 `PAGE_TITLES` —— 于是同一个词有了两个家，
-     * 且 `test/startup/conventions.test.ts` 的文案守卫**覆盖不到**（它反推的是
-     * `USER_VISIBLE_COPY_LITERALS`，`PAGE_TITLES` 的值不在其中）。
-     * review 抓到了这一点：收拢动作做了一半，等于没做。现已改为一处。
-     */
-    title: PAGE_TITLES['pages/index/index'],
-
-    /**
-     * 闸门状态 —— wxml 用它决定画骨架屏、数据区、还是失败出口。
+     * 闸门状态 —— wxml 用它决定画骨架屏、首页、还是失败出口。
      *
      * ⚠️ 与 `StartupState` 的判别键同名（`phase`），这样 `wx:if="{{phase === 'ready'}}"`
      * 与 TS 里的 `state.phase === 'ready'` 读起来是同一件事。
-     * 三个取值：`'loading'`（骨架屏）/ `'ready'`（数据区）/ `'failed'`（失败出口）。
      */
     phase: 'loading' as StartupState['phase'],
 
     /**
-     * 数据区占位文案 —— ⚠️ **过渡期的债**，随订单列表（D3）落地一起删。
+     * 品牌区与扫码按钮的文案 —— 唯一的家是 `startup/copy.ts` 的 `HOME_PAGE_COPY`。
      *
-     * 从 `copy.ts` 来而不是写在 wxml 里：用户可见的每个字都归文案层。
-     * 本票的 review 抓到过第一版写在模板里的两句 ——
-     * 其中一句还是「订单列表将在后续票中落地」这样的**开发者台词**。
+     * ⚠️ **导航栏标题不在这里**：spec §2 要求首页标题留空（只留胶囊），
+     * 但 `PAGE_TITLES['pages/index/index']` 仍登记「首页」，供文案守卫与分享等
+     * 非渲染场景使用。把 `PAGE_TITLES` 绑到 `title` 上会让导航栏多出一行字。
      */
-    dataAreaTitle: DATA_AREA_PLACEHOLDER_TITLE,
-    dataAreaHint: DATA_AREA_PLACEHOLDER_HINT,
+    wordmark: HOME_PAGE_COPY.wordmark,
+    tagline: HOME_PAGE_COPY.tagline,
+    scanLabel: HOME_PAGE_COPY.scanButton,
+
+    /**
+     * 订单区占位文案 —— ⚠️ **过渡期的债**，随 #67 的进行中订单区落地一起删。
+     *
+     * 本票的票面明确「页内订单区仍是占位，由后续票接手」。保留它，是为了让
+     * 「闸门通了、首页真的渲染出来了」在真机上一眼可见；它**不是**订单卡，
+     * 也不承载任何业务数据。
+     */
+    ordersPlaceholderTitle: HOME_PAGE_COPY.ordersPlaceholderTitle,
+    ordersPlaceholderHint: HOME_PAGE_COPY.ordersPlaceholderHint,
   },
 
   lifetimes: {
@@ -166,6 +169,58 @@ Component({
      */
     onStaticExit(): void {
       // 有意为空 —— 见方法的注释。
+    },
+
+    /**
+     * 扫码主行动 —— **唯一入口**。
+     *
+     * ⚠️ **不传 `onlyFromCamera`**：spec §2 要求默认允许相册选码。
+     * 相机权限不做任何探测或引导（见文件头）。
+     *
+     * ⚠️ 回调里只做「收敛 → 分流」两件事，不在这里写任何文案字面量；
+     * 提示语从 `HOME_PAGE_COPY` 来，走统一的反馈适配层。
+     */
+    onScan(): void {
+      wx.scanCode({
+        success: (res) => {
+          this.handleScanResult(res.result)
+        },
+        fail: (err) => {
+          this.handleScanFailure(err.errMsg)
+        },
+      })
+    },
+
+    /**
+     * 扫到了东西 —— 用 `resolveLockerCode()` 收敛成柜机码。
+     *
+     * ⚠️ **解析不出就留在首页**（不跳柜机页的入口失效页）：入口失效页是给
+     * 「从冷启动通道带着一个坏码进来」的用户的；首页扫码的用户就站在这里，
+     * 让他重扫一次比把他带到一个「这个码没用」的页面更直接。
+     */
+    handleScanResult(result: string): void {
+      const code = resolveLockerCode({ scanResult: result })
+      if (code === null) {
+        showToast(HOME_PAGE_COPY.notLockerCode)
+        return
+      }
+
+      wx.navigateTo({
+        // ⚠️ 路径来自常量；`code` 做一次编码，避免柜机码里的保留字符破坏查询串。
+        url: `/${LOCKER_PATH}?code=${encodeURIComponent(code)}`,
+      })
+    },
+
+    /**
+     * 扫码失败 —— **取消静默，其余一句提示**。
+     *
+     * ⚠️ 用户主动取消不是失败：弹一句「扫码没成功」会把用户的主动返回说成事故。
+     * 其余成因（相机不可用 / 系统错误 / 权限被拒）**不按成因分叉** —— 用户对成因
+     * 无能为力，一句「请重试」就是全部可行动信息。
+     */
+    handleScanFailure(errMsg: string): void {
+      if (errMsg.includes('cancel')) return
+      showToast(HOME_PAGE_COPY.scanFailed)
     },
   },
 })
