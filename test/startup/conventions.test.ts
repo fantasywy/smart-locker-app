@@ -24,6 +24,7 @@ import {
   ORDER_LIST_PATH,
   NAVIGATION_COPY,
   CONFIRM_COPY,
+  LOCKER_PAGE_COPY,
   STATIC_EXITS,
 } from '../../miniprogram/startup/copy'
 
@@ -63,6 +64,22 @@ function stripComments(source: string): string {
 /** 相对仓库根的展示路径，失败信息里用。 */
 function rel(path: string): string {
   return relative(repoRoot, path)
+}
+
+/**
+ * 把一张文案表（可能含嵌套对象）摊平成字符串列表。
+ *
+ * ⚠️ 为什么需要它：`LOCKER_PAGE_COPY` 的档名是一张子表
+ * （`cellTypeLabels: { 1: '小格口', ... }`）。只做 `Object.values` 会把
+ * 子表变成 `[object Object]`，于是四条档名全都逃过守卫 ——
+ * 而这正是「新增导出必须回来补一次」最容易漏的形状。
+ */
+function flattenCopy(value: unknown): string[] {
+  if (typeof value === 'string') return [value]
+  if (value !== null && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).flatMap(flattenCopy)
+  }
+  return []
 }
 
 const allSources = (): string[] => collect(miniprogramDir, ['.ts', '.wxml', '.scss', '.json'])
@@ -109,6 +126,10 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   // ⚠️ 空串要滤掉：`scoreLogs` 的 `hint` / `actionLabel` 是**有意的缺省**，
   // 而 `code.includes('')` 恒为 true —— 留着它这条守卫会当场全红。
   ...Object.values(EMPTY_STATES).flatMap((state) => [state.title, state.hint, state.actionLabel]),
+  // ⚠️ `LOCKER_PAGE_COPY` —— **#62 新增的导出**（旧票遗漏了这一项，repo-map §5 已记为已知缺口）。
+  // 四档档名 / 底栏 / 确认弹层 / 置灰原因 / 事实行 / 入口失效文案全部是用户可见的字；
+  // 漏掉它们，柜机页或 cell-card 里写字面量就会一路绿灯。
+  ...flattenCopy(LOCKER_PAGE_COPY),
   // ⚠️ `HOME_PAGE_COPY` 的每一句 —— `#61` 新增的导出。品牌 wordmark / tagline、
   // 扫码主按钮与两条扫码反馈都是用户可见的字；漏加一次，首页 wxml 或页面 data
   // 里写字面量就会一路绿灯（而首页恰好是唯一主行动的那一屏）。

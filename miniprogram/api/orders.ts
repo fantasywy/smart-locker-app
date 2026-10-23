@@ -25,13 +25,16 @@ export const CREATE_ORDER_PATH = `${API_PREFIX}/orders`
 /**
  * `13.7` 创建存件订单 —— 分配一个空闲格口并生成开门指令。
  *
- * @param body `lockerId`（来自 `13.6`）+ `cellType`（用户点的那一档）
+ * @param body `lockerId`（来自 `13.6`）+ `cellType`（用户点的那一档，数字码 1–4）
  * @returns 成功时订单摘要（含 `orderId` 与 `openTimeoutMinutes`）；失败时统一异常对象
  *
- * ⚠️ **失败码归因在页面**：
- *   • `4004` → 「这台柜机暂时不可用，请换一台或稍后再试」（定稿文案）
- *   • `8002` → 「该类型格口已满，换一种类型或换一台柜机」（定稿文案）
+ * ⚠️ **失败码归因在页面**（本模块只搬运异常，不翻译文案）：
+ *   • `4004` → 页面取 `LOCKER_PAGE_COPY.lockerUnavailableReason`
+ *   • `8002` → 页面取 `LOCKER_PAGE_COPY.cellTypeFullReason`
  *   • `5004` → 走受限卡（请求层的**唯一特判**，已归一成 `kind: 'restricted'`）
+ *
+ * ⚠️ 请求体里的 `cellType` 是**后端数字码 1–4**（spec #57 §3 契约漂移修复）。
+ * 页面只允许从自己的档位表取值，不得在这里做任何字符串 ↔ 数字转换。
  *
  * ⚠️ **本函数不幂等**：它每被调用一次就多一张订单 + 一个预留格口（见文件头）。
  * 调用方必须自己防重复提交。
