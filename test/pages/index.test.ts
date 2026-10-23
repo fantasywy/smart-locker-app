@@ -46,7 +46,7 @@ function loginBody(): Record<string, unknown> {
       accessToken: 'ACCESS-1',
       refreshToken: 'REFRESH-1',
       expiresIn: 7200,
-      user: { id: 88, nickname: null, avatar: null, phone: null, score: 100, status: 'NORMAL' },
+      user: { id: 88, nickname: null, avatar: null, phone: null, score: 100, status: 1 },
     },
   }
 }

@@ -72,7 +72,7 @@ function loginBody(accessToken: string, refreshToken: string): WxRequestSuccessR
       accessToken,
       refreshToken,
       expiresIn: 7200,
-      user: { id: 88, nickname: null, avatar: null, phone: null, score: 100, status: 'NORMAL' },
+      user: { id: 88, nickname: null, avatar: null, phone: null, score: 100, status: 1 },
     },
   })
 }

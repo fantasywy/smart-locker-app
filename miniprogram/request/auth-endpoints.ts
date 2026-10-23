@@ -38,9 +38,9 @@ import { LOGIN_PATH, REFRESH_PATH } from './config'
  * 契约：API设计文档.md §13.1 (:1045-1065)
  *
  * 用 `wx.login` 拿到的临时 `code` 换双 token。openid **首次出现自动注册**
- * （初始信用分 `score.max`、状态 `NORMAL`，§13.1 :1065）。
+ * （初始信用分 `score.max`、状态 `1`(NORMAL)，§13.1 :1065）。
  *
- * ⚠️ **黑名单用户允许登录** —— 响应里的 `user.status` 可能是 `BLACKLISTED` 而**登录照样成功**
+ * ⚠️ **黑名单用户允许登录** —— 响应里的 `user.status` 可能是 `2`(BLACKLISTED) 而**登录照样成功**
  * （§13.1 :1065）。⚠️ 上面引的「黑名单」是**后端契约原文**，照引不误；但**用户可见文案里不出
  * 这个词**，一律说「受限」（`GLOSSARY.md`「受限」）。
  * 本函数**不做任何基于 `status` 的阻断**（「拦截权只能属于服务端」）

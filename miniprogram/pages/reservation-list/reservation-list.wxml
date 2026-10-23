@@ -1,19 +1,106 @@
 <!--
-  reservation-list 页 —— **空壳**（issue #22 铺的骨架，页面本身归各自的功能票）。
+  我的预约页 —— 待使用 / 已结束两组（spec #57 §10）。
 
-  ⚠️ 为什么先落空壳：`app.json` 的 `pages` 是**全局唯一**的注册表，
-     每张页面票各改一次它，必然并发冲突。
-     一次性把 10 个页面注册齐，页面票就只动自己那个目录。
+  ⚠️ **本文件没有一句用户可见字面量**：分组标题 / 状态标签 / 按钮 / 卡内说明 /
+  空态与失败句全部来自 `startup/copy.ts`，页面 data 只是转手。
 
-  ⚠️ 标题来自 `startup/copy.ts` 的 `PAGE_TITLES`，**不在本文件里写字面量** ——
-     标题是用户可见的字，归文案层；
-     `test/startup/conventions.test.ts` 有一条守卫会判违规（它在本票第一版抓过一次）。
+  ⚠️ **按钮始终可见可点**：`PENDING` 行的「开始使用」不按使用窗口置灰
+     （窗口两端 `holdMinutes` / `noShowMinutes` 不在 C 端契约里，算不出来）。
+     服务端拒绝时由页面在动作点提示并刷新。
 
-  ⚠️ 这个文件里**没有任何业务内容**，也**不假装**有：
-     不写「敬请期待」、不写占位数据、不写开发者台词。
-     它渲染的只有自绘导航栏（全端统一自绘）与一个空的页面容器。
-     承载它的页面票请**整体替换**本文件，而不是往上叠。
+  ⚠️ **爽约 / 失效说明分开**：`NOSHOW`「爽约，已扣信用分」；
+     `EXPIRED`「柜机故障，预约已失效，不扣信用分」。两句都由 `card.note` 承担，
+     模板不参与措辞。
+
+  ⚠️ 二级页：导航栏显示返回箭头（从「我的」进来）。
 -->
-<navigation-bar title="{{ title }}" back="{{true}}"></navigation-bar>
+<navigation-bar title="{{ title }}" back="{{true}}" />
 
-<view class="page"></view>
+<view class="page">
+  <!-- 首屏骨架：列表形状（色条 + 两行短块 + 状态标签位）。 -->
+  <skeleton wx:if="{{ phase === 'loading' }}" />
+
+  <!-- 页内失败：不甩成全局失败出口（那一个只给登录链）。 -->
+  <view wx:elif="{{ phase === 'failed' }}" class="reservation-list__failed">
+    <view class="reservation-list__failed-detail">{{ loadFailed }}</view>
+    <button
+      class="reservation-list__failed-action"
+      hover-class="reservation-list__failed-action_active"
+      bindtap="onRetry"
+    >{{ retryLabel }}</button>
+  </view>
+
+  <!-- 空态：复用预约空态；出口只能是扫码（创建入口只在柜机页）。 -->
+  <empty-state
+    wx:elif="{{ isEmpty }}"
+    title="{{ emptyTitle }}"
+    hint="{{ emptyHint }}"
+    action-label="{{ emptyActionLabel }}"
+    bind:action="onScan"
+  />
+
+  <block wx:else>
+    <view wx:for="{{ groups }}" wx:key="key" class="reservation-list__group">
+      <view class="reservation-list__group-title">{{ item.title }}</view>
+
+      <view
+        wx:for="{{ item.cards }}"
+        wx:for-item="card"
+        wx:key="id"
+        class="reservation-list__card is-{{ card.statusTone }}"
+      >
+        <view class="reservation-list__head">
+          <view class="reservation-list__site">{{ card.siteName }}</view>
+          <view class="reservation-list__status is-{{ card.statusTone }}">{{ card.statusLabel }}</view>
+        </view>
+
+        <view class="reservation-list__meta">
+          <text class="reservation-list__locker">{{ card.lockerNo }}</text>
+          <text class="reservation-list__cell">{{ card.cellText }}</text>
+        </view>
+
+        <view class="reservation-list__time">{{ card.timeRange }}</view>
+
+        <!-- 卡内说明：只有 NOSHOW / EXPIRED 有；CANCELLED 一个字都没有。 -->
+        <view wx:if="{{ card.showNote }}" class="reservation-list__note">{{ card.note }}</view>
+
+        <view
+          wx:if="{{ card.showStart || card.showCancel || card.showViewOrder }}"
+          class="reservation-list__actions"
+        >
+          <button
+            wx:if="{{ card.showStart }}"
+            class="reservation-list__action reservation-list__action--primary"
+            hover-class="reservation-list__action--primary_active"
+            hover-start-time="0"
+            hover-stay-time="0"
+            data-id="{{ card.id }}"
+            bindtap="onStartUse"
+          >{{ startActionLabel }}</button>
+          <button
+            wx:if="{{ card.showCancel }}"
+            class="reservation-list__action reservation-list__action--secondary"
+            hover-class="reservation-list__action--secondary_active"
+            hover-start-time="0"
+            hover-stay-time="0"
+            data-id="{{ card.id }}"
+            bindtap="onCancel"
+          >{{ cancelActionLabel }}</button>
+          <button
+            wx:if="{{ card.showViewOrder }}"
+            class="reservation-list__action reservation-list__action--secondary"
+            hover-class="reservation-list__action--secondary_active"
+            hover-start-time="0"
+            hover-stay-time="0"
+            data-id="{{ card.orderId }}"
+            bindtap="onViewOrder"
+          >{{ viewOrderLabel }}</button>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- 反馈宿主：页面决定宿主在哪，页面本身不 import Vant 的 Toast / Dialog。 -->
+  <van-toast id="van-toast" />
+  <van-dialog id="van-dialog" />
+</view>

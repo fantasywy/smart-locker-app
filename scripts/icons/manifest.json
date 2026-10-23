@@ -96,6 +96,9 @@
     "nearby.hours": {
       "lucide": "clock"
     },
+    "profile.avatar": {
+      "lucide": "user-round"
+    },
     "profile.orders": {
       "lucide": "receipt-text"
     },

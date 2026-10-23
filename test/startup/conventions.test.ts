@@ -27,6 +27,7 @@ import {
   LOCKER_PAGE_COPY,
   WAITING_PAGE_COPY,
   LOAD_FAILED_DETAIL,
+  PROFILE_COPY,
   STATIC_EXITS,
   ORDER_CANCEL_COPY,
   ORDER_COPY,
@@ -36,6 +37,9 @@ import {
   NO_RESULT_COPY,
   PICKUP_SHEET_COPY,
   ORDER_LIST_COPY,
+  RESERVATION_CREATE_COPY,
+  RESERVATION_LIST_COPY,
+  RESERVATION_STATUS_LABELS,
 } from '../../miniprogram/startup/copy'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -147,6 +151,10 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   // 扫码主按钮与两条扫码反馈都是用户可见的字；漏加一次，首页 wxml 或页面 data
   // 里写字面量就会一路绿灯（而首页恰好是唯一主行动的那一屏）。
   ...Object.values(HOME_PAGE_COPY),
+  // ⚠️ `PROFILE_COPY` 的每一句 —— `#69` 新增的导出。身份回退名、受限卡四行、
+  // 信用分 / 两组入口、昵称校验与保存失败全部是用户可见的字；
+  // 漏加一次，「我的」页 wxml 里写字面量就会一路绿灯（而受限卡的四行是逐字定稿）。
+  ...flattenCopy(PROFILE_COPY),
   // ⚠️ `WAITING_PAGE_COPY` 的每一句 —— `#63` 新增的导出。主陈述 / 停滞说明 /
   // 手动核对 / 取消与重新开门弹窗 / 九种终局 / 金额四词全部是用户可见的字；
   // 漏掉它们，等待页 wxml 或页面 data 里写字面量就会一路绿灯。
@@ -163,6 +171,13 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   // ⚠️ `ORDER_LIST_COPY` —— `#66` 新增的导出。组标题 / 进行中「还有更多」/
   // 首屏失败与加载更多失败都是用户可见的字；漏加一次，列表页里写字面量就会一路绿灯。
   ...flattenCopy(ORDER_LIST_COPY),
+  // ⚠️ `RESERVATION_STATUS_LABELS` / `RESERVATION_LIST_COPY` / `RESERVATION_CREATE_COPY`
+  // —— `#70` 新增的导出。五个预约状态标签、两个二次确认、爽约 / 失效归因与
+  // 创建页的分组标题 / 校验句全部是用户可见的字；漏加一次，预约两页里写字面量
+  // 就会一路绿灯（而爽约与失效分开讲正是本票的验收事实）。
+  ...flattenCopy(RESERVATION_STATUS_LABELS),
+  ...flattenCopy(RESERVATION_LIST_COPY),
+  ...flattenCopy(RESERVATION_CREATE_COPY),
   // ⚠️ `STORED_TIME_PREFIX` —— 从 `datetime.ts` 的字面量提升出来的共享词。
   STORED_TIME_PREFIX,
   NOT_YET_STORED_HINT,

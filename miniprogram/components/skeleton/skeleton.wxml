@@ -39,6 +39,31 @@
 </view>
 
 <!--
+  「我的」页身份区骨架（#69）—— 形状对照真实版式：64px 圆形头像 + 两行短块。
+  ⚠️ 与信用分卡**各自一份**：两块的形状不同，且读取失败时各自在块内给一行提示。
+-->
+<view
+  wx:elif="{{ variant === 'identity' }}"
+  class="skeleton skeleton--identity"
+  aria-role="skeleton"
+>
+  <view class="skeleton__avatar"></view>
+  <view class="skeleton__identity-copy">
+    <view class="skeleton__block skeleton__block--title"></view>
+    <view class="skeleton__block skeleton__block--meta"></view>
+  </view>
+</view>
+
+<!--
+  「我的」页信用分卡骨架（#69）—— 一行标签 + 一行分数 + 右侧「明细」位。
+-->
+<view wx:elif="{{ variant === 'credit' }}" class="skeleton skeleton--credit" aria-role="skeleton">
+  <view class="skeleton__block skeleton__credit-label"></view>
+  <view class="skeleton__block skeleton__credit-score"></view>
+  <view class="skeleton__chip skeleton__credit-detail"></view>
+</view>
+
+<!--
   详情骨架（#64）—— 状态块 / 取件码块 / 两行信息 / 时间轴。
   形状对照订单详情页的六块，让首屏加载不跳版；仍然只有中性块，没有文字。
 -->

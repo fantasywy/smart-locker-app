@@ -154,6 +154,68 @@
 }
 
 // ---------------------------------------------------------------------------
+// 「我的」页骨架（#69）—— 身份区 / 信用分卡各自一份。
+//
+// ⚠️ 两块都用中性 token（$color-border / $color-bg-card），不带任何语义档：
+// 此刻还不知道用户的 status / score，染上任何一档都是在替数据说话。
+// ---------------------------------------------------------------------------
+.skeleton--identity,
+.skeleton--credit {
+  display: flex;
+  align-items: center;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-shadow: v.$shadow-card;
+  padding: v.$spacing-md;
+}
+
+.skeleton--identity {
+  // 真版式的头像位是 64px —— 骨架照抄这个几何，内容到位时布局不跳。
+  min-height: 64px;
+}
+
+.skeleton__avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: v.$color-border;
+  margin-right: v.$spacing-md;
+  flex: none;
+}
+
+.skeleton__identity-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.skeleton__identity-copy .skeleton__block--title {
+  width: 40%;
+}
+
+.skeleton__identity-copy .skeleton__block--meta {
+  width: 24%;
+  margin-top: v.$spacing-sm;
+}
+
+.skeleton__credit-label {
+  width: 30%;
+  height: 16px;
+}
+
+.skeleton__credit-score {
+  width: 12%;
+  height: 20px;
+  margin-left: auto;
+}
+
+.skeleton__credit-detail {
+  width: 12%;
+  margin-left: v.$spacing-sm;
+  background: v.$color-border;
+}
+
+// ---------------------------------------------------------------------------
 // 详情骨架（#64）—— 状态块 / 取件码块 / 两行信息 / 时间轴
 // ---------------------------------------------------------------------------
 // ⚠️ 形状对照订单详情页：首屏加载时布局不能跳，否则内容一到位整页重排。
@@ -214,3 +276,4 @@
   width: 30%;
   height: 12px;
 }
+

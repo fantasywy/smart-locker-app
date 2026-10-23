@@ -89,7 +89,7 @@ describe('#20 启动闸门：三个状态', () => {
       Promise.resolve({
         ok: true,
         // 一个形状可疑的 `data`：闸门连它是什么都不该关心。
-        data: { user: { score: 100, status: 'NORMAL' } },
+        data: { user: { score: 100, status: 1 } },
       }),
     )
 
@@ -98,14 +98,14 @@ describe('#20 启动闸门：三个状态', () => {
     expect(state).toEqual({ phase: 'ready' })
   })
 
-  it('⚠️ 登录成功且 user.status 为 BLACKLISTED → 照样 ready（登录不被拒）', async () => {
+  it('⚠️ 登录成功且 user.status 为 2（受限） → 照样 ready（登录不被拒）', async () => {
     // 这里有一个必须带住的陷阱：「拦截权只能属于服务端」，受限用户**允许登录**。
     // 闸门放行；是否受限 由动作点的 `5004`（`kind: 'restricted'`）说了算。
     // ⚠️ 本地若据此拦截，最坏的结果是**把已经解禁的用户挡在门外**。
     const gate = createStartupGate(() =>
       Promise.resolve({
         ok: true,
-        data: { user: { score: 40, status: 'BLACKLISTED' } },
+        data: { user: { score: 40, status: 2 } },
       }),
     )
 

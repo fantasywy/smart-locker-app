@@ -9,8 +9,8 @@
 // 本模块按类型层的既定规则落地：
 //   1. **不发明字段、不改字段名、不合并语义不同的字段** —— 后端叫 `accessToken` 就叫 `accessToken`。
 //   2. **可空字段显式标 `| null`** —— strict 模式因此强迫调用方处理这些分支。
-//   3. **枚举值与后端逐字一致** —— `NORMAL` / `BLACKLISTED` 原样进类型。中文映射属文案层，
-//      **不进这里**：类型层是后端的形状，文案层是用户的语言。
+//   3. **枚举值与后端逐字一致** —— `UserStatus` 是**数字码** `1 | 2`（spec §57 §14.9）。
+//      中文映射属文案层，**不进这里**：类型层是后端的形状，文案层是用户的语言。
 //   4. **找不到契约依据的字段不写** —— 宁可缺，不可编。本模块因此**没有** `13.2` 的
 //      `refreshToken`（契约里根本没有它，只有 `accessToken` / `expiresIn`）。
 //
@@ -52,13 +52,19 @@ export interface LoginRequest {
 }
 
 /**
- * 用户状态枚举 —— **值与后端逐字一致**，不做任何中文映射。
+ * 用户状态枚举 —— **数字码，与原后端枚举一一对应**，不做任何中文映射。
  *
- * 契约：API设计文档.md §13.1 (:1070, :1075)
- * 后端真源：`UserStatus`（`NORMAL` / `BLACKLISTED`）；信用分的档位语义
- * （`NORMAL` → 中性档；`BLACKLISTED` → 警示档）**是文案层的映射，不在此处**。
+ * 契约：API设计文档.md §13.1 (:1070, :1075)、§13.4、§14.9（spec #57）
+ *   1 = 正常（后端 `NORMAL`）
+ *   2 = 受限（后端 `BLACKLISTED`；**用户可见文案一律说「受限」**）
+ *
+ * ⚠️ 契约传输的是**数字码**（`JacksonConfig` 的 `CodedEnum` 全局序列化），
+ * 不是英文枚举名。旧版类型写成 `'NORMAL' | 'BLACKLISTED'` 是契约漂移，
+ * 由 #69 一次性迁到数字码；中文 / 档位映射仍属文案层，不在这里。
+ *
+ * ⚠️ 信用分的档位语义（1 → 中性档；2 → 警示档）**是文案层的映射**，不在此处。
  */
-export type UserStatus = 'NORMAL' | 'BLACKLISTED'
+export type UserStatus = 1 | 2
 
 /**
  * `13.1` 响应 `data.user` —— 登录时刻的用户简要信息。
@@ -98,9 +104,9 @@ export interface LoginUser {
   /**
    * 用户状态。**不可空** —— 但值本身带一个必须写死的陷阱，见下。
    *
-   * ⚠️⚠️ **登录成功时它也可能是 `BLACKLISTED`。**
+   * ⚠️⚠️ **登录成功时它也可能是 `2`（受限）。**
    *
-   * 契约原文：`13.1`「**黑名单用户允许登录**（`status` 返回 `BLACKLISTED`，下单等操作另行拦截）」
+   * 契约原文：`13.1`「**黑名单用户允许登录**（`status` 返回 `2`(BLACKLISTED)，下单等操作另行拦截）」
    * （§13.1 :1075）⇒ **不存在「登录被拒」的业务分支**。也就是说 `status` 与「这次登录成不成功」
    * **完全正交** —— 它描述的是这个账号当前的受限状态，不是登录的结果。
    *
@@ -117,7 +123,7 @@ export interface LoginUser {
    *      文案在动作点按受限口径解释。
    *   3. 因此**本层只把它作为字段带住**，判断权交给后续动作点。
    *
-   * 后来者最容易在这里加一个「`BLACKLISTED` 就跳受限页」的早退分支 —— 那正是既定裁决
+   * 后来者最容易在这里加一个「`status === 2` 就跳受限页」的早退分支 —— 那正是既定裁决
    * 明令禁止的。**本字段的正确用法是「只读、不判断」。**
    */
   status: UserStatus
@@ -130,8 +136,8 @@ export interface LoginUser {
  *
  * ```json
  * { "accessToken": "xxxx", "refreshToken": "yyyy", "expiresIn": 7200,
- *   "user": { "id": 88, "nickname": "小明", "avatar": "https://...", "phone": "13900000000",
- *             "score": 95, "status": "NORMAL" } }
+ *   "user": { "id": 88, "nickname": "小明", "avatar": null, "phone": "13900000000",
+ *             "score": 95, "status": 1 } }
  * ```
  */
 export interface LoginResponse {

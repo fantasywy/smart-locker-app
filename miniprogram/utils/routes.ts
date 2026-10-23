@@ -22,7 +22,7 @@
 // ⚠️ 本模块**只有常量，没有行为**（克制取向：不编不存在的需求）。
 // 页面自己的逻辑不长在这里。
 
-import type { PagePath } from '../startup/copy'
+import type { PagePath, StaticExitId } from '../startup/copy'
 
 /**
  * 等待态的页面路径 —— `app.json` 已注册（`#22` 一次配齐 10 个页面）。
@@ -93,10 +93,42 @@ export const BILLING_INFO_PATH: PagePath = 'pages/billing-info/billing-info'
 export const FAQ_PATH: PagePath = 'pages/faq/faq'
 
 /**
- * **订单详情页**的路径 —— 订单列表卡与首页进行中卡的目的地。
+ * **订单详情页**的路径 —— 订单列表卡 / 首页进行中卡 / 预约列表 `USED` 行的目的地。
  *
  * 用途：整卡点击时 `wx.navigateTo` 叠到当前列表 / 首页之上，返回键回到来源页。
  * ⚠️ 列表是 tab 页，**不能** `redirectTo`（会把 tab 页从栈里拆掉）；
  * 详情 → 等待页才用 `redirectTo`（spec §1 导航规则 4 / 5）。
+ * ⚠️ 预约列表 `USED` 行的「查看订单」也用它（#70）：`13.15` 的响应里 `orderNo`
+ * 不上屏，订单详情页的参数是 `id`（订单 ID）。
  */
 export const ORDER_DETAIL_PATH: PagePath = 'pages/order-detail/order-detail'
+
+/**
+ * **信用分明细页**的路径 —— 「我的」页信用分卡「明细 ›」的目标（issue #69）。
+ *
+ * ⚠️ 用 `navigateTo`（不是 `switchTab`）：它不是 tab 页；从「我的」出发，返回键应回「我的」。
+ * 与其它路径同理，写成常量而不是在页面里写 `pages/...` 字面量 —— 路径写错是静默失败。
+ */
+export const SCORE_LOGS_PATH: PagePath = 'pages/score-logs/score-logs'
+
+/**
+ * **我的预约页**的路径 —— 「我的」页「我的服务 → 我的预约」的目标（issue #69）。
+ *
+ * ⚠️ 用 `navigateTo`：它不是 tab 页；从「我的」出发，返回键应回「我的」。
+ * 创建预约的唯一入口仍在柜机页，本页只是列表出口，不提供「新建预约」。
+ */
+export const RESERVATION_LIST_PATH: PagePath = 'pages/reservation-list/reservation-list'
+
+/**
+ * 静态出口的**行为 id → 路由**映射 —— 首页失败出口与「我的」页共用同一张表。
+ *
+ * ⚠️ 键是 `STATIC_EXITS` 的 `id`，**不是 label**：`STATIC_EXITS` 把「行为」与「措辞」解耦；
+ * 按文案选目标会在改词那天让入口静默失效。`contact` 不在这张表里 —— 它由
+ * `open-type="contact"` 原生承载，页面不做任何降级。
+ *
+ * ⚠️ 两页共用本表（而不是各自写一份两行 map）：同一组出口的目标必须只有一个家。
+ */
+export const STATIC_EXIT_PATHS: Partial<Record<StaticExitId, PagePath>> = {
+  billing: BILLING_INFO_PATH,
+  faq: FAQ_PATH,
+}
