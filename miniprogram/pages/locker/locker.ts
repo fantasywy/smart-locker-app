@@ -171,7 +171,7 @@ interface LockerPageMethods {
 
 /** 余位模板的唯一格式化入口（copy 层给 `余 {count} 个`）。 */
 function remainingText(count: number): string {
-  return LOCKER_PAGE_COPY.remaining.replace('{count}', String(count))
+  return LOCKER_PAGE_COPY.remaining.replace('{count}', () => String(count))
 }
 
 /** 当前页面栈深 —— 冷启动直达柜机页时是 1（没有可返回的上一页）。 */
@@ -396,7 +396,7 @@ Component<LockerPageData, Record<string, never>, LockerPageMethods, Record<strin
         barTitle = LOCKER_PAGE_COPY.allSoldOutBarTitle
         barHint = LOCKER_PAGE_COPY.allSoldOutBarHint
       } else if (selected !== undefined) {
-        barTitle = LOCKER_PAGE_COPY.selectedCell.replace('{label}', selected.label)
+        barTitle = LOCKER_PAGE_COPY.selectedCell.replace('{label}', () => selected.label)
         barHint = remainingText(selected.available)
       }
 

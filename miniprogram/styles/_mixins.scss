@@ -105,7 +105,7 @@ $all-tones: (ok, info, warn, danger, muted);
   display: inline-block;
   padding: 0 v.$spacing-sm;
   font-size: v.$font-size-aux;
-  line-height: 20px;
+  line-height: 1.67;
   white-space: nowrap;
   // ⚠️ 纯白，不是 $color-bg-page —— 浅灰面会把三个 ink 全部压破 AA（见上面的实测）。
   background: v.$color-bg-card;

@@ -80,3 +80,55 @@ export function respondInOrder(
     })
   }
 }
+
+/** 一条按 URL 特征分流的响应队列。 */
+export interface ResponseRoute {
+  /** 这条流处理哪些请求。 */
+  match: (options: WxRequestOptions) => boolean
+  results: readonly (WxRequestSuccessResult | { errMsg: string })[]
+}
+
+/**
+ * 让 `wx.request` 桩按**请求分流**回话，每条流各自按顺序消耗自己的响应。
+ *
+ * ## 为什么需要它（而不是继续用 `respondInOrder`）
+ *
+ * 一个页面同时持有**两条独立的流**时（附近页：列表流 `pageSize=20` + 地图流
+ * `pageSize=100`），按「到达顺序」编排响应会让每个用例的数组都变成
+ * `[列表1, 地图1, 列表2, 地图2, ...]` 的交错写法 —— 既难读，又会在某次实现调整
+ * （比如地图流改成延后一发）时**整片红**，而每一处的失败都不是行为变化。
+ *
+ * 按 URL 分流后，用例只需要说「列表流依次回这几个、地图流依次回这几个」，
+ * 与两条流各自的业务顺序一一对应。
+ *
+ * ⚠️ 没有匹配到任何一条流的请求会**立刻抛错** —— 与「未编排即失败」同一取向：
+ * 新增一条流却忘了编排，会在这里现形，而不是静默拿到一个错响应。
+ */
+export function respondByRoute(
+  routes: readonly ResponseRoute[],
+): (options: WxRequestOptions) => void {
+  const indices = routes.map(() => 0)
+  return (options: WxRequestOptions) => {
+    const routeIndex = routes.findIndex((route) => route.match(options))
+    if (routeIndex === -1) {
+      throw new Error(
+        `wx.request 发向了没有编排的流：${options.url}\n` +
+          `    → 用 respondByRoute([...]) 补一条 match，或断言这次调用本不该发生。`,
+      )
+    }
+    const route = routes[routeIndex] as ResponseRoute
+    const index = indices[routeIndex] as number
+    indices[routeIndex] = index + 1
+    const result = route.results[index]
+    if (result === undefined) {
+      throw new Error(
+        `某条流第 ${index + 1} 次被调用，但只编排了 ${route.results.length} 个响应。\n` +
+          `    → 补齐这条流的响应，或断言这次调用本不该发生。`,
+      )
+    }
+    queueMicrotask(() => {
+      if ('statusCode' in result) options.success?.(result)
+      else options.fail?.(result)
+    })
+  }
+}

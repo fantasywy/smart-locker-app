@@ -15,11 +15,13 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { installWxStub, jsonResponse, seedStorage } from '../helpers/wx'
-import { respondInOrder, sentRequests } from '../helpers/http'
+import { respondByRoute, sentRequests } from '../helpers/http'
 import { installFakeTimers } from '../helpers/timers'
 import { decodePng, opaqueColors } from '../helpers/png'
 import type { InstalledWxStub, WxRequestSuccessResult } from '../helpers/wx'
 import { NEARBY_COPY, NEARBY_PATH } from '../../miniprogram/startup/copy'
+import { BASE_URL } from '../../miniprogram/request/config'
+import { NEARBY_SITES_ENDPOINT } from '../../miniprogram/api/nearby'
 import type { NearbySite } from '../../miniprogram/types/nearby'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -116,12 +118,41 @@ async function settle(): Promise<void> {
   for (let i = 0; i < 40; i += 1) await Promise.resolve()
 }
 
+/** 地图流的请求特征 —— spec §8 的 `pageSize=100`。 */
+const MAP_QUERY = 'pageSize=100'
+
+const isMapRequest = (url: string): boolean => url.includes(MAP_QUERY)
+
+function mapUrls(wx: InstalledWxStub): string[] {
+  return sentRequests(wx.request)
+    .map((request) => request.url)
+    .filter(isMapRequest)
+}
+
+/**
+ * 挂载页面。
+ *
+ * ⚠️ 本页有**两条流**（列表 20 / 地图 100），所以响应按 URL 分流：
+ * `list` 依次回列表 / 城市的请求，`map` 依次回地图的请求。
+ * `map` 缺省时用 `list[0]`（首屏那一批站点）—— 地图带与列表首屏画的是同一批柜机，
+ * 这正是多数用例要的形状。
+ */
 async function mount(
-  responses: Parameters<typeof respondInOrder>[0],
+  list: Parameters<typeof respondByRoute>[0][number]['results'],
+  map?: Parameters<typeof respondByRoute>[0][number]['results'],
 ): Promise<{ wx: InstalledWxStub; page: PageInstance }> {
   const wx = installWxStub()
   seedStorage('nearby.city', '北京')
-  wx.request.mockImplementation(respondInOrder(responses))
+  const first = list[0]
+  wx.request.mockImplementation(
+    respondByRoute([
+      {
+        match: (options) => isMapRequest(options.url),
+        results: map ?? (first === undefined ? [] : [first]),
+      },
+      { match: () => true, results: list },
+    ]),
+  )
   const def = await loadPage()
   const page = instantiate(def)
   ;(page.onShow as () => void)()
@@ -143,8 +174,9 @@ function call(page: PageInstance, name: string, event?: unknown): void {
   method(event)
 }
 
+/** 列表 / 城市流的请求数（不含地图流）。 */
 function requestCount(wx: InstalledWxStub): number {
-  return sentRequests(wx.request).length
+  return sentRequests(wx.request).length - mapUrls(wx).length
 }
 
 describe('#73 附近页 · 地图 marker', () => {
@@ -222,10 +254,14 @@ describe('#73 附近页 · 地图 marker', () => {
     const other = markerOf(page, 1)
     expect(selected?.callout).toMatchObject({
       content: '已满站',
-      bgColor: '#ffffff',
-      color: '#1f2329',
       display: 'ALWAYS',
     })
+    // ⚠️ callout 的两色是**原生 map API 唯一接受字面色值**的地方（不吃 CSS 变量、
+    // 不吃 SCSS token），所以它们在 `nearby.ts` 里是一对具名字面量。
+    // 判据不写死 hex，而是把它们**表到 token 上** —— token 改了、marker 没跟着改的那天
+    // 这里会红，而不是等用户看到一块与设计稿不同的气泡。
+    expect(selected?.callout?.bgColor).toBe(token('color-bg-card'))
+    expect(selected?.callout?.color).toBe(token('color-text-main'))
     expect(other?.callout).toBeUndefined()
     expect(selected?.width ?? 0).toBeGreaterThan(other?.width ?? 0)
     // 列表卡 → 地图居中到该站点。
@@ -399,5 +435,93 @@ describe('#73 附近页 · 地图失败降级', () => {
     expect(source).not.toMatch(/LOCKER_PATH|pages\/locker|navigateTo|redirectTo|switchTab/)
     expect(source).not.toMatch(/createOrder|reservation|预约|下单/)
     expect(source).not.toContain('查看柜机')
+  })
+})
+
+describe('#73 附近页 · 地图流按 pageSize=100 单独取（spec §8）', () => {
+  /** 20 条列表站点 —— 列表分页的形状。 */
+  function listSites(): NearbySite[] {
+    return Array.from({ length: 20 }, (_, index) =>
+      marker({ siteId: index + 1, name: `站点 ${index + 1}`, lng: 116.4 + index / 100, lat: 39.9 }),
+    )
+  }
+
+  it('⚠️ 地图带一次取 100 条：marker 覆盖全量，列表仍是 20 条那一页', async () => {
+    const mapSites = Array.from({ length: 100 }, (_, index) =>
+      marker({ siteId: index + 1, name: `站点 ${index + 1}`, lng: 116.4 + index / 100, lat: 39.9 }),
+    )
+    const { wx, page } = await mount(
+      [body(listSites(), 100)],
+      [body(mapSites, 100)],
+    )
+
+    // 列表：仍然是第一页 20 条（`pageSize=20` 的分页不动）。
+    expect(page.data.sites).toHaveLength(20)
+    expect(page.data.page).toBe(1)
+    expect(page.data.listHeader).toBe(NEARBY_COPY.listHeader.replace('{count}', '100'))
+    // 地图：100 个 marker 全在（此前只看得到列表已加载的 20 个）。
+    expect(markersOf(page)).toHaveLength(100)
+    expect(markersOf(page).map((entry) => entry.id)).toEqual(
+      mapSites.map((entry) => entry.siteId),
+    )
+    // 地图流是单独一发，且带着 spec §8 的 pageSize=100。
+    expect(mapUrls(wx)).toEqual([
+      `${BASE_URL}${NEARBY_SITES_ENDPOINT}?city=%E5%8C%97%E4%BA%AC&page=1&pageSize=100`,
+    ])
+    // 只发了两次请求：列表首屏 + 地图流（未定位不带半径）。
+    expect(sentRequests(wx.request)).toHaveLength(2)
+  })
+
+  it('⚠️ 地图流按 siteId 去重、保持服务端顺序、不重排', async () => {
+    const { page } = await mount(
+      [body([marker({ siteId: 1 })], 3)],
+      [
+        body([
+          marker({ siteId: 5, name: '五号' }),
+          marker({ siteId: 3, name: '三号' }),
+          marker({ siteId: 5, name: '五号重复' }),
+          marker({ siteId: 9, name: '九号' }),
+        ]),
+      ],
+    )
+
+    // 服务端顺序原样保留（5 → 3 → 9），重复的 siteId 只留第一次出现的那条。
+    expect(markersOf(page).map((entry) => entry.id)).toEqual([5, 3, 9])
+    expect(markersOf(page).map((entry) => entry.callout?.content ?? '')).toEqual(['', '', ''])
+    // 列表只有一条：地图流不会把条目灌进列表（列表分页归服务端）。
+    expect(page.data.sites).toHaveLength(1)
+  })
+
+  it('⚠️ 列表之外的站点（第 50 个）也能点选并出现在全屏浮层里', async () => {
+    const mapSites = Array.from({ length: 100 }, (_, index) =>
+      marker({
+        siteId: index + 1,
+        name: `站点 ${index + 1}`,
+        lng: 116.4 + index / 100,
+        lat: 39.9,
+      }),
+    )
+    const { wx, page } = await mount([body(listSites(), 100)], [body(mapSites, 100)])
+    wx.pageScrollTo.mockImplementation(() => {})
+
+    call(page, 'onMarkerTap', { detail: { markerId: 50 } })
+
+    expect(page.data.selectedSiteId).toBe(50)
+    expect(markerOf(page, 50)?.callout?.content).toBe('站点 50')
+    expect((page.data.selectedCard as { name: string }).name).toBe('站点 50')
+  })
+
+  it('⚠️ 地图流失败不影响列表：地图带用列表已加载的站点垫着', async () => {
+    const { page } = await mount([
+      body([marker({ siteId: 1, name: '可存件站' })], 1),
+      { errMsg: 'request:fail timeout' },
+      { errMsg: 'request:fail timeout' },
+    ])
+
+    expect(page.data.phase).toBe('ready')
+    expect(page.data.sites).toHaveLength(1)
+    expect(page.data.mapFailed).toBe(false)
+    // 地图流两次都失败（自动重试一次）→ 退回列表那一份，而不是空白。
+    expect(markersOf(page).map((entry) => entry.id)).toEqual([1])
   })
 })

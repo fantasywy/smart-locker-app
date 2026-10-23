@@ -23,6 +23,7 @@ import {
   NEARBY_PATH,
   ORDER_LIST_PATH,
   PAGE_TITLES,
+  SCAN_COPY,
 } from '../../miniprogram/startup/copy'
 import { LOCKER_PATH, ORDER_DETAIL_PATH } from '../../miniprogram/utils/routes'
 import type { OrderSummary } from '../../miniprogram/types/orders'
@@ -236,7 +237,7 @@ describe('#61 首页 · 扫码四种结果', () => {
 
     expect(wx.navigateTo).not.toHaveBeenCalled()
     expect(mocks.showToast).toHaveBeenCalledTimes(1)
-    expect(mocks.showToast).toHaveBeenCalledWith(HOME_PAGE_COPY.notLockerCode)
+    expect(mocks.showToast).toHaveBeenCalledWith(SCAN_COPY.notLockerCode)
   })
 
   it('⚠️ 用户取消（`errMsg` 含 cancel）→ 静默，不提示也不跳转', async () => {
@@ -251,7 +252,7 @@ describe('#61 首页 · 扫码四种结果', () => {
 
     expect(wx.navigateTo).not.toHaveBeenCalled()
     expect(mocks.showToast).toHaveBeenCalledTimes(1)
-    expect(mocks.showToast).toHaveBeenCalledWith(HOME_PAGE_COPY.scanFailed)
+    expect(mocks.showToast).toHaveBeenCalledWith(SCAN_COPY.scanFailed)
   })
 
   it('⚠️ 不传 `onlyFromCamera` —— 默认允许从相册选码', async () => {
@@ -556,9 +557,17 @@ describe('#61 首页 · 文案与路由只有一个家', () => {
 
   it('⚠️ 柜机码路径来自 `LOCKER_PATH` 常量，且该页已注册在 app.json', () => {
     const source = stripComments(indexSource())
-    expect(source).toContain('LOCKER_PATH')
+    // ⚠️ 链路的实现已收进 `utils/scan-locker.ts`（四个扫码入口共用），
+    // 所以「路径来自常量」这条断言落在**那个模块**上，页面只断言它确实走链路。
+    expect(source).toContain('scanToLocker')
     expect(source).not.toMatch(/url\s*:\s*['"`]\/?pages\//)
     expect(source).not.toMatch(/^\s*const\s+\w*PATH\w*\s*=\s*['"`]pages\//m)
+
+    const scanLocker = stripComments(
+      readFileSync(join(repoRoot, 'miniprogram', 'utils', 'scan-locker.ts'), 'utf8'),
+    )
+    expect(scanLocker).toContain('LOCKER_PATH')
+    expect(scanLocker).not.toMatch(/url\s*:\s*['"`]\/?pages\//)
 
     const appJson = JSON.parse(
       readFileSync(join(repoRoot, 'miniprogram', 'app.json'), 'utf8'),
@@ -575,8 +584,8 @@ describe('#61 首页 · 文案与路由只有一个家', () => {
       HOME_PAGE_COPY.wordmark,
       HOME_PAGE_COPY.tagline,
       HOME_PAGE_COPY.scanButton,
-      HOME_PAGE_COPY.notLockerCode,
-      HOME_PAGE_COPY.scanFailed,
+      SCAN_COPY.notLockerCode,
+      SCAN_COPY.scanFailed,
       HOME_PAGE_COPY.ordersTitle,
       HOME_PAGE_COPY.viewAll,
       HOME_PAGE_COPY.ordersLoadFailed,

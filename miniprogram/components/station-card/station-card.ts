@@ -120,7 +120,7 @@ function viewOf(site: NearbySite): Partial<StationCardData> {
     showLockers: firstPositions.length > 0,
     showLockerMore: hasMore,
     lockerMoreText: hasMore
-      ? NEARBY_COPY.lockerMore.replace('{count}', String(site.lockers.length))
+      ? NEARBY_COPY.lockerMore.replace('{count}', () => String(site.lockers.length))
       : '',
     lockerPositionLabel: NEARBY_COPY.lockerPositionLabel,
     // 导航只依赖站点坐标，不依赖定位授权 —— 定位被拒时仍可从列表导航。

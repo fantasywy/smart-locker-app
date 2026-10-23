@@ -28,9 +28,9 @@ import { requestsTo, respondInOrder, sentRequests } from '../helpers/http'
 import { deferred, installFakeTimers } from '../helpers/timers'
 import { BASE_URL } from '../../miniprogram/request/config'
 import {
-  HOME_PAGE_COPY,
   ORDER_LIST_PATH,
   PAGE_TITLES,
+  SCAN_COPY,
   WAITING_PAGE_COPY,
 } from '../../miniprogram/startup/copy'
 import { LOCKER_PATH } from '../../miniprogram/utils/routes'
@@ -451,6 +451,9 @@ describe('#63 等待页 · 核对失败与手动核对', () => {
     expect(viewOf(page).networkHint).toBe(WAITING_PAGE_COPY.networkHint)
     expect(viewOf(page).showManualCheck).toBe(true)
     expect(viewOf(page).showAutoUpdate).toBe(true)
+    // ⚠️ spec §4 状态机：`trouble` **只允许手动核对** —— 这一屏的语义是
+    // 「还没拿到可信事实」，上面挂一个可点的「取消订单」会诱使用户在状态未知时撤单。
+    expect(viewOf(page).showCancel).toBe(false)
 
     await tickPolls(timers, 1)
     expect(viewOf(page).phase).toBe('waiting')
@@ -784,14 +787,14 @@ describe('#63 等待页 · 出口', () => {
       options.success?.({ result: 'https://example.com/not-a-locker' })
     })
     ;(page.onRescan as () => void)()
-    expect(mocks.showToast).toHaveBeenCalledWith(HOME_PAGE_COPY.notLockerCode)
+    expect(mocks.showToast).toHaveBeenCalledWith(SCAN_COPY.notLockerCode)
 
     mocks.showToast.mockReset()
     wx.scanCode.mockImplementation((options) => {
       options.fail?.({ errMsg: 'scanCode:fail camera' })
     })
     ;(page.onRescan as () => void)()
-    expect(mocks.showToast).toHaveBeenCalledWith(HOME_PAGE_COPY.scanFailed)
+    expect(mocks.showToast).toHaveBeenCalledWith(SCAN_COPY.scanFailed)
 
     mocks.showToast.mockReset()
     wx.scanCode.mockImplementation((options) => {

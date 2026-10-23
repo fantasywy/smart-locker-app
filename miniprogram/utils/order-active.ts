@@ -1,11 +1,14 @@
-// **进行中订单** —— 判定、排序与合并的**唯一**口径（spec #57 §2 / §6）。
+// **进行中订单** —— 排序与合并的口径（spec #57 §2 / §6）；**判定**归 `utils/order-status.ts`。
 //
 // ## 为什么需要这个模块
 //
 // 首页进行中区与订单列表「进行中」组必须回答同一个问题：哪些单还在办、谁排前面。
 // 两处各写一遍 `status === 2 || (status === 4 && endAt === null)` 的后果不是重复三行，
 // 而是**同一张订单在首页是「进行中」、在列表却落到「已结束」** —— 用户会拿它去对客服。
-// ⇒ 判定与排序只在这里有一份实现，两页都调用它。
+// ⇒ 排序与合并只在这里有一份实现，两页都调用它。
+//
+// ⚠️ **判定（`isActiveOrder`）的唯一家在 `utils/order-status.ts`** —— 它与订单列表的
+// 「已结束」分组是同一件事的两面，写在这里就等于那条谓词的第二份实现。本模块只转出它。
 //
 // ## 口径
 //
@@ -16,22 +19,16 @@
 //
 // ⚠️ 本模块是纯函数：不碰 `wx.*`、不读时钟、不写 storage。
 
+import { isActiveOrder } from './order-status'
 import type { OrderSummary } from '../types/orders'
 
 /**
- * 是否属于「进行中」组。
+ * 是否属于「进行中」组 —— 转出 `utils/order-status.ts` 的唯一实现，方便本模块的消费方
+ * 从同一个入口拿到「判定 + 排序」两件事。
  *
- * ⚠️ `status == 1` 的兜底是**有意的**：它一期不产生，但若服务端意外回显，
- * 不能因为客户端少写一个分支就把它归到「已结束」—— `status == 1` 是待支付，
- * 显然还没办完。无 CTA 的呈现由卡片负责，不在判定层。
+ * ⚠️ 这里**只有转发**，没有第二份实现：`status` 的语义判定全在 `order-status.ts`。
  */
-export function isActiveOrder(order: OrderSummary): boolean {
-  return (
-    order.status === 1 ||
-    order.status === 2 ||
-    (order.status === 4 && order.endAt === null)
-  )
-}
+export { isActiveOrder }
 
 /**
  * 进行中组内的排序权重 —— 已超时（0）→ 待存入（1）→ 已存入（2）。

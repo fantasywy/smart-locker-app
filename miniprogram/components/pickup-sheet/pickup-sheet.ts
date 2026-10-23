@@ -46,6 +46,7 @@ import { getOrderDetail, payOrder } from '../../api/orders'
 import { PICKUP_SHEET_COPY } from '../../startup/copy'
 import { showToast } from '../../utils/feedback'
 import { formatMoney } from '../../utils/money'
+import { canPickupOrder, isTerminalOrder } from '../../utils/order-status'
 import type { OrderDetailOrder, PickupOrder } from '../../types/orders'
 
 /** `13.11` 失败：订单状态已变化 / 开门指令已回执（契约 §13.11）。 */
@@ -131,13 +132,14 @@ function runtimeOf(instance: PickupSheetInstance): PickupRuntime {
   return runtime
 }
 
-/** 入口谓词 —— 与详情页 / 列表卡的 `canPickup` 同一口径（spec §5 / §6）。 */
+/**
+ * 入口谓词 —— 与详情页主行动**同一条实现**（`utils/order-status.ts` 的 `canPickupOrder`）。
+ *
+ * ⚠️ 两处各写一遍的后果：详情页给得出主行动、弹层却打不开（或反过来）——
+ * 而它们说的是同一件事：这单已经存入、还没取走。
+ */
 function isPickupEligible(order: PickupOrder): boolean {
-  return (
-    (order.status === 2 || order.status === 4) &&
-    order.startAt !== null &&
-    order.endAt === null
-  )
+  return canPickupOrder(order)
 }
 
 /** 支付前的金额分支 —— 只看 `status` / `endAt` / `payAmount`，不猜服务端金额。 */
@@ -270,15 +272,15 @@ function closeAndRefresh(instance: PickupSheetInstance, missing: boolean): void 
   instance.triggerEvent('refresh', { missing })
 }
 
-/** `13.9` 显示订单已终局 —— 支付结果已无关紧要，关掉弹层让来源页刷新。 */
+/**
+ * `13.9` 显示订单已终局 —— 支付结果已无关紧要，关掉弹层让来源页刷新。
+ *
+ * ⚠️ 判据是 `utils/order-status.ts` 的 `isTerminalOrder()`（**不是**列表分组的
+ * `isEndedOrder`）—— 后者把「`status=4` 且 `endAt` 为空」还当进行中，而这里只要
+ * `endAt` 落了值就说明门已关好、单已结束。两者不是同一条谓词，见那里的说明。
+ */
 function isTerminal(order: OrderDetailOrder): boolean {
-  return (
-    order.endAt !== null ||
-    order.status === 3 ||
-    order.status === 5 ||
-    order.status === 6 ||
-    order.status === 7
-  )
+  return isTerminalOrder(order)
 }
 
 /** `13.9` 显示「已支付且未取件」—— 网络核对成功态的唯一判据。 */

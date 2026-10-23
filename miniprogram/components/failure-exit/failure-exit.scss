@@ -54,8 +54,12 @@
   // 下面三个静态出口压成配角，而它们是并列的三条路。
   padding: 0 v.$spacing-xxl;
   min-width: 240rpx;
-  line-height: 44px;
+  // ⚠️ 定高按钮的文字居中用 flex，不写像素行高：
+  // 行高一旦写成像素值就与字号脱钩，字号一改文字就偏（且像素行高散进页面）。
   height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
   // 小程序里 button 自带边框与背景，按下态交给 `hover-class`（不用 `:active`）。
   &::after {

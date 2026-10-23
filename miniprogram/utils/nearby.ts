@@ -48,7 +48,9 @@ export function formatNearbyDistance(meters: number | null): string {
   if (meters === null || !Number.isFinite(meters) || meters < 0) return ''
   if (meters < 1000) {
     const rounded = Math.round(meters / 10) * 10
-    return NEARBY_COPY.distanceMeters.replace('{value}', String(rounded))
+    // ⚠️ 替换值走**函数形式**：字符串形式会把值里的 `$&` / `$'` 当成替换模式展开 ——
+  // 关键字 / 站点名是用户与服务端给的任意文本，那种展开是实打实的注入面。
+  return NEARBY_COPY.distanceMeters.replace('{value}', () => String(rounded))
   }
-  return NEARBY_COPY.distanceKilometers.replace('{value}', (meters / 1000).toFixed(1))
+  return NEARBY_COPY.distanceKilometers.replace('{value}', () => (meters / 1000).toFixed(1))
 }

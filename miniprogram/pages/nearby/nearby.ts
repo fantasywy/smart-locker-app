@@ -13,10 +13,13 @@
 // 距离整体隐藏（服务端即使回传也不上屏）。拒绝后再点「开启定位」才 `wx.openSetting`，
 // 不自动弹第二次授权。
 //
-// ## 数据纪律
+// ## 两条数据流
 //
-// - 排序与分页完全归服务端；客户端不重排，翻页按 `siteId` 去重。
-// - 半径默认 3000，空态可扩到 10000；列表 `pageSize=20`。
+// - **列表流**：排序与分页完全归服务端；客户端不重排，翻页按 `siteId` 去重，`pageSize=20`。
+// - **地图流**：spec §8 的 `pageSize=100` 一次取，只供 206px 地图带与全屏地图使用；
+//   不追加、不翻页。地图流失败不影响列表（退回列表已加载的站点垫着）。
+// - 半径默认 3000，已定位时可扩到 10000；**未定位时不发半径**（没有中心点的半径没有意义），
+//   此时地图带的「扩大到 10 公里」也不出现。
 // - 端点失败**只对 network**自动重试一次；成功结果进 30 秒内存缓存，
 //   下拉刷新绕过缓存。不落 storage、不跨会话。
 // - **只有城市字符串允许落 storage**（`nearby.city`），业务数据一律不落。
@@ -39,14 +42,21 @@ import {
   hasSiteCoordinates,
 } from '../../utils/nearby'
 import type { PageOf } from '../../utils/pagination'
+import { PAGE_SIZE } from '../../utils/pagination'
 import type { NearbyAvailability, NearbyCity, NearbySite } from '../../types/nearby'
 
 /** 默认半径 / 扩大后的半径 —— 客户端只发这两档。 */
 const DEFAULT_RADIUS_METERS = 3000
 const EXPANDED_RADIUS_METERS = 10000
 
-/** 列表每页条数 —— 契约缺省 20。 */
-const PAGE_SIZE = 20
+/**
+ * 地图流的页大小 —— spec §8 逐字：「地图页按 `pageSize=100` 一次取」。
+ *
+ * ⚠️ 地图与列表是**两条流**：列表按 20 分页（上拉追加），地图要一次拿到半径内
+ * 的全部站点（206px 地图带与全屏地图都只用这一份）。用列表已加载的 20 条画 marker，
+ * 等于让地图谎报「附近只有这些柜机」—— spec 的 100 上限正是为此写的。
+ */
+const MAP_PAGE_SIZE = 100
 
 /** 成功结果的内存缓存时长 —— 不写 storage，不跨会话。 */
 const CACHE_TTL_MS = 30_000
@@ -68,7 +78,17 @@ const MAP_MARKER_SIZE_SELECTED = 34
 /** 城市/站点都不可用时的地图中心 —— 只用于让 `<map>` 有合法经纬度，不上屏。 */
 const MAP_DEFAULT_CENTER = { lat: 39.9042, lng: 116.4074 }
 
-/** callout 的白底与 ink 文字 —— 原生 map API 只接受字面色值（与 `$color-bg-card` / `$color-text-main` 对齐）。 */
+/**
+ * callout 的白底与 ink 文字。
+ *
+ * ⚠️⚠️ **这是全仓唯一允许出现裸 hex 的地方之一，且是有意的例外**：`<map>` 的
+ * `marker.callout` 是**原生属性**（走 setData 传给原生地图层），既不吃 CSS 变量、
+ * 也不吃 SCSS token —— 只能给字面量。
+ *
+ * 例外的代价用一条测试兜住：`test/pages/nearby-map.test.ts` 把这两个值与
+ * `styles/_variables.scss` 的 `$color-bg-card` / `$color-text-main` 对齐断言 ——
+ * token 改了而这里没改的那天，测试会红，而不是等用户看到一块颜色不对的气泡。
+ */
 const MAP_CALLOUT_BG = '#ffffff'
 const MAP_CALLOUT_INK = '#1f2329'
 
@@ -236,6 +256,15 @@ interface NearbyRuntime {
   locationState: LocationState
   cities: NearbyCity[]
 
+  /**
+   * 地图流 —— 与列表流分开（`pageSize=100` 一次取，不追加）。
+   *
+   * ⚠️ `mapLoaded` 区分「还没取过」（此时先用列表已加载的站点垫着，地图不至于空白）
+   * 与「取过了，就是这些」（哪怕服务端回了空列表）。由长度反推会在这两态上撞车。
+   */
+  mapSites: NearbySite[]
+  mapLoaded: boolean
+
   /** 地图中心 / 是否被用户固定（选中 / 拖动 / 定位后不再自动跟随首条结果）。 */
   mapCenter: MapCenter | null
   mapCenterFixed: boolean
@@ -273,6 +302,8 @@ function runtimeOf(page: NearbyPageInstance): NearbyRuntime {
       requestSeq: 0,
       locationState: 'idle',
       cities: [],
+      mapSites: [],
+      mapLoaded: false,
       mapCenter: null,
       mapCenterFixed: false,
       mapReady: false,
@@ -286,12 +317,22 @@ function runtimeOf(page: NearbyPageInstance): NearbyRuntime {
   return runtime
 }
 
-/** 拼请求参数 —— 关键词模式忽略半径；坐标只在成功定位后成对出现。 */
-function queryFor(runtime: NearbyRuntime, page: number): NearbySitesQuery {
+/**
+ * 拼请求参数。
+ *
+ * ⚠️ `radiusMeters` **只在有坐标时发**：没有中心点的半径没有意义，
+ * 契约也说得明白 ——「无坐标时必须传 `city`」（城市列表不带半径）。
+ * 关键词模式忽略半径（关键词搜索一定是城内搜索）。
+ */
+function queryFor(
+  runtime: NearbyRuntime,
+  page: number,
+  pageSize: number = PAGE_SIZE,
+): NearbySitesQuery {
   const query: NearbySitesQuery = {
     city: runtime.city,
     page,
-    pageSize: PAGE_SIZE,
+    pageSize,
   }
   if (runtime.coords !== null) {
     query.lat = runtime.coords.lat
@@ -299,7 +340,7 @@ function queryFor(runtime: NearbyRuntime, page: number): NearbySitesQuery {
   }
   if (runtime.activeKeyword !== '') {
     query.keyword = runtime.activeKeyword
-  } else {
+  } else if (runtime.coords !== null) {
     query.radiusMeters = runtime.radiusMeters
   }
   return query
@@ -359,9 +400,55 @@ function dedupeBySiteId(sites: readonly NearbySite[]): NearbySite[] {
   return unique
 }
 
-/** 模板替换 —— 文案模板的占位符只在页面替换一次。 */
+/**
+ * 地图流的当前内容。
+ *
+ * ⚠️ 地图流回来之前先用列表已加载的站点垫着（首屏不会是一块空地图）；
+ * 一旦地图流到手，**只认它** —— 否则「地图只画了前 20 个」这个缺陷会以
+ * 「列表翻到第 3 页后 marker 变多」的形式回来。
+ */
+function mapSourceOf(runtime: NearbyRuntime): readonly NearbySite[] {
+  return runtime.mapLoaded ? runtime.mapSites : runtime.sites
+}
+
+/** 按 `siteId` 找站点 —— 地图交互的站点可能还没进列表（地图流是 100，列表是 20）。 */
+function siteById(runtime: NearbyRuntime, siteId: number): NearbySite | undefined {
+  return (
+    runtime.mapSites.find((site) => site.siteId === siteId) ??
+    runtime.sites.find((site) => site.siteId === siteId)
+  )
+}
+
+/**
+ * 拉地图流 —— spec §8 的 `pageSize=100` 一次取。
+ *
+ * ⚠️ **只在第一页 / 换查询时拉**：地图流不追加、不翻页（100 是上限，超了再议 bbox）。
+ * `seq` 与列表流共用同一个请求序号：用户换城市 / 改关键词时，迟到的旧地图响应
+ * 必须被丢弃，否则地图会画上一个查询的站点。
+ */
+async function loadMapSites(page: NearbyPageInstance, seq: number): Promise<void> {
+  const runtime = runtimeOf(page)
+  const result = await fetchSitesWithRetry(queryFor(runtime, 1, MAP_PAGE_SIZE), false)
+  if (seq !== runtime.requestSeq) return
+
+  if (!result.ok) {
+    // 地图流失败**不影响列表**：地图带继续用列表垫着的那份（或上一次成功的地图流）。
+    return
+  }
+  runtime.mapSites = dedupeBySiteId(result.data.records)
+  runtime.mapLoaded = true
+  render(page)
+}
+
+/**
+ * 模板替换 —— 文案模板的占位符只在页面替换一次。
+ *
+ * ⚠️ 替换值走**函数形式**（`() => value`）：字符串形式会把值里的 `$&` / `$'`
+ * 当成替换模式展开，而这里填进去的是**城市名 / 关键词**（用户输入）——
+ * 那种展开是实打实的注入面（与 `utils/datetime.ts` / `utils/nearby.ts` 同一纪律）。
+ */
 function fill(template: string, key: string, value: string): string {
-  return template.replace(`{${key}}`, value)
+  return template.replace(`{${key}}`, () => value)
 }
 
 /**
@@ -420,7 +507,7 @@ function mapCenterOf(runtime: NearbyRuntime): MapCenter {
     if (runtime.coords !== null) {
       runtime.mapCenter = { lat: runtime.coords.lat, lng: runtime.coords.lng }
     } else {
-      const site = firstLocatedSite(runtime.sites)
+      const site = firstLocatedSite(mapSourceOf(runtime))
       runtime.mapCenter =
         site === null
           ? { lat: MAP_DEFAULT_CENTER.lat, lng: MAP_DEFAULT_CENTER.lng }
@@ -446,7 +533,7 @@ function mapScaleOf(runtime: NearbyRuntime): number {
 function markersOf(runtime: NearbyRuntime, phase: NearbyPhase): NearbyMapMarker[] {
   if (phase === 'loading') return []
   const markers: NearbyMapMarker[] = []
-  for (const site of runtime.sites) {
+  for (const site of mapSourceOf(runtime)) {
     if (!hasSiteCoordinates(site)) continue
     const selected = site.siteId === runtime.selectedSiteId
     const marker: NearbyMapMarker = {
@@ -494,7 +581,7 @@ function emptySelectedCard(): NearbySelectedCard {
 
 /** 选中站点 → 全屏卡片浮层模型；距离与列表同一开关（未定位不显示）。 */
 function selectedCardOf(runtime: NearbyRuntime, located: boolean): NearbySelectedCard {
-  const site = runtime.sites.find((entry) => entry.siteId === runtime.selectedSiteId)
+  const site = siteById(runtime, runtime.selectedSiteId)
   if (site === undefined) return emptySelectedCard()
   const badge = NEARBY_AVAILABILITY[site.availability] ?? NEARBY_AVAILABILITY[3]
   const distanceText = located ? formatNearbyDistance(site.distanceMeters) : ''
@@ -550,7 +637,7 @@ function syncMapWatchdog(page: NearbyPageInstance): void {
 
 /** 地图点击平台调用 —— 与卡片导航共用同一份坐标判定。 */
 function openSiteLocation(page: NearbyPageInstance, siteId: number): void {
-  const site = runtimeOf(page).sites.find((entry) => entry.siteId === siteId)
+  const site = siteById(runtimeOf(page), siteId)
   if (site === undefined || !hasSiteCoordinates(site)) return
   wx.openLocation({
     latitude: site.lat,
@@ -573,7 +660,7 @@ function selectSite(
   options: { center: boolean; scroll: boolean },
 ): void {
   const runtime = runtimeOf(page)
-  const site = runtime.sites.find((entry) => entry.siteId === siteId)
+  const site = siteById(runtime, siteId)
   if (site === undefined) return
 
   runtime.selectedSiteId = siteId
@@ -612,8 +699,13 @@ function render(page: NearbyPageInstance): void {
     page: runtime.page,
     listHeader: fill(NEARBY_COPY.listHeader, 'count', String(runtime.total)),
     cities: runtime.cities.map((entry) => entry.city),
+    // ⚠️ 「扩大到 10 公里」只在**已定位**时出现：没有中心点的半径没有意义 ——
+    // 未定位的查询里根本不带 `radiusMeters`（见 `queryFor`），给一个按下去
+    // 什么都不会变的按钮比不给更糟。
     emptyActionLabel:
-      runtime.radiusMeters < EXPANDED_RADIUS_METERS ? NEARBY_COPY.expandRadius : '',
+      runtime.coords === null || runtime.radiusMeters >= EXPANDED_RADIUS_METERS
+        ? ''
+        : NEARBY_COPY.expandRadius,
     noResultTitle: fill(NEARBY_COPY.noResultTitle, 'keyword', keyword),
     showMapBand: mapBandVisible(page),
     mapFailed: runtime.mapFailure,
@@ -687,6 +779,10 @@ async function loadFirst(
       : 'ready'
   page.setData({ phase })
   render(page)
+
+  // ⚠️ 地图流与列表流并行：列表已画上屏，地图按 spec §8 的 `pageSize=100` 另取一份。
+  // 不 await —— 地图是增强，列表不该等它（地图失败也不影响列表）。
+  void loadMapSites(page, seq)
 }
 
 /** 加载下一页 —— 只按服务端顺序追加，按 siteId 去重。 */
@@ -855,7 +951,7 @@ Component({
 
     emptyTitle: NEARBY_COPY.emptyTitle,
     emptyHint: NEARBY_COPY.emptyHint,
-    emptyActionLabel: NEARBY_COPY.expandRadius,
+    emptyActionLabel: '',
     switchCityLabel: NEARBY_COPY.switchCity,
     noResultTitle: '',
     noResultHint: NEARBY_COPY.noResultHint,
@@ -1123,9 +1219,9 @@ Component({
       const page = this as unknown as NearbyPageInstance
       const runtime = runtimeOf(page)
       if (runtime.mapFailure) return
-      const current = runtime.sites.find((site) => site.siteId === runtime.selectedSiteId)
+      const current = siteById(runtime, runtime.selectedSiteId)
       if (current === undefined || !hasSiteCoordinates(current)) {
-        const first = firstLocatedSite(runtime.sites)
+        const first = firstLocatedSite(mapSourceOf(runtime))
         if (first !== null) runtime.selectedSiteId = first.siteId
       }
       runtime.fullscreen = true

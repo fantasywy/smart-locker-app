@@ -30,11 +30,7 @@
 // ⚠️ 本组件是纯展示 + 两个事件：不读 storage、不发请求、不碰 `wx.*`。
 
 import { ORDER_COPY, PICKUP_SHEET_COPY } from '../../startup/copy'
-import {
-  formatOrderTime,
-  formatOrderTimeInProgress,
-  formatStoredTime,
-} from '../../utils/datetime'
+import { formatOrderTimeInProgress, formatOrderTime } from '../../utils/datetime'
 import { formatMoney } from '../../utils/money'
 import { resolveOrderStatus } from '../../utils/order-status'
 import type { OrderStatusBadge } from '../../utils/order-status'
@@ -94,10 +90,11 @@ function variantOf(value: unknown): OrderCardVariant {
 /**
  * 第二行 —— 只有时间与格口都确定时才拼接，避免渲染出一个悬空的「·」。
  *
- * ⚠️ **`home` 变体的时间写法与列表不同**（spec §2）：首页卡的格口行是
- * `cellNo · 今天 HH:mm / MM-DD HH:mm / YYYY-MM-DD HH:mm`，没有「存入」前缀；
- * 列表卡沿用 `formatOrderTimeInProgress()` 的「存入 MM-DD HH:mm」。
- * 两种写法都在 `utils/datetime.ts` 里，组件只按变体选函数。
+ * ⚠️ **时间写法全站只有一套**（spec §14.3）：`今天 HH:mm / MM-DD HH:mm / YYYY-MM-DD HH:mm`，
+ * 由 `formatOrderTime()` 唯一负责，三个变体都用它（`now` 由组件在渲染时传入）。
+ * 在途行多一个「存入」前缀，那由 `formatOrderTimeInProgress()` 负责 —— 它不是第二种格式。
+ *
+ * ⚠️ 已取消不显示格口：格口已释放，写了会把人指向一扇不属于他的门。
  */
 function cellLineOf(
   order: OrderCardOrder,
@@ -110,7 +107,7 @@ function cellLineOf(
 
   if (variant === 'home') {
     if (order.startAt === null) return cellNo
-    const time = formatStoredTime(order.startAt, new Date())
+    const time = formatOrderTime(order.startAt, new Date())
     return time === '' ? cellNo : `${cellNo}${CELL_SEPARATOR}${time}`
   }
 
@@ -118,12 +115,12 @@ function cellLineOf(
 
   if (status.key === 'stored' || status.key === 'timeout') {
     if (order.startAt === null) return cellNo
-    const time = formatOrderTimeInProgress(order.startAt)
+    const time = formatOrderTimeInProgress(order.startAt, new Date())
     return time === '' ? cellNo : `${cellNo}${CELL_SEPARATOR}${time}`
   }
 
   if (order.endAt === null) return cellNo
-  const time = formatOrderTime(order.endAt)
+  const time = formatOrderTime(order.endAt, new Date())
   return time === '' ? cellNo : `${cellNo}${CELL_SEPARATOR}${time}`
 }
 

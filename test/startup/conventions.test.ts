@@ -35,6 +35,7 @@ import {
   NOT_YET_STORED_HINT,
   NO_RESULT_COPY,
   PICKUP_SHEET_COPY,
+  SCAN_COPY,
   ORDER_LIST_COPY,
   RESERVATION_CREATE_COPY,
   RESERVATION_LIST_COPY,
@@ -149,6 +150,10 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   // 扫码主按钮与两条扫码反馈都是用户可见的字；漏加一次，首页 wxml 或页面 data
   // 里写字面量就会一路绿灯（而首页恰好是唯一主行动的那一屏）。
   ...Object.values(HOME_PAGE_COPY),
+  // ⚠️ `SCAN_COPY` —— 「扫码 → 柜机页」这条链路的两句反馈，`utils/scan-locker.ts`
+  // 与四个扫码入口共用。它**不在** `HOME_PAGE_COPY` 里（那条链路的文案不归某一页），
+  // 所以必须单独列进来 —— 否则「这不是柜机码」被抄进某个页面就一路绿灯。
+  ...flattenCopy(SCAN_COPY),
   // ⚠️ `PROFILE_COPY` 的每一句 —— `#69` 新增的导出。身份回退名、受限卡四行、
   // 信用分 / 两组入口、昵称校验与保存失败全部是用户可见的字；
   // 漏加一次，「我的」页 wxml 里写字面量就会一路绿灯（而受限卡的四行是逐字定稿）。
@@ -619,5 +624,37 @@ describe('#57 全局禁用词与等待页判断字段（spec §14.4 / §15）', 
       `以下位置引用了支付回执字段 —— 等待页判态只用 status/startAt/endAt/payAmount：\n` +
         offenders.map((f) => `  • ${f}`).join('\n'),
     ).toEqual([])
+  })
+})
+
+describe('文案的「同一个值只有一个家」', () => {
+  it('⚠️ 高频复用的句子在 `copy.ts` 里只以字面量出现一次，其余处按引用取值', () => {
+    // 口径：同一个东西在全局只能有一个名字。这些句子此前各有两处字面量
+    // （首页入口条 vs 页面标题、首页失败标题 vs 列表失败标题、等待页主陈述 vs
+    // 取件层幂等重开标题、底栏「暂无可存格口」两处、两个「我的预约」）——
+    // 两处字面量的后果不是啰嗦，而是改一处漏一处之后**同一件事在界面上有两种说法**。
+    //
+    // 判据是 copy.ts 源码里这些句子的**字面量出现次数**：1 次 = 有且仅有一个家；
+    // 第二处只允许写成对那个家的引用。取值相同的断言（toBe）在这里没有意义 ——
+    // 它永远为真，挡不住任何一次重新抄写。
+    const source = stripComments(readFileSync(join(startupDir, 'copy.ts'), 'utf8'))
+    const SINGLE_HOME = ['已发出开门指令', '订单加载失败', '附近柜机', '我的预约', '暂无可存格口', '进行中']
+    for (const literal of SINGLE_HOME) {
+      // ⚠️ 数的是**带引号的完整字符串**，不是裸子串：「进行中」会出现在
+      // 「还有更多进行中订单」里面，按子串数会把一个正常的长句判成第二份字面量。
+      const hits = source.split(`'${literal}'`).length - 1
+      expect(hits, `「${literal}」在 copy.ts 里出现了 ${hits} 次 —— 它只能有一个家`).toBe(1)
+    }
+  })
+
+  it('⚠️ 确认弹窗的「取消」不再被任何表重新抄一遍', () => {
+    // `CONFIRM_COPY.cancel` 是那几个中性取消按钮的唯一家：资料弹层 / 取件确认弹层 /
+    // 重新开门弹窗 / 城市选择器都引用它。判据取源码里的赋值形态 ——
+    // `cancel: '取消'` 这样的第二份字面量一个都不许再有。
+    const source = stripComments(readFileSync(join(startupDir, 'copy.ts'), 'utf8'))
+    expect(CONFIRM_COPY.cancel).toBe('取消')
+    // 恰好一次 —— 就是 `CONFIRM_COPY` 自己的定义；第二处只允许写成对它的引用。
+    const typed = source.match(/(cancel|Cancel):\s*'取消'/g) ?? []
+    expect(typed, `「取消」被抄了 ${typed.length} 次`).toHaveLength(1)
   })
 })

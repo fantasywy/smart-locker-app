@@ -23,7 +23,6 @@ import { cancelReservation, listReservations, useReservation } from '../../api/r
 import type { Reservation } from '../../types/reservations'
 import {
   EMPTY_STATES,
-  HOME_PAGE_COPY,
   LOCKER_PAGE_COPY,
   PAGE_TITLES,
   PROFILE_COPY,
@@ -40,8 +39,8 @@ import {
 } from '../../utils/pagination'
 import type { PagedList } from '../../utils/pagination'
 import { isPendingReservation, resolveReservationStatus } from '../../utils/reservation-status'
-import { resolveLockerCode } from '../../utils/locker-code'
-import { LOCKER_PATH, ORDER_DETAIL_PATH, WAITING_PATH } from '../../utils/routes'
+import { ORDER_DETAIL_PATH, WAITING_PATH } from '../../utils/routes'
+import { scanToLocker } from '../../utils/scan-locker'
 
 /** 每页条数 —— spec §10 逐字：每页 10。 */
 const RESERVATION_PAGE_SIZE = 10
@@ -382,21 +381,7 @@ function viewOrder(orderId: number): void {
  * （`lockerId` 的唯一来源是 `13.6`）。
  */
 function scanEntry(): void {
-  wx.scanCode({
-    success: (result) => {
-      const code = resolveLockerCode({ scanResult: result.result })
-      if (code === null) {
-        showToast(HOME_PAGE_COPY.notLockerCode)
-        return
-      }
-      wx.navigateTo({ url: `/${LOCKER_PATH}?code=${encodeURIComponent(code)}` })
-    },
-    fail: (error) => {
-      // 用户主动取消不是失败；其余成因不按成因分叉。
-      if (error.errMsg.includes('cancel')) return
-      showToast(HOME_PAGE_COPY.scanFailed)
-    },
-  })
+  scanToLocker('navigate')
 }
 
 /** 从事件 dataset 里取正整数 id —— 模板事件不可信，非法值直接忽略。 */

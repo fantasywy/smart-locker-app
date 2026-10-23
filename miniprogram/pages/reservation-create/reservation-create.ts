@@ -1,18 +1,22 @@
 // **预约创建页（结构级）** —— 从柜机页「预约」进来，带 `lockerId`（spec #57 §10 / `13.12`）。
 //
-// ## 这一页只问两个用户答得上的问题
+// ## 这一页只问契约里的两个时刻
 //
-// 「什么时候开始」+「要占多久」。结束时刻由两者相加得出 —— 不让用户面对
-// 「结束时刻」这个抽象问题，也让 `8006` 的三条规则在 UI 层不可能被触发：
-//   • 时长档恒 > 0 ⇒ `end > start`；
-//   • 最长档 8h < `maxHours`(24h)；
-//   • 档位只渲染未来 ⇒ `planStartAt > now`。
-// 服务端 `8006` 仍按 `message` 直出，作为竞态 / 时钟偏差的兜底。
+// 用户直接给出**开始时间**与**结束时间** —— 这正是 `13.12` 的两个字段
+// （`planStartAt` / `planEndAt`），页面不发明第三个概念。
+//
+// ⚠️ 早先那版让用户选「30 分钟一档的开始档位」+「1 / 2 / 4 / 8 小时的时长档位」，
+// 两者都不在 `13.12` 里，是**编出来的业务选择**（spec §10 逐字：「表单字段与校验
+// 严格按 `13.12` 契约」）。现在改成两个原生 `<picker mode="time">`，并把
+// `end > start`、`start > now` 两条校验留在本地 —— 于是服务端 `8006` 的三条规则
+// （结束不晚于开始 / 超 `maxHours` / 开始已过）在 UI 层不可触发，`8006` 只作竞态兜底。
 //
 // ## 时区口径（硬约束）
 //
 // 请求体用**无偏移本地 ISO**（`2026-09-22T15:00:00`，后端 `LocalDateTime`）；
 // 响应才带 `+08:00`。契约示例里的 `+08:00` 是文档漂移，照抄会让后端解析失败。
+// ⇒ 页面把「日期（今天 / 明天）+ `HH:mm`」拼成无偏移本地 ISO；这一层是**请求口径**，
+// 不是展示口径（展示时间的唯一实现是 `utils/datetime.ts`，本页一个格式都不写）。
 //
 // ## 三条硬约束
 //
@@ -30,20 +34,13 @@ import {
   PROFILE_COPY,
   RESERVATION_CREATE_COPY,
 } from '../../startup/copy'
-import { formatDurationSlot, formatSlotTime } from '../../utils/datetime'
 import { RESERVATION_LIST_PATH } from '../../utils/routes'
-
-/** 开始档位步长 —— spec #10：30 分钟。 */
-const SLOT_STEP_MINUTES = 30
-
-/** 一天 48 个档位（00:00–23:30）。 */
-const SLOTS_PER_DAY = (24 * 60) / SLOT_STEP_MINUTES
-
-/** 时长档位 —— 1 / 2 / 4 / 8 小时（定稿）。 */
-const DURATION_HOURS: readonly number[] = [1, 2, 4, 8]
 
 /** 四个格口档位 —— 数字码 1–4（与 `13.12` 的 `cellType` 同一值域）。 */
 const CELL_TYPES: readonly CellType[] = [1, 2, 3, 4]
+
+/** `HH:mm` —— 原生 `<picker mode="time">` 交出来的形态。 */
+const TIME_PATTERN = /^(\d{2}):(\d{2})$/
 
 /** `13.12` 柜机不可用（契约 §13.12）。 */
 const LOCKER_UNAVAILABLE = 4004
@@ -64,20 +61,6 @@ interface ActionFailure {
   message: string | null
 }
 
-/** 一个开始档位。 */
-interface SlotOption {
-  /** 无偏移本地 ISO —— 直接作为 `planStartAt` 发送。 */
-  value: string
-  /** `HH:mm`（由 `formatSlotTime` 唯一负责写法）。 */
-  label: string
-}
-
-/** 一个时长档位。 */
-interface DurationOption {
-  hours: number
-  label: string
-}
-
 interface ReservationCreateData {
   title: string
   /** 是否有合法的 `lockerId`；false 时整张表单换成一句入口提示。 */
@@ -86,7 +69,8 @@ interface ReservationCreateData {
 
   cellTypeSection: string
   startSection: string
-  durationSection: string
+  endSection: string
+  pickTime: string
 
   cellTypeOptions: { value: CellType; label: string }[]
   selectedCellType: CellType | 0
@@ -94,13 +78,9 @@ interface ReservationCreateData {
   dateOptions: { value: number; label: string }[]
   selectedDate: number
 
-  slotOptions: SlotOption[]
-  selectedSlot: string
-  emptySlotHint: string
-  showEmptySlotHint: boolean
-
-  durationOptions: DurationOption[]
-  selectedHours: number
+  /** 两个时刻都是 `HH:mm`；空串 = 还没选（占位显示 `pickTime`）。 */
+  startTime: string
+  endTime: string
 
   submitLabel: string
   submittingLabel: string
@@ -140,59 +120,27 @@ function pad2(value: number): string {
  * `Date` → **无偏移本地 ISO**（`YYYY-MM-DDTHH:mm:00`）。
  *
  * ⚠️ 这是**请求**口径，不是展示口径。展示时间的唯一实现是 `utils/datetime.ts`；
- * 本函数只服务于「把用户选的档位变成契约字段」这一件事。
+ * 本函数只服务于「把用户选的时刻变成契约字段」这一件事。
  */
 function localIsoOf(date: Date): string {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}:00`
 }
 
-/** 今天 / 明天的档位：步长 30 分钟，今天的只保留严格晚于当前时刻的档。 */
-function slotsOf(now: Date, dayOffset: number): SlotOption[] {
-  const slots: SlotOption[] = []
-  for (let index = 0; index < SLOTS_PER_DAY; index += 1) {
-    const start = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + dayOffset,
-      Math.floor((index * SLOT_STEP_MINUTES) / 60),
-      (index * SLOT_STEP_MINUTES) % 60,
-      0,
-      0,
-    )
-    // 「起点至少是当前档位的下一个档」：严格大于 now（恰好等于当前档时也排斥）。
-    if (dayOffset === 0 && start.getTime() <= now.getTime()) continue
-    const value = localIsoOf(start)
-    slots.push({ value, label: formatSlotTime(value) })
-  }
-  return slots
-}
-
-/** 在无偏移本地 ISO 上增加小时数 —— `planEndAt = planStartAt + 时长`。 */
-function addHours(start: string, hours: number): string {
-  const matched = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(start)
-  if (matched === null) return ''
-  const date = new Date(
-    Number(matched[1]),
-    Number(matched[2]) - 1,
-    Number(matched[3]),
-    Number(matched[4]),
-    Number(matched[5]),
-    0,
-    0,
+/**
+ * 「日期上下文（今天 / 明天）+ `HH:mm`」→ **无偏移本地 ISO**。
+ *
+ * 用 `Date` 构造而不是字符串拼接：跨月 / 跨年时 `getDate() + 1` 由平台自己进位，
+ * 手拼会造出一个不存在的日期（`2026-12-32`）。非法时刻返回 `null`，由调用方拦下。
+ */
+function instantOf(now: Date, dayOffset: number, time: string): string | null {
+  const matched = TIME_PATTERN.exec(time)
+  if (matched === null) return null
+  const hours = Number(matched[1])
+  const minutes = Number(matched[2])
+  if (hours > 23 || minutes > 59) return null
+  return localIsoOf(
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, hours, minutes, 0, 0),
   )
-  return localIsoOf(new Date(date.getTime() + hours * 60 * 60 * 1000))
-}
-
-/** 把开始档位落到页面 —— 切换日期后旧选择必须清掉（不能跨天复用）。 */
-function applySlots(page: ReservationCreateInstance, now: Date, dayOffset: number): void {
-  const slots = slotsOf(now, dayOffset)
-  page.setData({
-    selectedDate: dayOffset,
-    slotOptions: slots,
-    selectedSlot: '',
-    showEmptySlotHint: dayOffset === 0 && slots.length === 0,
-    emptySlotHint: RESERVATION_CREATE_COPY.noSlotsToday,
-  })
 }
 
 /** 从事件 dataset 里取数字 —— 模板事件不可信，非法值直接忽略。 */
@@ -200,6 +148,13 @@ function numberOf(event: { currentTarget: { dataset: Record<string, unknown> } }
   const raw = event.currentTarget.dataset['value']
   const value = typeof raw === 'number' ? raw : Number(raw)
   return Number.isFinite(value) ? value : null
+}
+
+/** 从 `<picker mode="time">` 的 change 事件里取 `HH:mm`。 */
+function pickedTime(event: { detail?: { value?: unknown } }): string | null {
+  const raw = event.detail?.value
+  if (typeof raw !== 'string' || TIME_PATTERN.exec(raw) === null) return null
+  return raw
 }
 
 /** 失败归因 —— 已知码说人话；`8006` 等按服务端 message 直出；最后兜底。 */
@@ -210,6 +165,36 @@ function failureTextOf(error: ActionFailure): string {
   if (error.code === DUPLICATE_RESERVATION) return RESERVATION_CREATE_COPY.duplicate
   if (error.message !== null && error.message !== '') return error.message
   return RESERVATION_CREATE_COPY.submitFailed
+}
+
+type ValidationResult =
+  | { ok: false; message: string }
+  | { ok: true; planStartAt: string; planEndAt: string }
+
+/**
+ * 本地校验 —— 通过时顺带把两个「日期 + `HH:mm`」拼成契约要的无偏移本地 ISO。
+ *
+ * ⚠️ 判据只有契约要求的 `end > start`、以及「今天不能选一个已经过去的开始时刻」。
+ * 不判上限 / 不判窗口（`maxHours`、使用窗口都在服务端，C 端拿不到那些数字）。
+ */
+function validate(page: ReservationCreateInstance, now: Date): ValidationResult {
+  if (page.data.startTime === '' || page.data.endTime === '') {
+    return { ok: false, message: RESERVATION_CREATE_COPY.selectRequired }
+  }
+  // `HH:mm` 是定宽字符串，字典序即时间序 —— 不需要构造 `Date` 来比大小。
+  if (page.data.endTime <= page.data.startTime) {
+    return { ok: false, message: RESERVATION_CREATE_COPY.endBeforeStart }
+  }
+
+  const planStartAt = instantOf(now, page.data.selectedDate, page.data.startTime)
+  const planEndAt = instantOf(now, page.data.selectedDate, page.data.endTime)
+  if (planStartAt === null || planEndAt === null) {
+    return { ok: false, message: RESERVATION_CREATE_COPY.selectRequired }
+  }
+  if (planStartAt <= localIsoOf(now)) {
+    return { ok: false, message: RESERVATION_CREATE_COPY.startInPast }
+  }
+  return { ok: true, planStartAt, planEndAt }
 }
 
 /**
@@ -226,25 +211,28 @@ async function submit(page: ReservationCreateInstance): Promise<void> {
     page.setData({ invalidEntry: true, entryHint: RESERVATION_CREATE_COPY.invalidEntry })
     return
   }
-  if (
-    page.data.selectedCellType === 0 ||
-    page.data.selectedSlot === '' ||
-    page.data.selectedHours === 0
-  ) {
+
+  // 先收敛档位 —— 收窄之后 `cellType` 就是契约要的数字码（`0` 是「还没选」的哨兵）。
+  const cellType = page.data.selectedCellType
+  if (cellType === 0) {
     page.setData({ submitError: RESERVATION_CREATE_COPY.selectRequired })
     return
   }
 
-  const planStartAt = page.data.selectedSlot
-  const planEndAt = addHours(planStartAt, page.data.selectedHours)
+  const checked = validate(page, new Date())
+  if (!checked.ok) {
+    page.setData({ submitError: checked.message })
+    return
+  }
+
   runtime.submitting = true
   page.setData({ submitting: true, submitError: '' })
 
   const result = await createReservation({
     lockerId: runtime.lockerId,
-    cellType: page.data.selectedCellType,
-    planStartAt,
-    planEndAt,
+    cellType,
+    planStartAt: checked.planStartAt,
+    planEndAt: checked.planEndAt,
   })
 
   runtime.submitting = false
@@ -264,8 +252,8 @@ interface ReservationCreateMethods {
   onLoad(options: Record<string, string | undefined>): void
   onSelectCellType(event: { currentTarget: { dataset: Record<string, unknown> } }): void
   onSelectDate(event: { currentTarget: { dataset: Record<string, unknown> } }): void
-  onSelectSlot(event: { currentTarget: { dataset: Record<string, unknown> } }): void
-  onSelectDuration(event: { currentTarget: { dataset: Record<string, unknown> } }): void
+  onPickStart(event: { detail?: { value?: unknown } }): void
+  onPickEnd(event: { detail?: { value?: unknown } }): void
   onSubmit(): void
 }
 
@@ -283,7 +271,8 @@ Component<
 
     cellTypeSection: RESERVATION_CREATE_COPY.cellTypeSection,
     startSection: RESERVATION_CREATE_COPY.startSection,
-    durationSection: RESERVATION_CREATE_COPY.durationSection,
+    endSection: RESERVATION_CREATE_COPY.endSection,
+    pickTime: RESERVATION_CREATE_COPY.pickTime,
 
     cellTypeOptions: CELL_TYPES.map((type) => ({
       value: type,
@@ -297,16 +286,8 @@ Component<
     ],
     selectedDate: 0,
 
-    slotOptions: [],
-    selectedSlot: '',
-    emptySlotHint: RESERVATION_CREATE_COPY.noSlotsToday,
-    showEmptySlotHint: false,
-
-    durationOptions: DURATION_HOURS.map((hours) => ({
-      hours,
-      label: formatDurationSlot(hours),
-    })),
-    selectedHours: 0,
+    startTime: '',
+    endTime: '',
 
     submitLabel: RESERVATION_CREATE_COPY.submit,
     submittingLabel: RESERVATION_CREATE_COPY.submitting,
@@ -321,7 +302,7 @@ Component<
   },
 
   methods: {
-    /** 进页：收敛 `lockerId`，生成今天的未来档位。 */
+    /** 进页：收敛 `lockerId`；两个时刻不预填（不替用户编一个「默认时间」）。 */
     onLoad(options: Record<string, string | undefined>): void {
       const page = this as unknown as ReservationCreateInstance
       const runtime = runtimeOf(page)
@@ -337,7 +318,6 @@ Component<
       }
       runtime.lockerId = lockerId
       page.setData({ invalidEntry: false })
-      applySlots(page, new Date(), 0)
     },
 
     /** 选档位（数字码 1–4）。 */
@@ -350,32 +330,28 @@ Component<
       page.setData({ selectedCellType: type, submitError: '' })
     },
 
-    /** 切今天 / 明天 —— 重新生成档位并清空旧选择。 */
+    /** 切今天 / 明天 —— 两个时刻本身与日期无关，保留用户的选择。 */
     onSelectDate(event: { currentTarget: { dataset: Record<string, unknown> } }): void {
       const page = this as unknown as ReservationCreateInstance
       const value = numberOf(event)
       if (value !== 0 && value !== 1) return
-      applySlots(page, new Date(), value)
-      page.setData({ submitError: '' })
+      page.setData({ selectedDate: value, submitError: '' })
     },
 
-    /** 选开始档位 —— 只接受当前档位表里的值。 */
-    onSelectSlot(event: { currentTarget: { dataset: Record<string, unknown> } }): void {
+    /** 选开始时间 —— 取值来自原生 time picker，不是页面自造的档位表。 */
+    onPickStart(event: { detail?: { value?: unknown } }): void {
       const page = this as unknown as ReservationCreateInstance
-      const raw = event.currentTarget.dataset['value']
-      if (typeof raw !== 'string') return
-      if (!page.data.slotOptions.some((slot) => slot.value === raw)) return
-      page.setData({ selectedSlot: raw, submitError: '' })
-    },
-
-    /** 选时长 —— 只接受 1 / 2 / 4 / 8。 */
-    onSelectDuration(event: { currentTarget: { dataset: Record<string, unknown> } }): void {
-      const page = this as unknown as ReservationCreateInstance
-      const value = numberOf(event)
+      const value = pickedTime(event)
       if (value === null) return
-      const hours = DURATION_HOURS.find((candidate) => candidate === value)
-      if (hours === undefined) return
-      page.setData({ selectedHours: hours, submitError: '' })
+      page.setData({ startTime: value, submitError: '' })
+    },
+
+    /** 选结束时间 —— 与开始时间是同一次选择的两个端点。 */
+    onPickEnd(event: { detail?: { value?: unknown } }): void {
+      const page = this as unknown as ReservationCreateInstance
+      const value = pickedTime(event)
+      if (value === null) return
+      page.setData({ endTime: value, submitError: '' })
     },
 
     /** 提交 —— 本地校验 → `13.12` → 回我的预约。 */

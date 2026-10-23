@@ -99,8 +99,12 @@ page {
   margin-top: v.$spacing-xxl;
   padding: 0 v.$spacing-xxl;
   min-width: 240rpx;
-  line-height: 44px;
+  // ⚠️ 定高按钮的文字居中用 flex，不写像素行高：
+  // 行高一旦写成像素值就与字号脱钩，字号一改文字就偏（且像素行高散进页面）。
   height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
   &::after {
     border: none;

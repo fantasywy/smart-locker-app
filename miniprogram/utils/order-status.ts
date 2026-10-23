@@ -69,3 +69,84 @@ export function resolveOrderStatus(
 function badge(key: OrderStatusKey, tone: OrderStatusTone): OrderStatusBadge {
   return { key, label: ORDER_STATUS_LABELS[key], tone }
 }
+
+/**
+ * **订单谓词的入参形状** —— 只有这三个字段参与判定，凡是带着它们的 DTO 都能直接传进来
+ * （`OrderSummary` / `OrderDetailOrder` / `PickupOrder` / `OrderCardOrder` 都满足）。
+ *
+ * ⚠️ 刻意不要求 `id` / `payAmount` 之类的字段：谓词只回答「这张单在状态机的哪一格」，
+ * 多要一个字段就等于把「订单是什么」这一层知识抄进判定层。
+ */
+export interface OrderStatusFields {
+  status: OrderStatus
+  startAt: string | null
+  endAt: string | null
+}
+
+/**
+ * **是否还在办**（进行中）。
+ *
+ * ## 为什么多个页面必须共用这一条谓词
+ *
+ * 首页进行中区、订单列表的「进行中 / 已结束」分组、订单详情的「历史单」出口、
+ * 等待页的终局识别，问的是**同一个问题**。各写一遍 `status === 2 || ...` 的后果
+ * 不是重复三行，而是**同一张订单在首页是「进行中」、在列表却落到「已结束」** ——
+ * 用户会拿这个矛盾去对客服。
+ *
+ * ## 口径
+ *
+ *   • 候选：`status == 2`，或（`status == 4` 且 `endAt == null`）；
+ *   • `status == 1` 按进行中兜底：一期不产生，但若服务端意外回显，
+ *     它仍进进行中组、标签「待支付」、不给任何 CTA（spec §6）。
+ */
+export function isActiveOrder(order: OrderStatusFields): boolean {
+  return (
+    order.status === 1 ||
+    order.status === 2 ||
+    (order.status === 4 && order.endAt === null)
+  )
+}
+
+/**
+ * **是否已经结束**（历史 / 终局分组）。
+ *
+ * ⚠️ 它就是 `isActiveOrder` 的补集 —— 不另写一份 `3 / 5 / 6 / 7 /（4 且 endAt 有值）`：
+ * 同一件事的正反两份写法，正是它们迟早对不上的原因（改了一处漏了另一处）。
+ */
+export function isEndedOrder(order: OrderStatusFields): boolean {
+  return !isActiveOrder(order)
+}
+
+/**
+ * **能不能取件** —— 已存入 / 已超时未取件，两个入口（详情主行动、共享取件层）同一口径。
+ *
+ * 判据：`status ∈ {2, 4}` 且**已经存入**（`startAt` 有值）且**还没取走**（`endAt` 为空）。
+ * `endAt` 有值说明这一单已经结束，取件层没有存在的理由。
+ */
+export function canPickupOrder(order: OrderStatusFields): boolean {
+  return (
+    (order.status === 2 || order.status === 4) &&
+    order.startAt !== null &&
+    order.endAt === null
+  )
+}
+
+/**
+ * **`13.9` 回显是否已经终局** —— 取件层网络核对时的唯一判据。
+ *
+ * ⚠️ 它与 `isEndedOrder` **不是**同一条谓词，别合并：
+ *   • `isEndedOrder` 回答「这条单该进列表的哪一组」，`status == 4` 且 `endAt` 为空时仍是进行中；
+ *   • 本谓词回答「支付结果还有没有意义」，只要 `endAt` 有值（哪怕 `status` 还是 `2` / `4`）
+ *     就说明柜门已经关好、订单已落定，再重发支付只会白跑一趟。
+ *
+ * 所以它是 `isEndedOrder` 的**超集**：终局那四个状态码，加上「任何 `endAt` 有值的单」。
+ */
+export function isTerminalOrder(order: OrderStatusFields): boolean {
+  return (
+    order.endAt !== null ||
+    order.status === 3 ||
+    order.status === 5 ||
+    order.status === 6 ||
+    order.status === 7
+  )
+}

@@ -467,7 +467,41 @@ checkTrue(
   `实际 animation ${motion.whitelisted.animation} 处、@keyframes ${motion.whitelisted.keyframes} 处`,
 )
 
-// ---------- 第 13 条：app.scss 的 Vant 主题映射（#59 起强制） ----------
+// ---------- 第 13 条：页面 / 组件 SCSS 里不得出现像素行高 ----------
+// spec §12 的几何口径：「字号 / 圆角 / 1px 细节继续 `px`；布局几何继续 `rpx`」——
+// 行高两者都不是：它要么是**字号的相对比例**（无单位），要么就该走
+// `$line-height-heading` / `$line-height-hero` / `$line-height-display` 三档 token。
+// 写成 `line-height: 22px` 的后果是**行高与字号脱钩**：字号一改文字就偏，
+// 而且「一屏一个像素值」会重新散进每个页面。
+//
+// ⚠️ 例外只有 token 定义处（`_variables.scss` 的三档 px 行高）、`_mixins.scss`
+// 的共享 mixin（它已经收敛成比例），以及 `app.scss` 里 Vant 的
+// `--button-line-height` / `--cell-line-height`（那是**第三方主题变量**，不是本仓库的行高）。
+// 判据用后行断言排除 `--xxx-line-height` 形态的自定义属性。
+let lastLineHeightOffenders = []
+checkTrue(
+  '页面 / 组件 SCSS 不出现像素行高（一律无单位比例或 token）',
+  (() => {
+    const offenders = []
+    for (const file of collect(miniprogramDir, ['.scss'])) {
+      const relativePath = relative(repoRoot, file)
+      if (relativePath.endsWith(join('styles', '_variables.scss'))) continue
+      if (relativePath.endsWith(join('styles', '_mixins.scss'))) continue
+      if (relativePath === relative(repoRoot, appScssPath)) continue
+      const lines = blankComments(readFileSync(file, 'utf8')).split('\n')
+      for (let i = 0; i < lines.length; i += 1) {
+        if (/(?<![\w-])line-height\s*:\s*[\d.]+px/.test(lines[i] ?? '')) {
+          offenders.push(`${relativePath}:${i + 1}  ${(lines[i] ?? '').trim()}`)
+        }
+      }
+    }
+    lastLineHeightOffenders = offenders
+    return offenders.length === 0
+  })(),
+  lastLineHeightOffenders.map((x) => `  • ${x}`).join('\n'),
+)
+
+// ---------- 第 14 条：app.scss 的 Vant 主题映射（#59 起强制） ----------
 // spec §12：12 组组件的变量按表映射；值必须来自 `_variables.scss`（用 `#{}` 插值），
 // 不允许在 app.scss 里抄第二份色值。这里逐项断言 **变量存在且引用正确 token**。
 const VANT_THEME_VARIABLES = {

@@ -32,6 +32,7 @@ import {
   PAGE_TITLES,
   PICKUP_SHEET_COPY,
   RETRY_LABEL,
+  SCAN_COPY,
 } from '../../miniprogram/startup/copy'
 import { LOCKER_PATH, WAITING_PATH } from '../../miniprogram/utils/routes'
 import type { InstalledWxStub } from '../helpers/wx'
@@ -1039,7 +1040,7 @@ describe('#64 订单详情 · 主行动', () => {
       options.success?.({ result: 'https://example.com/not-a-locker' })
     })
     ;(page.onScanEntry as () => void)()
-    expect(mocks.showToast).toHaveBeenCalledWith(HOME_PAGE_COPY.notLockerCode)
+    expect(mocks.showToast).toHaveBeenCalledWith(SCAN_COPY.notLockerCode)
     expect(wx.navigateTo).not.toHaveBeenCalled()
 
     mocks.showToast.mockReset()
@@ -1053,7 +1054,7 @@ describe('#64 订单详情 · 主行动', () => {
       options.fail?.({ errMsg: 'scanCode:fail camera' })
     })
     ;(page.onScanEntry as () => void)()
-    expect(mocks.showToast).toHaveBeenCalledWith(HOME_PAGE_COPY.scanFailed)
+    expect(mocks.showToast).toHaveBeenCalledWith(SCAN_COPY.scanFailed)
   })
 })
 

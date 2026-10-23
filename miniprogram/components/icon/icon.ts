@@ -17,13 +17,20 @@
 import { ICON_DATA } from './icons.generated'
 import type { IconTone } from './icons.generated'
 
-const TONES: readonly string[] = ['primary', 'sub', 'weak', 'danger', 'white']
-const DEFAULT_TONE = 'sub'
+const DEFAULT_TONE: IconTone = 'sub'
 const DEFAULT_SIZE = 24
 
+/**
+ * 语义 key + 色调 → 预着色 data URI。
+ *
+ * ⚠️ **色调白名单不在这里**：`ICON_DATA` 的第二层键就是生成期写死的五档
+ * （`ICON_TONES`，与 manifest 一一对应）。早先这里另存了一份
+ * `TONES = ['primary', 'sub', ...]` 做 `includes` 校验 —— 那是**第二份真相**：
+ * 往 manifest 加一档 tone 时，生成物有了、这份手写数组没有，于是新档位静默不渲染。
+ * 现在只做一次查表：未知 tone 取到 `undefined`，回落成空串（裁决 3：不渲染、不抛错）。
+ */
 function resolveSrc(name: unknown, tone: unknown): string {
   if (typeof name !== 'string' || typeof tone !== 'string') return ''
-  if (!TONES.includes(tone)) return ''
   const table = ICON_DATA as unknown as Record<string, Record<string, string>>
   return table[name]?.[tone] ?? ''
 }
