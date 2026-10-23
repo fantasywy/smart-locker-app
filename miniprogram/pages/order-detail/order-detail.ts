@@ -18,12 +18,13 @@
 // 3. **每次 `onShow` 静默刷新**：从等待页 / 支付层回来后必须看到最新状态。
 //    首屏用骨架屏，后续刷新**不切回骨架**（否则每次回前台整页闪一下）。
 //
-// ## 主行动：本票只做「待存入」那一条
+// ## 主行动：待存入 → 等待页；已存入 / 已超时 → 共享取件层
 //
-// 待存入 → `redirectTo` 等待页（`mode=drop`）。已存入 / 已超时确实该有「取件开门」，
-// 但那要等 `pickup-sheet`（#65）——**本票不画一个点下去没反应的假按钮**。
-// 因此底栏只在「有真实 CTA」时渲染；`canPickup` 作为数据位留在页面上，
-// #65 接进来时只补文案与点击去向，不必推翻这里的判断。
+// 待存入 → `redirectTo` 等待页（`mode=drop`）。
+// 已存入 / 已超时（`canPickup`）→ 打开共享的 `pickup-sheet`（#65）：
+//   • 本页**不画支付界面**，也不自己调 `13.11`；支付取件请求与状态机都在组件里；
+//   • 组件成功后发 `success`，本页才 `redirectTo` 等待页（`mode=pickup`）——
+//     成功后的去向由宿主决定（列表入口将来用 `navigateTo`，组件不知道这件事）。
 //
 // ## 取消只在本页出现
 //
@@ -40,6 +41,7 @@ import {
   ORDER_COPY,
   ORDER_LIST_PATH,
   PAGE_TITLES,
+  PICKUP_SHEET_COPY,
 } from '../../startup/copy'
 import { alert, confirm, showToast } from '../../utils/feedback'
 import { formatFullTime } from '../../utils/datetime'
@@ -47,7 +49,12 @@ import { resolveLockerCode } from '../../utils/locker-code'
 import { formatMoney } from '../../utils/money'
 import { resolveOrderStatus } from '../../utils/order-status'
 import { LOCKER_PATH, WAITING_PATH } from '../../utils/routes'
-import type { OrderDetailOrder, OrderDetailResponse, OrderTimelineEvent } from '../../types/orders'
+import type {
+  OrderDetailOrder,
+  OrderDetailResponse,
+  OrderTimelineEvent,
+  PickupOrder,
+} from '../../types/orders'
 
 /** `13.9` 订单不存在（契约 §13.9 :1197）。 */
 const ORDER_NOT_FOUND = 3001
@@ -124,6 +131,8 @@ interface OrderDetailPageData {
 
   /** 主行动 / 取消 / 历史单扫码出口。 */
   showActionBar: boolean
+  /** 主行动的种类 —— 决定点击后是去等待页还是打开取件层（不靠按钮文案判分支）。 */
+  primaryAction: 'waiting' | 'pickup' | ''
   primaryActionLabel: string
   showCancel: boolean
   cancelActionLabel: string
@@ -137,8 +146,9 @@ interface OrderDetailPageData {
   loadFailedDetail: string
   retryLabel: string
 
-  /** #65 的接线位 —— 本票不渲染取件按钮，但先把「够不够格取件」算出来。 */
+  /** #65 取件层 —— `canPickup` 是入口谓词；`pickupOrder` 有值即打开弹层。 */
   canPickup: boolean
+  pickupOrder: PickupOrder | null
 }
 
 interface OrderDetailPageInstance {
@@ -152,6 +162,8 @@ interface DetailRuntime {
   /** 是否已经收到过第一次 `onShow`（真实运行时 onLoad 后紧跟 onShow）。 */
   started: boolean
   cancelling: boolean
+  /** 最近一次 `13.9` 的回显 —— 打开取件层时用它拼 `PickupOrder`（不落 storage）。 */
+  detail: OrderDetailResponse | null
 }
 
 /** 页面实例 → 运行时。`WeakMap` 不缓存业务数据，只挂时序状态。 */
@@ -160,7 +172,7 @@ const runtimes = new WeakMap<OrderDetailPageInstance, DetailRuntime>()
 function runtimeOf(page: OrderDetailPageInstance): DetailRuntime {
   let runtime = runtimes.get(page)
   if (runtime === undefined) {
-    runtime = { orderId: null, started: false, cancelling: false }
+    runtime = { orderId: null, started: false, cancelling: false, detail: null }
     runtimes.set(page, runtime)
   }
   return runtime
@@ -289,7 +301,7 @@ function paymentsOf(detail: OrderDetailResponse): PaymentRow[] {
   }))
 }
 
-/** 主行动 / 取消 / 历史单出口 —— 三个布尔各自只由一个判定决定。 */
+/** 主行动 / 取消 / 历史单出口 —— 每个判定只算一次，避免「按钮文案」与「点击去向」分叉。 */
 function actionsOf(order: OrderDetailOrder): Partial<OrderDetailPageData> {
   const canPickup =
     (order.status === 2 || order.status === 4) &&
@@ -303,15 +315,45 @@ function actionsOf(order: OrderDetailOrder): Partial<OrderDetailPageData> {
     order.status === 7 ||
     (order.status === 4 && order.endAt !== null)
 
+  // 取件入口只按「超时单 → 补缴 / 普通单 → 取件」分两档；两者打开同一个弹层。
+  const primaryAction: OrderDetailPageData['primaryAction'] = canPickup
+    ? 'pickup'
+    : canCancel
+      ? 'waiting'
+      : ''
+  const primaryActionLabel = canPickup
+    ? order.status === 4
+      ? PICKUP_SHEET_COPY.topUpAction
+      : PICKUP_SHEET_COPY.pickupAction
+    : canCancel
+      ? ORDER_COPY.continueWaiting
+      : ''
+
   return {
     canPickup,
-    // ⚠️ 本票只有待存入有真实 CTA；取件按钮等 #65（见文件头）。
-    showActionBar: canCancel,
-    primaryActionLabel: canCancel ? ORDER_COPY.continueWaiting : '',
+    showActionBar: canPickup || canCancel,
+    primaryAction,
+    primaryActionLabel,
     showCancel: canCancel,
     cancelActionLabel: ORDER_CANCEL_COPY.action,
     showScanEntry: isHistory,
     scanEntryLabel: ORDER_COPY.scanEntry,
+  }
+}
+
+/** `13.9` 的 `order` + `locker` → 取件层入参（共享组件不知道详情响应有两个块）。 */
+function pickupOrderOf(detail: OrderDetailResponse): PickupOrder {
+  const order = detail.order
+  return {
+    id: order.id,
+    status: order.status,
+    startAt: order.startAt,
+    endAt: order.endAt,
+    payAmount: order.payAmount,
+    estimatedAmount: order.estimatedAmount,
+    siteName: detail.locker.siteName,
+    lockerNo: detail.locker.lockerNo,
+    cellNo: detail.locker.cellNo,
   }
 }
 
@@ -321,6 +363,9 @@ function renderDetail(page: OrderDetailPageInstance, detail: OrderDetailResponse
   const status = resolveOrderStatus(order.status, order.startAt, order.endAt)
   const timelineRows = timelineOf(detail.timeline)
   const paymentRows = paymentsOf(detail)
+
+  // 取件层打开时要拼 `PickupOrder`；存下这次回显，避免再发一次 `13.9`。
+  runtimeOf(page).detail = detail
 
   page.setData({
     phase: 'ready',
@@ -388,8 +433,57 @@ async function load(page: OrderDetailPageInstance, source: LoadSource): Promise<
 /** 待存入的主行动 —— `redirectTo` 等待页（详情页拿不到 `openTimeoutMinutes`，不传）。 */
 function continueWaiting(page: OrderDetailPageInstance): void {
   const runtime = runtimeOf(page)
-  if (runtime.orderId === null || page.data.primaryActionLabel === '') return
+  if (runtime.orderId === null || page.data.primaryAction !== 'waiting') return
   wx.redirectTo({ url: `/${WAITING_PATH}?orderId=${runtime.orderId}&mode=drop` })
+}
+
+/**
+ * 已存入 / 已超时 —— 打开共享取件层。
+ *
+ * ⚠️ 页面只把 `PickupOrder` 塞进 `data`，弹层自己负责 `13.11` 与支付状态机。
+ * 这里不画金额、不调支付接口、不判断「付没付过」。
+ */
+function openPickup(page: OrderDetailPageInstance): void {
+  const runtime = runtimeOf(page)
+  if (runtime.detail === null || !page.data.canPickup) return
+  page.setData({ pickupOrder: pickupOrderOf(runtime.detail) })
+}
+
+/**
+ * 取件层支付成功 —— 宿主的去向：详情入口 `redirectTo` 等待页（`mode=pickup`）。
+ *
+ * ⚠️ 不在详情页停留、不 toast「支付成功」：成功文案已在弹层里逐字呈现，
+ * 用户点「知道了」之后应当直接看到「已发出开门指令」的等待页。
+ */
+function pickupSuccess(page: OrderDetailPageInstance): void {
+  const runtime = runtimeOf(page)
+  page.setData({ pickupOrder: null })
+  if (runtime.orderId === null) return
+  wx.redirectTo({ url: `/${WAITING_PATH}?orderId=${runtime.orderId}&mode=pickup` })
+}
+
+/** 用户关掉空闲 / 失败态弹层 —— 只收起，不刷新、不跳转。 */
+function pickupDismiss(page: OrderDetailPageInstance): void {
+  page.setData({ pickupOrder: null })
+}
+
+/**
+ * 取件层要求来源页刷新。
+ *
+ * `missing=true` 是 `3001` / `8003`：订单不存在或非本人，来源页直接回列表
+ * （详情页的「不存在」页也好、列表也好，都不该让用户继续在弹层里重试）。
+ * 其余（`3002` / 网络核对终局）静默刷新 `13.9`，把最新状态画回来。
+ */
+function pickupRefresh(
+  page: OrderDetailPageInstance,
+  event: { detail?: { missing?: boolean } },
+): void {
+  page.setData({ pickupOrder: null })
+  if (event.detail?.missing === true) {
+    wx.switchTab({ url: `/${ORDER_LIST_PATH}` })
+    return
+  }
+  void load(page, 'refresh')
 }
 
 /** 取消 —— 只对待存入开放；成功后回订单列表（列表在 `onShow` 自己刷新）。 */
@@ -504,6 +598,9 @@ interface OrderDetailPageMethods {
   onScanEntry(): void
   onBackToOrders(): void
   onRetry(): void
+  onPickupSuccess(): void
+  onPickupDismiss(): void
+  onPickupRefresh(event: { detail?: { missing?: boolean } }): void
 }
 
 Component<OrderDetailPageData, Record<string, never>, OrderDetailPageMethods, Record<string, never>, true>({
@@ -544,6 +641,7 @@ Component<OrderDetailPageData, Record<string, never>, OrderDetailPageMethods, Re
     paymentRows: [],
 
     showActionBar: false,
+    primaryAction: '',
     primaryActionLabel: '',
     showCancel: false,
     cancelActionLabel: ORDER_CANCEL_COPY.action,
@@ -557,6 +655,7 @@ Component<OrderDetailPageData, Record<string, never>, OrderDetailPageMethods, Re
     retryLabel: ORDER_COPY.retry,
 
     canPickup: false,
+    pickupOrder: null,
   } as OrderDetailPageData,
 
   methods: {
@@ -569,7 +668,12 @@ Component<OrderDetailPageData, Record<string, never>, OrderDetailPageMethods, Re
     },
 
     onPrimaryAction(): void {
-      continueWaiting(this as unknown as OrderDetailPageInstance)
+      const page = this as unknown as OrderDetailPageInstance
+      if (page.data.primaryAction === 'pickup') {
+        openPickup(page)
+        return
+      }
+      continueWaiting(page)
     },
 
     onCancel(): void {
@@ -586,6 +690,18 @@ Component<OrderDetailPageData, Record<string, never>, OrderDetailPageMethods, Re
 
     onRetry(): void {
       retry(this as unknown as OrderDetailPageInstance)
+    },
+
+    onPickupSuccess(): void {
+      pickupSuccess(this as unknown as OrderDetailPageInstance)
+    },
+
+    onPickupDismiss(): void {
+      pickupDismiss(this as unknown as OrderDetailPageInstance)
+    },
+
+    onPickupRefresh(event: { detail?: { missing?: boolean } }): void {
+      pickupRefresh(this as unknown as OrderDetailPageInstance, event)
     },
   },
 })

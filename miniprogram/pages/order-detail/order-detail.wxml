@@ -11,9 +11,9 @@
   ⚠️ **六块的顺序是契约**（状态摘要 → 取件码 → 柜机信息 → 费用 → 时间轴 →
   支付记录），测试按 DOM 顺序钉住；不要在中间插一块「提示」把顺序打乱。
 
-  ⚠️ 底栏只在**有真实 CTA** 时出现（本票只有「待存入 → 继续等待关门」）。
-  已存入 / 已超时的「取件开门」由 #65 的 `pickup-sheet` 接进来 ——
-  在这里预埋一个点不动的按钮，就是 #23 修过的死按钮。
+  ⚠️ 底栏只在**有真实 CTA** 时出现（待存入 → 继续等待关门；已存入 / 已超时 →
+  取件开门）。后者打开共享的 `pickup-sheet`（#65），本页**不画支付界面**：
+  支付取件请求与状态机都在组件里，成功后只由本页决定 `redirectTo` 等待页。
 -->
 <navigation-bar title="{{ title }}" back="{{true}}"></navigation-bar>
 
@@ -125,7 +125,18 @@
   <van-dialog id="van-dialog" />
 </view>
 
-<!-- 进行中的固定行动条：只有真实 CTA 才出现（#65 的取件按钮接进这里）。 -->
+<!--
+  共享取件层 —— 页面只传 `order` 与三个事件；支付取件请求、状态机与成功文案都在组件里。
+  `order` 有值即打开；`success` 由本页决定 `redirectTo` 等待页，`dismiss` 只收起。
+-->
+<pickup-sheet
+  order="{{ pickupOrder }}"
+  bind:success="onPickupSuccess"
+  bind:dismiss="onPickupDismiss"
+  bind:refresh="onPickupRefresh"
+/>
+
+<!-- 进行中的固定行动条：只有真实 CTA 才出现（待存入 / 已存入 / 已超时）。 -->
 <view wx:if="{{ phase === 'ready' && showActionBar }}" class="detail__bar">
   <button
     class="detail__bar-primary"

@@ -30,6 +30,7 @@ import {
   ORDER_LIST_PATH,
   ORDER_STATUS_LABELS,
   PAGE_TITLES,
+  PICKUP_SHEET_COPY,
   RETRY_LABEL,
 } from '../../miniprogram/startup/copy'
 import { LOCKER_PATH, WAITING_PATH } from '../../miniprogram/utils/routes'
@@ -898,15 +899,102 @@ describe('#64 订单详情 · 主行动', () => {
     expect(wx.navigateTo).not.toHaveBeenCalled()
   })
 
-  it('⚠️ 已存入 / 已超时：不渲染假的取件按钮（#65 才接真按钮）', async () => {
-    const { page } = await enter({ id: String(ORDER_ID) }, [storedBody()])
+  it('⚠️ 已存入：底栏「取件开门」打开共享取件层，页面不自己跳转', async () => {
+    const { wx, page } = await enter({ id: String(ORDER_ID) }, [storedBody()])
 
     expect(viewOf(page).canPickup).toBe(true)
-    expect(viewOf(page).showActionBar).toBe(false)
-    expect(viewOf(page).primaryActionLabel).toBe('')
+    expect(viewOf(page).showActionBar).toBe(true)
+    expect(viewOf(page).primaryAction).toBe('pickup')
+    expect(viewOf(page).primaryActionLabel).toBe(PICKUP_SHEET_COPY.pickupAction)
     expect(viewOf(page).showCancel).toBe(false)
-    expect(detailWxml()).not.toContain('onPickup')
-    expect(detailWxml()).not.toContain('pickup-sheet')
+    expect(viewOf(page).pickupOrder).toBeNull()
+
+    ;(page.onPrimaryAction as () => void)()
+
+    expect(viewOf(page).pickupOrder).toMatchObject({
+      id: ORDER_ID,
+      status: 2,
+      startAt: '2025-04-01T09:00:00+08:00',
+      endAt: null,
+      payAmount: null,
+      estimatedAmount: 1800,
+      siteName: '万达广场店',
+      lockerNo: 'WD-01',
+      cellNo: 'S03',
+    })
+    expect(wx.redirectTo).not.toHaveBeenCalled()
+    expect(wx.navigateTo).not.toHaveBeenCalled()
+  })
+
+  it('⚠️ 已超时未取件：底栏「补缴并开门」，仍打开同一个取件层', async () => {
+    const { page } = await enter({ id: String(ORDER_ID) }, [
+      detailBody({
+        status: 4,
+        startAt: '2025-04-01T09:00:00+08:00',
+        payAmount: 500,
+        estimatedAmount: 1800,
+        pickupCode: '385214',
+      }),
+    ])
+
+    expect(viewOf(page).canPickup).toBe(true)
+    expect(viewOf(page).primaryActionLabel).toBe(PICKUP_SHEET_COPY.topUpAction)
+    expect(viewOf(page).primaryAction).toBe('pickup')
+
+    ;(page.onPrimaryAction as () => void)()
+    expect(viewOf(page).pickupOrder).toMatchObject({ status: 4, payAmount: 500 })
+  })
+
+  it('⚠️ 取件层 success → 详情页 redirectTo 等待页（mode=pickup），不是 navigateTo', async () => {
+    const { wx, page } = await enter({ id: String(ORDER_ID) }, [storedBody()])
+    ;(page.onPrimaryAction as () => void)()
+
+    ;(page.onPickupSuccess as () => void)()
+
+    expect(viewOf(page).pickupOrder).toBeNull()
+    expect(wx.redirectTo).toHaveBeenCalledTimes(1)
+    expect(wx.redirectTo.mock.calls[0]?.[0]).toMatchObject({
+      url: `/${WAITING_PATH}?orderId=${ORDER_ID}&mode=pickup`,
+    })
+    expect(wx.navigateTo).not.toHaveBeenCalled()
+  })
+
+  it('⚠️ 取件层 dismiss → 只收起弹层，不刷新、不跳转', async () => {
+    const { wx, page } = await enter({ id: String(ORDER_ID) }, [storedBody()])
+    ;(page.onPrimaryAction as () => void)()
+
+    ;(page.onPickupDismiss as () => void)()
+
+    expect(viewOf(page).pickupOrder).toBeNull()
+    expect(wx.redirectTo).not.toHaveBeenCalled()
+    expect(wx.switchTab).not.toHaveBeenCalled()
+  })
+
+  it('⚠️ 取件层 refresh(missing) → 来源页回订单列表', async () => {
+    const { wx, page } = await enter({ id: String(ORDER_ID) }, [storedBody()])
+    ;(page.onPrimaryAction as () => void)()
+
+    ;(page.onPickupRefresh as (event: { detail?: { missing?: boolean } }) => void)({
+      detail: { missing: true },
+    })
+
+    expect(viewOf(page).pickupOrder).toBeNull()
+    expect(wx.switchTab).toHaveBeenCalledTimes(1)
+    expect(wx.switchTab.mock.calls[0]?.[0]).toMatchObject({ url: `/${ORDER_LIST_PATH}` })
+  })
+
+  it('⚠️ 取件层 refresh（状态已变）→ 静默重查一次 13.9', async () => {
+    const { wx, page } = await enter({ id: String(ORDER_ID) }, [storedBody(), completedBody()])
+    ;(page.onPrimaryAction as () => void)()
+
+    ;(page.onPickupRefresh as (event: { detail?: { missing?: boolean } }) => void)({
+      detail: { missing: false },
+    })
+    await settle()
+
+    expect(viewOf(page).pickupOrder).toBeNull()
+    expect(detailRequests(wx)).toHaveLength(2)
+    expect(viewOf(page).statusLabel).toBe(ORDER_STATUS_LABELS.completed)
   })
 
   it('⚠️ `status=1` 兜底：标签「待支付」，没有任何 CTA', async () => {
@@ -1016,5 +1104,23 @@ describe('#64 订单详情 · 源码守卫', () => {
   it('⚠️ 固定行动条只在有真实 CTA 时出现', () => {
     expect(detailWxml()).toContain("phase === 'ready' && showActionBar")
     expect(detailWxml()).toContain('wx:if="{{ showCancel }}"')
+  })
+
+  it('⚠️ 取件层是共享组件：页面只传 order / 收事件，不画支付界面、不调 13.11', () => {
+    const source = detailSource()
+    const wxml = detailWxml()
+    const json = readFileSync(join(detailDir, 'order-detail.json'), 'utf8')
+
+    expect(wxml).toContain('<pickup-sheet')
+    expect(wxml).toContain('order="{{ pickupOrder }}"')
+    expect(wxml).toContain('bind:success="onPickupSuccess"')
+    expect(wxml).toContain('bind:dismiss="onPickupDismiss"')
+    expect(wxml).toContain('bind:refresh="onPickupRefresh"')
+    expect(json).toContain('"pickup-sheet": "/components/pickup-sheet/pickup-sheet"')
+
+    // 页面不自己画支付弹层 / 不自己调支付接口 —— 这些都属于共享组件。
+    expect(wxml).not.toContain('van-popup')
+    expect(source).not.toContain('payOrder')
+    expect(source).not.toContain('@vant/weapp')
   })
 })

@@ -197,6 +197,36 @@ export interface OrderDetailLocker {
 }
 
 /**
+ * `pickup-sheet` 需要的订单视图 —— **共享取件层的唯一入参**（spec §5 / §11）。
+ *
+ * 为什么需要这一层而不是直接把 `13.9` 的 `order` 块交给组件：
+ *   • 顶行要 `站点名 · 柜机码 · 格口`，这三项在 `13.9` 里属于 `locker` 块；
+ *   • 订单列表（`13.8`）的每一项天然带这三个字段，同一个组件必须两边都能用；
+ *   • 组件不该知道「详情页有 locker 块、列表页没有」—— 那是宿主的装配差异。
+ *
+ * ⇒ 宿主负责把 `13.9` 的 `order` + `locker` 拼成本形状（`13.8` 的行直接满足）。
+ * 这里**没有新增契约字段**：九个字段全部来自 `13.8` / `13.9` 的既有响应。
+ *
+ * ⚠️ **不含 `orderNo`**：取件层顶行只到格口，订单号全程不上屏（spec §14.5）。
+ * ⚠️ **不含 `paid` / `openCommandIssued`**：组件判态只用
+ * `status` / `startAt` / `endAt` / `payAmount` / `estimatedAmount`。
+ */
+export interface PickupOrder {
+  id: number
+  status: OrderStatus
+  startAt: string | null
+  endAt: string | null
+  /** 累计实收（分）；未支付为 `null`。 */
+  payAmount: number | null
+  /** 当前时长预估（分）；缺少时取件层整行不渲染。 */
+  estimatedAmount: number | null
+  siteName: string
+  lockerNo: string
+  /** 具体格口号 —— 只作行内定位辅助，不给它中文名（spec §14.6）。 */
+  cellNo: string
+}
+
+/**
  * `13.9` 的时间轴事件。
  *
  * 契约：§13.9 后端实现要点（事件值域）：
