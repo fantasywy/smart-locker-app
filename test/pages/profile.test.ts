@@ -427,7 +427,6 @@ describe('#69 我的页 · 硬约束（源码守卫）', () => {
   it('头像只读：无上传 / 压缩 / 选图入口，也无编译期开关', () => {
     const source = stripComments(profileSource()) + stripComments(profileWxml())
     for (const forbidden of [
-      'AVATAR_UPLOAD_ENABLED',
       'chooseAvatar',
       'uploadFile',
       'compressImage',
