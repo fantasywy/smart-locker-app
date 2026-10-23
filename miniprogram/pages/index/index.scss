@@ -1,8 +1,11 @@
-// 首页 —— 启动闸门承载页的样式。全部走设计 token，**零裸 hex**。
+// 首页样式 —— 全部走设计 token，**零裸 hex**。
 //
-// ⚠️ 本文件只画**闸门的三态容器**与 `ready` 的占位块；骨架屏与失败出口的视觉
-// 各自归它们的组件（`components/skeleton/`、`components/failure-exit/`）——
+// ⚠️ 本文件只画首页版式（品牌区 / 扫码主按钮 / 订单区占位）；骨架屏与失败出口的
+// 视觉各自归它们的组件（`components/skeleton/`、`components/failure-exit/`）——
 // 页面不重复它们的样式，否则「唯一」这件事在样式层就先破了。
+//
+// 单位约定（见 styles/_variables.scss 末尾）：布局几何用 rpx，字号 / 圆角用 px。
+// spec 里的 112px 圆形按钮按 750rpx 设计宽折算成 224rpx；40px 品牌方块 = 80rpx。
 
 @use '../../styles/variables' as v;
 
@@ -22,27 +25,132 @@ page {
   overflow-y: auto;
 }
 
-// 闸门放行后的占位块 —— 订单列表落地前，「闸门通了」这件事在真机上可见。
-// ⚠️ 它不是空态（空态文案「还没有订单」+ 扫码存件入口），
-// 所以这里**不用空态的措辞**：那会让人以为订单列表已经做完了，只是恰好没数据。
-.gate-passed {
+.home {
   display: flex;
   flex-direction: column;
+  // 区块间距 24px，左右 16px（spec §2 布局）。
+  gap: v.$spacing-xxl;
+  padding: v.$spacing-lg v.$spacing-lg v.$spacing-xxl;
+}
+
+// ---------------------------------------------------------------------------
+// 品牌区
+// ---------------------------------------------------------------------------
+.home__brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-md;
+}
+
+.home__brand-decor {
+  // 120px 圆形装饰 = 240rpx；品牌绿 6% 的纯装饰面，不承载信息。
+  // ⚠️ 用 token 派生透明度（不写裸 hex）：语义色只做面，符合色调层硬规则。
+  position: absolute;
+  top: -80rpx;
+  right: -24rpx;
+  width: 240rpx;
+  height: 240rpx;
+  border-radius: 50%;
+  background: rgba(v.$color-primary, 0.06);
+  pointer-events: none;
+}
+
+.home__brand-mark {
+  position: relative;
+  z-index: 1;
+  display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 60vh;
-  padding: 0 v.$spacing-xxl;
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: v.$radius-control;
+  // 品牌标记用品牌绿原值：它只做面，白色图标压在上方（非文字装饰）。
+  background: v.$color-primary;
+  flex-shrink: 0;
 }
 
-.gate-passed__title {
-  font-size: v.$font-size-title;
-  line-height: 1.5;
+.home__brand-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-xs;
+  min-width: 0;
 }
 
-.gate-passed__hint {
-  // 承载信息的辅助文字走 sub（5.45 ✅），不是 weak（3.02 ❌，只给占位符与禁用态）。
+.home__brand-wordmark {
+  // wordmark 是展示级文字：24px / 600，行高与字号成对取自 token。
+  color: v.$color-text-main;
+  font-size: v.$font-size-hero;
+  line-height: v.$line-height-hero;
+  font-weight: v.$font-weight-semibold;
+}
+
+.home__brand-tagline {
+  // 辅助说明走 sub（5.45 ✅），不是 weak（3.02 ❌，只给占位符与禁用态）。
   color: v.$color-text-sub;
   font-size: v.$font-size-aux;
   line-height: 1.5;
-  margin-top: v.$spacing-sm;
+}
+
+// ---------------------------------------------------------------------------
+// 扫码主按钮
+// ---------------------------------------------------------------------------
+.home__scan {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: center;
+}
+
+.home__scan-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  // 112px = 224rpx；圆形按钮的填充色只允许 $color-primary-active（白字 4.62）。
+  width: 224rpx;
+  height: 224rpx;
+  border-radius: 50%;
+  background: v.$color-primary-active;
+  box-shadow: v.$shadow-sheet;
+}
+
+.home__scan-label {
+  margin-top: v.$spacing-md;
+  color: v.$color-text-main;
+  font-size: v.$font-size-title;
+  line-height: 1.5;
+  font-weight: v.$font-weight-semibold;
+}
+
+// 按下反馈：只换填充色，瞬时不加时长（spec §12 动效白名单第 ③ 条）。
+// ⚠️ 不写 transition / transform / opacity —— 那三样都在白名单之外。
+.home__scan_active .home__scan-circle {
+  background: v.$color-primary-pressed;
+}
+
+// ---------------------------------------------------------------------------
+// 订单区占位（过渡期的债，由 #67 接手）
+// ---------------------------------------------------------------------------
+.home__orders-placeholder {
+  padding: v.$spacing-xl v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  text-align: center;
+}
+
+.home__orders-placeholder-title {
+  color: v.$color-text-sub;
+  font-size: v.$font-size-body;
+  line-height: 1.5;
+  font-weight: v.$font-weight-semibold;
+}
+
+.home__orders-placeholder-hint {
+  margin-top: v.$spacing-xs;
+  color: v.$color-text-sub;
+  font-size: v.$font-size-aux;
+  line-height: 1.5;
 }

@@ -139,6 +139,47 @@ export const EMPTY_STATES = {
 } as const satisfies Record<string, { title: string; hint: string; actionLabel: string }>
 
 /**
+ * **首页**的全部用户可见文案 —— spec #57 §2「逐字文案」表里属于首页的那几行。
+ *
+ * ⚠️ 为什么首页的文案要单独成表：首页是**唯一主行动**的承载页，品牌区、主按钮与
+ * 两条扫码反馈都挤在第一屏。把它们散在页面 `data` 与 wxml 里，改一句就要翻三处；
+ * 更糟的是「非柜机码」与「扫码失败」是**两句不同的提示**，散写最容易在复制粘贴时
+ * 让两条失败路径共用同一句话 —— 而那正是票面要区分的两件事。
+ *
+ * ⚠️ 逐字依据（spec §2）：
+ *   • `wordmark` / `tagline` / `scanButton` —— 品牌区与主按钮定稿；
+ *   • `notLockerCode` —— 「这不是柜机码，请扫柜机上的二维码」；
+ *   • `scanFailed` —— 「扫码没成功，请重试」。
+ *
+ * ⚠️ **相机权限不在这张表里，也不在任何界面里**：`wx.scanCode` 不写 `authSetting`，
+ * `wx.getSetting()` 无法区分「未请求」与「被拒绝」，所以任何「请开启相机权限」
+ * 都是假归因（spec §2 末段）。将来若真需要，唯一可靠的路是自绘 `<camera>` 扫码页。
+ */
+export const HOME_PAGE_COPY = {
+  /** 品牌 wordmark —— 逐字。24px / 600，收敛到 `$font-size-hero`。 */
+  wordmark: '智能储物柜',
+  /** 品牌 tagline —— 逐字。12px / `$color-text-sub`。 */
+  tagline: '扫码存件，随时取走',
+  /** 扫码主按钮 —— 逐字；同时是整颗圆形按钮的 `aria-label`。 */
+  scanButton: '扫码存件',
+  /** 扫到非柜机码时的提示 —— 逐字；留在首页、可立刻重扫。 */
+  notLockerCode: '这不是柜机码，请扫柜机上的二维码',
+  /** 扫码失败（取消之外）的提示 —— 逐字；不按成因分叉。 */
+  scanFailed: '扫码没成功，请重试',
+
+  /**
+   * 订单区占位 —— ⚠️ **过渡期的债**（#20 留下、#67 接手）。
+   *
+   * 首页的订单区在本票仍是占位；这两句沿用 #20 已登记的占位文案，
+   * 让「闸门通了、首页真的渲染出来了」在真机上一眼可见。
+   * ⚠️ #67 落地进行中订单区时，这两句**必须一起删除**（届时由订单区的空态取代），
+   * 不要在首页继续保留一段「已连接」的开发者台词。
+   */
+  ordersPlaceholderTitle: DATA_AREA_PLACEHOLDER_TITLE,
+  ordersPlaceholderHint: DATA_AREA_PLACEHOLDER_HINT,
+} as const
+
+/**
  * **导航栏**的固定出口文案 —— `navigation-bar` 组件内部使用。
  *
  * ⚠️ 这三句与页面标题不同：它们是**动作 / 出口**的名字，不是页面名。
@@ -182,14 +223,15 @@ export type EmptyStateCopy = (typeof EMPTY_STATES)[keyof typeof EMPTY_STATES]
  * 若不并到一处，改一处漏一处的那天就是两条路分叉的那天（与 `STATIC_EXITS` 同一理由）。
  *
  * ⚠️ 本表的取值**多数尚未定稿** —— 它们随各页面票一起收敛：
- *   • `pages/index/index` → 「我的订单」（逐字，柜机页出口也用它）
+ *   • `pages/index/index` → 「首页」（逐字；#61 起首页不再承载订单列表，
+ *     导航栏本身标题留空，见 spec §2）
  *   • `pages/profile/profile` → 「我的」（tabBar 逐字）
  *   • `pages/billing-info/billing-info` / `pages/faq/faq` → 复用 `STATIC_EXITS` 的措辞（同一份内容）
  *   • 其余为**页面清单里的归属名**，属过渡措辞 —— 页面票拿到定稿后，改这里一处即可。
  * 把这些**集中**在本表，正是为了让那次修正只发生在一个地方。
  */
 export const PAGE_TITLES = {
-  'pages/index/index': '我的订单',
+  'pages/index/index': '首页',
   'pages/profile/profile': '我的',
   'pages/locker/locker': '储物柜',
   'pages/order-detail/order-detail': '订单详情',
