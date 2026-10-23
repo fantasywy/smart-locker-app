@@ -85,7 +85,10 @@ interface IndexPageData {
   /** 进行中订单区 —— 组标题、状态与卡片。 */
   ordersTitle: string
   ordersPhase: OrdersPhase
+  /** 全部进行中单（合并排序后的完整集合）—— N 就是它的长度。 */
   activeOrders: OrderCardOrder[]
+  /** 首页实际渲染的前两张卡。 */
+  homeOrders: OrderCardOrder[]
   orderCount: number
   showOrders: boolean
   showOrdersTitle: boolean
@@ -151,10 +154,12 @@ function viewAllLabelOf(count: number): string {
  * `N > 2` 时只把前两张交给 `order-card`，`orderCount` 仍是真实过滤后条数。
  */
 function renderOrders(page: IndexPageInstance, orders: readonly OrderSummary[]): void {
+  const cards = orders.map(cardOrderOf)
   const count = orders.length
   page.setData({
     ordersPhase: 'ready',
-    activeOrders: orders.slice(0, HOME_ORDER_LIMIT).map(cardOrderOf),
+    activeOrders: cards,
+    homeOrders: cards.slice(0, HOME_ORDER_LIMIT),
     orderCount: count,
     showOrders: count > 0,
     showOrdersTitle: count > 0,
@@ -168,6 +173,7 @@ function showOrdersSkeleton(page: IndexPageInstance): void {
   page.setData({
     ordersPhase: 'loading',
     activeOrders: [],
+    homeOrders: [],
     orderCount: 0,
     showOrders: true,
     showOrdersTitle: false,
@@ -187,6 +193,7 @@ function handleOrdersFailure(page: IndexPageInstance, source: OrdersSource): voi
     page.setData({
       ordersPhase: 'loadFailed',
       activeOrders: [],
+      homeOrders: [],
       orderCount: 0,
       showOrders: true,
       showOrdersTitle: false,
@@ -255,6 +262,7 @@ Component({
     ordersTitle: HOME_PAGE_COPY.ordersTitle,
     ordersPhase: 'loading' as OrdersPhase,
     activeOrders: [] as OrderCardOrder[],
+    homeOrders: [] as OrderCardOrder[],
     orderCount: 0,
     showOrders: true,
     showOrdersTitle: false,
@@ -375,8 +383,19 @@ Component({
       wx.switchTab({ url: `/${ORDER_LIST_PATH}` })
     },
 
-    /** 失败出口的「重试」—— **重跑启动链**（不是重取订单）。 */
+    /**
+     * 失败出口的「重试」—— **重跑启动链**。
+     *
+     * ⚠️ 订单区自己的页内重试走 `onOrdersRetry`；这里保留一个兜底：若闸门早已
+     * ready、只是订单区在 `loadFailed`（比如外部直接把 `onRetry` 接到重试按钮上），
+     * 就重取订单而不是空跑一次 `gate.start()`。
+     */
     onRetry(): void {
+      const page = this as unknown as IndexPageInstance
+      if (page.data.phase === 'ready' && page.data.ordersPhase === 'loadFailed') {
+        void loadOrders(page, 'retry')
+        return
+      }
       void gate?.start()
     },
 

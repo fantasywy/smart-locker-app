@@ -302,6 +302,7 @@ describe('#20 首页：闸门接线（重试真的到达闸门、状态真的画
     expect(Object.keys(page.data).sort()).toEqual(
       [
         'activeOrders',
+        'homeOrders',
         'orderCount',
         'ordersLoadFailedTitle',
         'ordersPhase',

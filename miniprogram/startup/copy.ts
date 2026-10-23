@@ -125,6 +125,20 @@ export const EMPTY_STATES = {
 } as const satisfies Record<string, { title: string; hint: string; actionLabel: string }>
 
 /**
+ * **信用分明细页**的全部界面文案 —— spec #57 §10。
+ *
+ * ⚠️ 本表只有失败 / 重试两句：每行的原因来自服务端，变动值与时间由页面格式化；
+ * 空态标题在 `EMPTY_STATES.scoreLogs`（且**只有标题**，本表不补说明或按钮）。
+ * 不在这里造「暂无更多」之类的尾巴 —— spec 没有这句。
+ */
+export const SCORE_LOGS_COPY = {
+  /** 页内失败句 —— 全站共用（`LOAD_FAILED_DETAIL`）。 */
+  loadFailed: LOAD_FAILED_DETAIL,
+  /** 页内重试按钮 —— 全站共用（`RETRY_LABEL`）。 */
+  retry: RETRY_LABEL,
+} as const
+
+/**
  * **首页**的全部用户可见文案 —— spec #57 §2「逐字文案」表里属于首页的那几行。
  *
  * ⚠️ 为什么首页的文案要单独成表：首页是**唯一主行动**的承载页，品牌区、主按钮与

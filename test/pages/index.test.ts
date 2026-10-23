@@ -176,7 +176,13 @@ async function enter(
   return { wx, page }
 }
 
+/** 前两张实际渲染的卡。 */
 function idsOf(page: PageInstance): number[] {
+  return (page.data.homeOrders as OrderSummary[]).map((item) => item.id)
+}
+
+/** 合并排序后的完整进行中集合 —— N 由它决定。 */
+function allIdsOf(page: PageInstance): number[] {
   return (page.data.activeOrders as OrderSummary[]).map((item) => item.id)
 }
 
@@ -321,7 +327,9 @@ describe('#67 首页 · 进行中订单区', () => {
 
     expect(urlsOf(sentRequests(wx.request))).toEqual([ACTIVE_2, ACTIVE_4])
     // 40（已超时）→ 20（待存入）→ 30 / 10（已存入，id 倒序）；首页只渲染前两张。
+    expect(allIdsOf(page)).toEqual([40, 20, 30, 10])
     expect(idsOf(page)).toEqual([40, 20])
+    expect(page.data.activeOrders).toHaveLength(4)
     expect(page.data.orderCount).toBe(4)
     expect(page.data.showOrders).toBe(true)
     expect(page.data.showOrdersTitle).toBe(true)
@@ -346,6 +354,7 @@ describe('#67 首页 · 进行中订单区', () => {
     expect(page.data.ordersPhase).toBe('ready')
     expect(page.data.orderCount).toBe(0)
     expect(page.data.activeOrders).toEqual([])
+    expect(page.data.homeOrders).toEqual([])
     expect(page.data.showOrders).toBe(false)
     expect(page.data.showOrdersTitle).toBe(false)
     expect(page.data.showViewAll).toBe(false)

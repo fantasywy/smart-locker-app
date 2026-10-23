@@ -110,7 +110,7 @@
 
       <view wx:else class="home__orders-cards">
         <order-card
-          wx:for="{{ activeOrders }}"
+          wx:for="{{ homeOrders }}"
           wx:key="id"
           order="{{ item }}"
           variant="home"

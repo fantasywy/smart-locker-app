@@ -39,6 +39,7 @@ import {
   RESERVATION_CREATE_COPY,
   RESERVATION_LIST_COPY,
   RESERVATION_STATUS_LABELS,
+  SCORE_LOGS_COPY,
 } from '../../miniprogram/startup/copy'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -174,6 +175,9 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   ...flattenCopy(RESERVATION_STATUS_LABELS),
   ...flattenCopy(RESERVATION_LIST_COPY),
   ...flattenCopy(RESERVATION_CREATE_COPY),
+  // ⚠️ `SCORE_LOGS_COPY` —— `#71` 新增的导出。页内失败句与重试按钮同样是
+  // 用户可见的字；漏加一次，信用分明细页里写字面量就会一路绿灯。
+  ...flattenCopy(SCORE_LOGS_COPY),
   // ⚠️ `STORED_TIME_PREFIX` / `TODAY_LABEL` —— 从 `datetime.ts` 的字面量提升出来的共享词。
   STORED_TIME_PREFIX,
   TODAY_LABEL,
