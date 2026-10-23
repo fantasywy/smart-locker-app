@@ -1,19 +1,22 @@
 // **小程序骨架**的工程约束守卫 —— issue #22 的 Acceptance criteria。
 //
 // 与 `test/startup/conventions.test.ts` 同一取向：这些是**关于代码形状**的约束，
-// 不是运行时行为。「`tabBar` 不引图标」「`navigationStyle` 仍是 `custom`」
+// 不是运行时行为。「tabBar 的图标还没接进 app.json」「`navigationStyle` 仍是 `custom`」
 // 「10 个页面都注册了」「`logs` 没有残留引用」—— 功能测试一个都测不到
 // （一个带图标的 tabBar 照样能跑），所以只能读配置与源码。
 //
 // ⚠️ 这些守卫的价值全在**未来**：本票把骨架一次性配齐，是为了让后面的页面票
 // 只动自己那个目录。而「后来者顺手加个图标 / 顺手改回默认导航栏 / 顺手引分包」
 // 恰好都是那种一次通过、事后没人验收的改动 —— 把它们钉成断言，代价是几毫秒。
+// （#60 之后「顺手加图标」的判据变成：四个 tab 没齐之前，`app.json` 不得出现
+// `iconPath` —— 见下方 tabBar 用例。）
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { fileURLToPath } from 'node:url'
 import { PAGE_TITLES } from '../../miniprogram/startup/copy'
+import { alphaBBox, decodePng, opaqueColors } from '../helpers/png'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
 const miniprogramDir = join(repoRoot, 'miniprogram')
@@ -60,7 +63,7 @@ describe('#22 BASE_URL 指向可联调后端', () => {
   })
 })
 
-describe('#22 tabBar：订单 + 我的，纯文字', () => {
+describe('#22 tabBar：订单 + 我的（图标待四 tab 一并接线）', () => {
   it('⚠️ tabBar 存在，且恰好两项：订单（index 0）+ 我的（index 1）', () => {
     const tabBar = appJson.tabBar
     expect(tabBar, 'app.json 必须有 tabBar').toBeDefined()
@@ -73,22 +76,25 @@ describe('#22 tabBar：订单 + 我的，纯文字', () => {
     ])
   })
 
-  it('⚠️ tabBar **不引入任何图片/图标资源**（「无本地图片资源」仍是事实）', () => {
-    // 「本期页面没有任何本地图片或图标资源」是一条**已核实的事实**，也是
-    // 「一期不分包」的理由之一。tabBar 的图标需求与它直接冲突，本票的裁决是：
-    // **接受纯文字 tabBar**（微信原生支持省略 `iconPath`），不去动那句事实。
+  it('⚠️ tabBar 暂不写 iconPath —— 四 tab 未齐，8 张 PNG 先落地', () => {
+    // #60 已经产出四组 × 两态共 8 张 81×81 PNG（`miniprogram/assets/tabbar/`），
+    // 但 `order-list` / `nearby` 两个页面由 #66 / #72 才注册。若此刻只给现有的
+    // index / profile 两项补图标，tabBar 会变成「一半有图、一半没图」；等 #66/#72
+    // 再回来补，又得同时改 `app.json` 的顺序与三处断言。
     //
-    // ⇒ 一旦有人补了 `iconPath`，那句话就变假了。
-    //    那一天必须**同时**更正文档，而不是让文档悄悄说谎 —— 这条断言就是那个提醒。
+    // ⇒ 本票的裁决：**产物先落地、`app.json` 暂不接线**。等四个 tab 都在 `pages`
+    //   里注册的那张票，再把四项的 `iconPath` / `selectedIconPath` 一次写齐。
+    //   在那之前，任何人补 iconPath 都会让这条断言红 —— 提醒他四 tab 没齐。
     for (const item of appJson.tabBar?.list ?? []) {
-      expect(item.iconPath, `${item.text} 不得带图标 —— 要么保持纯文字，要么同步更正文档`).toBeUndefined()
-      expect(item.selectedIconPath, `${item.text} 不得带选中图标`).toBeUndefined()
+      expect(item.iconPath, `${item.text} 的 iconPath 必须等四个 tab 一并接线`).toBeUndefined()
+      expect(item.selectedIconPath, `${item.text} 的 selectedIconPath 必须等四个 tab 一并接线`).toBeUndefined()
     }
   })
 
-  it('⚠️ 仓库里确实没有任何图片/图标资源文件（与上一条互为佐证）', () => {
-    // 上一条只挡 tabBar 这一个入口。若哪天有人往 `miniprogram/` 里丢了一张 png，
-    // 「无本地图片资源」这句事实同样变假 —— 而且是**静默**变假。
+  it('⚠️ 仓库里的图片资源恰好是 8 张 tabBar PNG，且都是 81×81 RGBA', () => {
+    // 这条替换了 #22 的「无本地图片资源」断言（#60 起，那句话不再是事实）。
+    // 判据不是「文件存在」而是**原生 tabBar 的硬要求**：81×81、8-bit RGBA、
+    // 非隔行、内容盒 72、两态颜色分别等于 weak / main。
     const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico']
     const found: string[] = []
     const walk = (dir: string): void => {
@@ -101,7 +107,49 @@ describe('#22 tabBar：订单 + 我的，纯文字', () => {
       }
     }
     walk(miniprogramDir)
-    expect(found, 'miniprogram/ 下出现了图片资源 —— 请同步更正「无本地图片资源」的记载').toEqual([])
+    expect(found.sort()).toEqual(
+      ['index', 'order-list', 'nearby', 'profile']
+        .flatMap((route) => [
+          `miniprogram/assets/tabbar/${route}.png`,
+          `miniprogram/assets/tabbar/${route}-active.png`,
+        ])
+        .sort(),
+    )
+
+    const scss = readFileSync(join(miniprogramDir, 'styles', '_variables.scss'), 'utf8')
+    const tokens: Record<string, string> = {}
+    for (const line of scss.split('\n')) {
+      const m = /^\s*\$([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;/.exec(line)
+      if (m?.[1] !== undefined && m[2] !== undefined) tokens[m[1]] = m[2].toLowerCase()
+    }
+
+    for (const route of ['index', 'order-list', 'nearby', 'profile']) {
+      for (const suffix of ['', '-active']) {
+        const file = join(miniprogramDir, 'assets', 'tabbar', `${route}${suffix}.png`)
+        const png = decodePng(readFileSync(file))
+        expect([png.width, png.height], `${rel(file)} 尺寸`).toEqual([81, 81])
+        expect(png.bitDepth).toBe(8)
+        expect(png.colorType).toBe(6)
+        expect(png.interlace).toBe(0)
+        const box = alphaBBox(png)
+        expect(box.maxX - box.minX + 1, `${rel(file)} 内容宽`).toBeLessThanOrEqual(72)
+        expect(box.maxY - box.minY + 1, `${rel(file)} 内容高`).toBeLessThanOrEqual(72)
+        const expected = suffix === '' ? tokens['color-text-weak'] : tokens['color-text-main']
+        expect(opaqueColors(png), `${rel(file)} 颜色`).toEqual([expected])
+      }
+    }
+  })
+
+  it('⚠️ 语义图标清单 `icons.generated.ts` 也在仓库里（只读生成物）', () => {
+    // 8 张 PNG 只服务原生 tabBar；页面里的图标走构建期 base64 data URI 清单。
+    // 两者都属于 #60 的产物，所以在这里一起守「产物真的进了 git」。
+    const generated = join(miniprogramDir, 'components', 'icon', 'icons.generated.ts')
+    expect(existsSync(generated), '缺少 miniprogram/components/icon/icons.generated.ts').toBe(true)
+    const body = readFileSync(generated, 'utf8')
+    expect(body).toContain('AUTO-GENERATED')
+    expect(body).toContain("'cell.package'")
+    expect(body).toContain('data:image/svg+xml;base64,')
+    expect(body).not.toContain('currentColor')
   })
 
   it('⚠️ tabBar 的三个颜色**对齐色调层 token**，不是随手挑的色值', () => {
