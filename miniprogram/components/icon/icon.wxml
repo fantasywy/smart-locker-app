@@ -1,0 +1,8 @@
+<image
+  wx:if="{{src}}"
+  class="icon"
+  src="{{src}}"
+  mode="aspectFit"
+  style="width:{{sizePx}}px;height:{{sizePx}}px"
+  aria-hidden="true"
+/>

@@ -103,6 +103,9 @@ describe('#59 反馈适配层是唯一入口', () => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const full = join(dir, entry.name)
         if (entry.isDirectory()) {
+          // `miniprogram_npm/` 是开发者工具「构建 npm」的产物（gitignored）；
+          // 这条守卫只看仓库源码，不扫描第三方构建结果。
+          if (entry.name === 'miniprogram_npm') continue
           walk(full)
           continue
         }

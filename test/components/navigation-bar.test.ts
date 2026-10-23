@@ -223,6 +223,56 @@ describe('#59 navigation-bar · Vant 实现与样式约束', () => {
   })
 })
 
+describe('#59 navigation-bar · 胶囊避让几何', () => {
+  function makeAttachableInstance(definition: ComponentDefinition): {
+    data: Record<string, unknown>
+    setData: (patch: Record<string, unknown>) => void
+    triggerEvent: ReturnType<typeof vi.fn>
+  } {
+    const instance = {
+      data: { ...(definition.data as Record<string, unknown>) },
+      setData(patch: Record<string, unknown>) {
+        Object.assign(instance.data, patch)
+      },
+      triggerEvent: vi.fn(),
+    }
+    return instance
+  }
+
+  it('⚠️ attached 用胶囊实测位置预留右侧宽度（px，与 Vant 同一坐标系）', async () => {
+    const wxStub = installWxStub()
+    wxStub.getSystemInfoSync.mockReturnValue({ windowWidth: 375, statusBarHeight: 20, platform: 'ios' })
+    wxStub.getMenuButtonBoundingClientRect.mockReturnValue({
+      left: 278,
+      right: 365,
+      top: 24,
+      bottom: 56,
+      width: 87,
+      height: 32,
+    })
+
+    const definition = await loadComponentDefinition()
+    const instance = makeAttachableInstance(definition)
+    definition.lifetimes?.attached?.call(instance)
+
+    // 375 - 278 = 97：右侧从胶囊左缘到屏右的总宽度都要让开。
+    expect(instance.data.capsuleSafeWidth).toBe(97)
+  })
+
+  it('⚠️ 量不到胶囊时回退 0 —— 几何失败不该让整页白屏', async () => {
+    const wxStub = installWxStub()
+    wxStub.getMenuButtonBoundingClientRect.mockImplementation(() => {
+      throw new Error('getMenuButtonBoundingClientRect is not supported')
+    })
+
+    const definition = await loadComponentDefinition()
+    const instance = makeAttachableInstance(definition)
+    definition.lifetimes?.attached?.call(instance)
+
+    expect(instance.data.capsuleSafeWidth).toBe(0)
+  })
+})
+
 describe('#59 两个跳转目标都是真实 tabBar 页', () => {
   const appJson = JSON.parse(
     readFileSync(join(repoRoot, 'miniprogram', 'app.json'), 'utf8'),
