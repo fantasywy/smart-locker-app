@@ -1,0 +1,62 @@
+<!--
+  支付取件确认层 —— 共享底部弹层（#65 / spec §5）。
+
+  ⚠️ **本文件没有一句用户可见字面量**：金额四词、三条说明句、成功三态与失败五句
+     全部来自 `startup/copy.ts` 的 `PICKUP_SHEET_COPY`，页面 / 组件 `data` 只做转手。
+  ⚠️ 顶行只有 `站点名 · 柜机码 · 格口`，**没有订单号**。
+  ⚠️ 成功态必须由用户点「知道了」离开；组件**不自动跳转**（宿主决定去向）。
+  ⚠️ 支付中遮罩不可关：`close-on-click-overlay` 读 `overlayClosable`。
+-->
+<van-popup
+  show="{{ visible }}"
+  position="bottom"
+  round="{{ true }}"
+  custom-class="app-popup-shadow pickup-sheet"
+  close-on-click-overlay="{{ overlayClosable }}"
+  bind:click-overlay="onDismiss"
+>
+  <view class="pickup-sheet__body">
+    <!-- 顶行：站点名 · 柜机码 · 格口（无订单号）。 -->
+    <view class="pickup-sheet__location">{{ locationLine }}</view>
+
+    <!-- 成功态：三态标题 / 可选「本次支付」/ 统一步骤说明 / 唯一出口。 -->
+    <block wx:if="{{ showSuccess }}">
+      <view class="pickup-sheet__success-title">{{ successTitle }}</view>
+      <view wx:if="{{ showSuccessAmount }}" class="pickup-sheet__success-amount">
+        <text class="pickup-sheet__amount-label">{{ successAmountLabel }}</text>
+        <text class="pickup-sheet__amount-value">{{ successAmount }}</text>
+      </view>
+      <view class="pickup-sheet__success-hint">{{ successHint }}</view>
+      <button
+        class="pickup-sheet__action"
+        hover-class="pickup-sheet__action_active"
+        bindtap="onKnow"
+      >{{ knowLabel }}</button>
+    </block>
+
+    <!-- 核对中：只陈述正在核对，不提供按钮，也不让用户重复付。 -->
+    <block wx:elif="{{ showReconciling }}">
+      <view class="pickup-sheet__reconciling">{{ reconcilingLabel }}</view>
+    </block>
+
+    <!-- 空闲 / 支付中 / 失败：金额块 + 说明 + 失败原因 + 主按钮。 -->
+    <block wx:else>
+      <view wx:if="{{ showEstimated }}" class="pickup-sheet__amount-row">
+        <text class="pickup-sheet__amount-label">{{ estimatedLabel }}</text>
+        <text class="pickup-sheet__amount-value">{{ estimatedAmount }}</text>
+      </view>
+      <view wx:if="{{ showPaid }}" class="pickup-sheet__amount-row">
+        <text class="pickup-sheet__amount-label">{{ paidLabel }}</text>
+        <text class="pickup-sheet__amount-value">{{ paidAmount }}</text>
+      </view>
+      <view class="pickup-sheet__note">{{ note }}</view>
+      <view wx:if="{{ showFailure }}" class="pickup-sheet__failure">{{ failureMessage }}</view>
+      <button
+        class="pickup-sheet__action"
+        hover-class="pickup-sheet__action_active"
+        disabled="{{ actionDisabled }}"
+        bindtap="onSubmit"
+      >{{ actionLabel }}</button>
+    </block>
+  </view>
+</van-popup>
