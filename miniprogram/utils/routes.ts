@@ -73,3 +73,22 @@ export const RESERVATION_CREATE_PATH = 'pages/reservation-create/reservation-cre
  * `test/components/navigation-bar.test.ts`。
  */
 export const HOME_PATH: PagePath = 'pages/index/index'
+
+/**
+ * **计费说明页**的路径 —— 失败出口静态出口之一（issue #68）。
+ *
+ * 用途：首页的全局失败出口（登录链失败）里，「计费说明」必须真的能打开 ——
+ * 它是用户在「连不上」时仍可查看的规则页；内容端点免鉴权正是为这条路服务的。
+ *
+ * ⚠️ 用 `navigateTo`（不是 `switchTab`）：它不是 tab 页；从首页出发，返回键应回首页。
+ * ⚠️ 类型写成 `PagePath`：`PAGE_TITLES` 的键就是 `app.json` 注册表，
+ * 这条类型让「路径写错 / 页面没注册」在编译期就报错，而不是变成一次静默失败。
+ */
+export const BILLING_INFO_PATH: PagePath = 'pages/billing-info/billing-info'
+
+/**
+ * **常见问题页**的路径 —— 失败出口静态出口之二（issue #68）。
+ *
+ * 用途与 `BILLING_INFO_PATH` 相同：登录链失败时也要能打开。
+ */
+export const FAQ_PATH: PagePath = 'pages/faq/faq'

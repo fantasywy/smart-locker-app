@@ -1,6 +1,6 @@
-// 请求层的**配置** —— 唯二免鉴权端点的硬编码豁免名单，与 baseUrl 解析。
+// 请求层的**配置** —— 免鉴权端点名单与 baseUrl 解析。
 //
-// ⚠️ 豁免名单是**源码核实过的事实**，不是推断：
+// ⚠️ **登录 / 刷新两条**豁免是**源码核实过的事实**，不是推断：
 // `java/smart-locker/src/main/java/com/zhichu/common/config/WebMvcConfig.java:46-47`：
 //
 //     registry.addInterceptor(appAuthInterceptor)
@@ -10,6 +10,10 @@
 // 用户端路径下**只有这两个**被排除在 `AppAuthInterceptor` 之外。
 // （管理端那两行另有 `/api/v1/auth/logout`，与本端无关 —— 别把 `13.3` 抄进来：
 //  本端一期不接 `13.3`，且它**不在**用户端豁免名单里。）
+//
+// ⚠️ **内容端点**（`GET /contents/{key}`）是 spec #57 §13 新定义的**免鉴权**端点
+// （后端待建）。免鉴权是硬要求：登录链失败时 `failure-exit` 必须还能打开计费 / FAQ。
+// 它不能塞进 `AUTH_EXEMPT_PATHS`：路径带 `{key}`，不是固定串；因此单独维护一个**前缀**名单。
 
 /** 用户端 API 前缀。`WebMvcConfig` 的拦截范围是 `/api/app/v1/**`。 */
 export const API_PREFIX = '/api/app/v1'
@@ -27,17 +31,50 @@ export const LOGIN_PATH = `${API_PREFIX}/auth/login`
 export const REFRESH_PATH = `${API_PREFIX}/auth/refresh`
 
 /**
- * ⚠️ **唯二**免鉴权端点 —— 硬编码，不是配置项。
+ * 内容端点的基路径 —— **免鉴权新端点**（spec #57 §13，后端待建）。
+ *
+ * ⚠️ 单独导出常量而不是在 `api/contents.ts` 里写一遍：路径只有一个家，
+ * 豁免前缀由它派生；两处各写一遍字面量就有「名单放行、请求打偏」的漂移空间。
+ *
+ * ⚠️ 它**不属于** `AUTH_EXEMPT_PATHS` 那条源码核实过的登录豁免 —— 那条名单的每一项
+ * 都必须能在后端 `WebMvcConfig` 里逐字找到。内容端点的免鉴权依据是 spec 的契约硬要求，
+ * 后端落地时也必须保持免鉴权；这条注释就是给后端实现者的对照点。
+ */
+export const CONTENTS_PATH = `${API_PREFIX}/contents`
+
+/**
+ * 内容端点的**免鉴权前缀** —— 末尾的 `/` 是刻意的。
+ *
+ * ⚠️ `isAuthExempt` 用 `startsWith` 判定，若前缀写成 `/contents`，
+ * `/contents-evil` 也会被放行。加上 `/` 之后只匹配 `/contents/<key>`。
+ */
+export const CONTENTS_PATH_PREFIX = `${CONTENTS_PATH}/`
+
+/**
+ * ⚠️ **登录 / 刷新**免鉴权端点 —— 硬编码，不是配置项。
  *
  * 把它做成可配置的，等于给「后来者顺手把某个端点加进豁免」留了一个不需要改代码的入口；
  * 而这条名单的正确性完全依赖后端 `WebMvcConfig` 那一行，多一个就是鉴权缺口。
  * 改动它必须同时改后端源码 —— 这个成本是**刻意保留**的。
+ *
+ * ⚠️ 内容端点**不在**这里：它的路径是动态的，见 `CONTENTS_PATH_PREFIX`。
  */
 export const AUTH_EXEMPT_PATHS: readonly string[] = [LOGIN_PATH, REFRESH_PATH]
 
-/** 路径是否属于免鉴权豁免（`13.1` / `13.2`）。 */
+/**
+ * 免鉴权**前缀**名单 —— 那些路径带变量的端点。
+ *
+ * ⚠️ 目前只有内容端点。新增一项等于给一整棵路径树免鉴权，
+ * 必须同时确认后端 `WebMvcConfig` 的 `excludePathPatterns` 覆盖同一批路径。
+ */
+export const AUTH_EXEMPT_PREFIXES: readonly string[] = [CONTENTS_PATH_PREFIX]
+
+/** 路径是否属于免鉴权豁免（登录 / 刷新 / 内容端点）。 */
 export function isAuthExempt(path: string): boolean {
-  return AUTH_EXEMPT_PATHS.includes(path)
+  return (
+    AUTH_EXEMPT_PATHS.includes(path) ||
+    AUTH_EXEMPT_PREFIXES.some((prefix) => path.startsWith(prefix))
+  )
 }
 
 /**

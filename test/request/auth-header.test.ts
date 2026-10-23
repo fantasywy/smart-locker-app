@@ -103,10 +103,13 @@ describe('#18 免鉴权豁免：13.1 与 13.2 不被附加 access 头', () => {
     }
   })
 
-  it('豁免名单只有这两个 —— 别的 /auth/* 路径照常带 access', async () => {
+  it('登录 / 刷新之外没有别的 auth 豁免 —— 别的 /auth/* 路径照常带 access', async () => {
     // 反面守卫：豁免名单不能被写成「路径含 /auth/ 就免鉴权」。
     // `13.3 logout` 在用户端**不在**豁免名单里（`WebMvcConfig` 的 app 拦截器那两行只排除了
     // login / refresh），而 `/profile` 这类更明显。
+    //
+    // ⚠️ #68 起 config 还多了一个**内容端点前缀**豁免（`/contents/{key}`，spec 定的免鉴权新端点）。
+    // 那条不在本断言的范围里：这里守的是「登录路径树不能被整棵放行」。
     const wx = stubOk()
     seedStorage('auth.accessToken', 'ACCESS-1')
 
