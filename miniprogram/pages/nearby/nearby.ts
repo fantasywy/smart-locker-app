@@ -33,8 +33,13 @@ import {
   PAGE_TITLES,
 } from '../../startup/copy'
 import { showToast } from '../../utils/feedback'
+import {
+  NEARBY_AVAILABILITY,
+  formatNearbyDistance,
+  hasSiteCoordinates,
+} from '../../utils/nearby'
 import type { PageOf } from '../../utils/pagination'
-import type { NearbyCity, NearbySite } from '../../types/nearby'
+import type { NearbyAvailability, NearbyCity, NearbySite } from '../../types/nearby'
 
 /** 默认半径 / 扩大后的半径 —— 客户端只发这两档。 */
 const DEFAULT_RADIUS_METERS = 3000
@@ -48,6 +53,36 @@ const CACHE_TTL_MS = 30_000
 
 /** 附近页唯一允许持久化的数据：城市名字符串。 */
 const CITY_STORAGE_KEY = 'nearby.city'
+
+/** 地图看门狗 —— spec §8 的 3–5 秒；取中值 4 秒，既不像 3 秒那样误伤弱网首屏，也不拖过 5 秒。 */
+const MAP_WATCHDOG_MS = 4000
+
+/** 地图默认缩放：3 km 半径 14；扩大到 10 km 时 12（spec §8）。 */
+const MAP_SCALE_NEAR = 14
+const MAP_SCALE_FAR = 12
+
+/** marker 尺寸（px）—— 选中态放大一档；marker 上不压字，名字只走 callout。 */
+const MAP_MARKER_SIZE = 24
+const MAP_MARKER_SIZE_SELECTED = 34
+
+/** 城市/站点都不可用时的地图中心 —— 只用于让 `<map>` 有合法经纬度，不上屏。 */
+const MAP_DEFAULT_CENTER = { lat: 39.9042, lng: 116.4074 }
+
+/** callout 的白底与 ink 文字 —— 原生 map API 只接受字面色值（与 `$color-bg-card` / `$color-text-main` 对齐）。 */
+const MAP_CALLOUT_BG = '#ffffff'
+const MAP_CALLOUT_INK = '#1f2329'
+
+/**
+ * 可用状态 → marker 图标。
+ *
+ * 颜色在构建期写进 PNG（`pnpm icons:build`），运行时只查文件名；
+ * 接口不区分离线与故障，所以只有三张图，没有第四种「故障 marker」。
+ */
+export const NEARBY_MARKER_ICONS = {
+  1: '/assets/map/marker-available.png',
+  2: '/assets/map/marker-full.png',
+  3: '/assets/map/marker-unavailable.png',
+} as const satisfies Record<NearbyAvailability, string>
 
 /** 页面态 —— 四类空态各有自己的分支。 */
 type NearbyPhase = 'loading' | 'ready' | 'empty' | 'noresult' | 'neterr' | 'citypick'
@@ -93,6 +128,26 @@ interface NearbyPageData {
   listHeader: string
   selectedSiteId: number
 
+  /**
+   * 地图带 —— 与列表同一屏，无「地图 / 列表」切换。
+   *
+   * `mapFailed` 独立于页面 `phase`：地图坏了，列表/搜索/分页都不受影响。
+   */
+  showMapBand: boolean
+  mapFailed: boolean
+  mapFailTitle: string
+  mapFailHint: string
+  mapFullscreenLabel: string
+  mapExitLabel: string
+  mapLatitude: number
+  mapLongitude: number
+  mapScale: number
+  markers: NearbyMapMarker[]
+  showFullscreenMap: boolean
+
+  /** 全屏卡片浮层 —— 只渲染选中站点；无选中时是空对象。 */
+  selectedCard: NearbySelectedCard
+
   /** 城市选择器。 */
   showCityPicker: boolean
   cities: string[]
@@ -112,9 +167,57 @@ interface NearbyPageData {
   retryLabel: string
 }
 
+interface NearbyMapCallout {
+  content: string
+  color: string
+  bgColor: string
+  fontSize: number
+  borderRadius: number
+  padding: number
+  display: 'ALWAYS'
+  textAlign: 'center'
+}
+
+/**
+ * `<map>` marker 的最小渲染形状。
+ *
+ * ⚠️ `id` 用 `siteId`：选中同步只靠这一个数字，marker 与列表卡不会各存一份身份。
+ * `callout` 只挂在**当前选中**的 marker 上 —— 这是「同屏只有一个 callout」的实现方式。
+ */
+interface NearbyMapMarker {
+  id: number
+  latitude: number
+  longitude: number
+  iconPath: string
+  width: number
+  height: number
+  zIndex: number
+  callout?: NearbyMapCallout
+}
+
+/** 全屏地图卡片浮层的数据 —— 由 `cover-view` 渲染，只放短文本。 */
+interface NearbySelectedCard {
+  siteId: number
+  name: string
+  statusLabel: string
+  statusTone: string
+  distanceText: string
+  showDistance: boolean
+  address: string
+  showAddress: boolean
+  showNavigate: boolean
+  navigateLabel: string
+  footer: string
+}
+
 interface NearbyPageInstance {
   data: NearbyPageData
   setData(patch: Partial<NearbyPageData>): void
+}
+
+interface MapCenter {
+  lat: number
+  lng: number
 }
 
 interface NearbyRuntime {
@@ -132,6 +235,17 @@ interface NearbyRuntime {
   requestSeq: number
   locationState: LocationState
   cities: NearbyCity[]
+
+  /** 地图中心 / 是否被用户固定（选中 / 拖动 / 定位后不再自动跟随首条结果）。 */
+  mapCenter: MapCenter | null
+  mapCenterFixed: boolean
+  mapReady: boolean
+  mapFailure: boolean
+  mapTimer: ReturnType<typeof setTimeout> | null
+
+  /** 列表与地图共享的选中站点。 */
+  selectedSiteId: number
+  fullscreen: boolean
 }
 
 /** 30 秒内存缓存 —— 模块级、不落 storage；页面重建可复用一次会话内的结果。 */
@@ -159,6 +273,13 @@ function runtimeOf(page: NearbyPageInstance): NearbyRuntime {
       requestSeq: 0,
       locationState: 'idle',
       cities: [],
+      mapCenter: null,
+      mapCenterFixed: false,
+      mapReady: false,
+      mapFailure: false,
+      mapTimer: null,
+      selectedSiteId: 0,
+      fullscreen: false,
     }
     runtimes.set(page, runtime)
   }
@@ -271,6 +392,202 @@ function displaySiteOf(site: NearbySite, located: boolean): NearbySite {
   }
 }
 
+/** 地图带只在这些页面态出现；城市选择器 / 网络失败页不铺地图。 */
+function mapBandVisible(page: NearbyPageInstance): boolean {
+  const runtime = runtimeOf(page)
+  const phase = page.data.phase
+  return runtime.city !== '' && phase !== 'neterr' && phase !== 'citypick'
+}
+
+/** 第一条有坐标的站点 —— 无定位时的地图中心候选。 */
+function firstLocatedSite(
+  sites: readonly NearbySite[],
+): (NearbySite & { lng: number; lat: number }) | null {
+  for (const site of sites) {
+    if (hasSiteCoordinates(site)) return site
+  }
+  return null
+}
+
+/**
+ * 地图中心。
+ *
+ * 用户拖动 / 选中站点 / 定位成功后 `mapCenterFixed = true`，之后的列表刷新不再抢中心；
+ * 否则跟随定位点或第一条有坐标的站点。全屏进出只读这份运行时状态，不落 storage。
+ */
+function mapCenterOf(runtime: NearbyRuntime): MapCenter {
+  if (runtime.mapCenter === null || !runtime.mapCenterFixed) {
+    if (runtime.coords !== null) {
+      runtime.mapCenter = { lat: runtime.coords.lat, lng: runtime.coords.lng }
+    } else {
+      const site = firstLocatedSite(runtime.sites)
+      runtime.mapCenter =
+        site === null
+          ? { lat: MAP_DEFAULT_CENTER.lat, lng: MAP_DEFAULT_CENTER.lng }
+          : { lat: site.lat, lng: site.lng }
+    }
+  }
+  return runtime.mapCenter
+}
+
+/** 半径 → 缩放；城内搜索沿用近景（搜索结果通常集中在几个街区）。 */
+function mapScaleOf(runtime: NearbyRuntime): number {
+  if (runtime.activeKeyword !== '') return MAP_SCALE_NEAR
+  return runtime.radiusMeters >= EXPANDED_RADIUS_METERS ? MAP_SCALE_FAR : MAP_SCALE_NEAR
+}
+
+/**
+ * 站点 → marker。
+ *
+ * ⚠️ 只有 `phase === 'loading'` 时为空；缺坐标站点永远不产生 marker。
+ * ⚠️ callout 只挂在选中 marker 上 —— 原生 callout 的 `ALWAYS` 会让每个 marker 常驻气泡，
+ * 这里用「数组里最多一个 callout」保证同屏只有一个。
+ */
+function markersOf(runtime: NearbyRuntime, phase: NearbyPhase): NearbyMapMarker[] {
+  if (phase === 'loading') return []
+  const markers: NearbyMapMarker[] = []
+  for (const site of runtime.sites) {
+    if (!hasSiteCoordinates(site)) continue
+    const selected = site.siteId === runtime.selectedSiteId
+    const marker: NearbyMapMarker = {
+      id: site.siteId,
+      latitude: site.lat,
+      longitude: site.lng,
+      iconPath: NEARBY_MARKER_ICONS[site.availability] ?? NEARBY_MARKER_ICONS[3],
+      width: selected ? MAP_MARKER_SIZE_SELECTED : MAP_MARKER_SIZE,
+      height: selected ? MAP_MARKER_SIZE_SELECTED : MAP_MARKER_SIZE,
+      zIndex: selected ? 2 : 1,
+    }
+    if (selected) {
+      marker.callout = {
+        content: site.name,
+        color: MAP_CALLOUT_INK,
+        bgColor: MAP_CALLOUT_BG,
+        fontSize: 12,
+        borderRadius: 8,
+        padding: 8,
+        display: 'ALWAYS',
+        textAlign: 'center',
+      }
+    }
+    markers.push(marker)
+  }
+  return markers
+}
+
+/** 空卡片 —— 全屏浮层在无选中时不渲染（wxml 用 siteId 判定）。 */
+function emptySelectedCard(): NearbySelectedCard {
+  return {
+    siteId: 0,
+    name: '',
+    statusLabel: '',
+    statusTone: '',
+    distanceText: '',
+    showDistance: false,
+    address: '',
+    showAddress: false,
+    showNavigate: false,
+    navigateLabel: NEARBY_COPY.navigate,
+    footer: NEARBY_COPY.footer,
+  }
+}
+
+/** 选中站点 → 全屏卡片浮层模型；距离与列表同一开关（未定位不显示）。 */
+function selectedCardOf(runtime: NearbyRuntime, located: boolean): NearbySelectedCard {
+  const site = runtime.sites.find((entry) => entry.siteId === runtime.selectedSiteId)
+  if (site === undefined) return emptySelectedCard()
+  const badge = NEARBY_AVAILABILITY[site.availability] ?? NEARBY_AVAILABILITY[3]
+  const distanceText = located ? formatNearbyDistance(site.distanceMeters) : ''
+  const address = site.address ?? ''
+  return {
+    siteId: site.siteId,
+    name: site.name,
+    statusLabel: badge.label,
+    statusTone: badge.tone,
+    distanceText,
+    showDistance: distanceText !== '',
+    address,
+    showAddress: address !== '',
+    showNavigate: hasSiteCoordinates(site),
+    navigateLabel: NEARBY_COPY.navigate,
+    footer: NEARBY_COPY.footer,
+  }
+}
+
+function clearMapWatchdog(runtime: NearbyRuntime): void {
+  if (runtime.mapTimer !== null) {
+    clearTimeout(runtime.mapTimer)
+    runtime.mapTimer = null
+  }
+}
+
+/** 地图失败：只改地图带，不动 `phase` / `sites` / 分页。 */
+function failMap(page: NearbyPageInstance): void {
+  const runtime = runtimeOf(page)
+  clearMapWatchdog(runtime)
+  runtime.mapFailure = true
+  runtime.mapReady = false
+  runtime.fullscreen = false
+  page.setData({ mapFailed: true, showFullscreenMap: false })
+}
+
+/**
+ * 看门狗 —— `bindrendererror` 只覆盖同层渲染失败，瓦片/弱网白屏没有专用事件，
+ * 所以地图挂载后等 `bindupdated`；4 秒内没等到就按失败处理（spec §8 的 3–5 秒）。
+ */
+function syncMapWatchdog(page: NearbyPageInstance): void {
+  const runtime = runtimeOf(page)
+  if (!mapBandVisible(page) || runtime.mapFailure || runtime.mapReady) {
+    clearMapWatchdog(runtime)
+    return
+  }
+  if (runtime.mapTimer !== null) return
+  runtime.mapTimer = setTimeout(() => {
+    runtime.mapTimer = null
+    failMap(page)
+  }, MAP_WATCHDOG_MS)
+}
+
+/** 地图点击平台调用 —— 与卡片导航共用同一份坐标判定。 */
+function openSiteLocation(page: NearbyPageInstance, siteId: number): void {
+  const site = runtimeOf(page).sites.find((entry) => entry.siteId === siteId)
+  if (site === undefined || !hasSiteCoordinates(site)) return
+  wx.openLocation({
+    latitude: site.lat,
+    longitude: site.lng,
+    scale: 18,
+    name: site.name,
+    ...(site.address === null ? {} : { address: site.address }),
+  })
+}
+
+/**
+ * 选中站点 —— 列表卡与 marker 的唯一入口。
+ *
+ * `center: true` 是「点列表卡 → 地图居中」；`scroll: true` 是「点 marker → 滚到列表卡」。
+ * 两个方向都只改同一份运行时选中态，然后整页重画一次。
+ */
+function selectSite(
+  page: NearbyPageInstance,
+  siteId: number,
+  options: { center: boolean; scroll: boolean },
+): void {
+  const runtime = runtimeOf(page)
+  const site = runtime.sites.find((entry) => entry.siteId === siteId)
+  if (site === undefined) return
+
+  runtime.selectedSiteId = siteId
+  if (options.center && hasSiteCoordinates(site)) {
+    runtime.mapCenter = { lat: site.lat, lng: site.lng }
+    runtime.mapCenterFixed = true
+  }
+  render(page)
+
+  if (options.scroll && page.data.phase === 'ready') {
+    wx.pageScrollTo({ selector: `#nearby-site-${siteId}`, duration: 0 })
+  }
+}
+
 /**
  * 把运行时状态画到 `data`。
  *
@@ -281,6 +598,7 @@ function render(page: NearbyPageInstance): void {
   const runtime = runtimeOf(page)
   const located = runtime.locationState === 'located' && runtime.coords !== null
   const keyword = runtime.activeKeyword
+  const center = mapCenterOf(runtime)
 
   page.setData({
     locationState: runtime.locationState,
@@ -297,7 +615,17 @@ function render(page: NearbyPageInstance): void {
     emptyActionLabel:
       runtime.radiusMeters < EXPANDED_RADIUS_METERS ? NEARBY_COPY.expandRadius : '',
     noResultTitle: fill(NEARBY_COPY.noResultTitle, 'keyword', keyword),
+    showMapBand: mapBandVisible(page),
+    mapFailed: runtime.mapFailure,
+    mapLatitude: center.lat,
+    mapLongitude: center.lng,
+    mapScale: mapScaleOf(runtime),
+    markers: markersOf(runtime, page.data.phase),
+    selectedSiteId: runtime.selectedSiteId,
+    selectedCard: selectedCardOf(runtime, located),
+    showFullscreenMap: runtime.fullscreen,
   })
+  syncMapWatchdog(page)
 }
 
 /** 首屏 / 刷新 / 搜索 / 扩半径都用同一个入口：替换全部已加载内容。 */
@@ -320,6 +648,8 @@ async function loadFirst(
   runtime.requestSeq = seq
   if (source !== 'show' && source !== 'pull') {
     page.setData({ phase: 'loading' })
+    // 加载中地图仍在版式里（无 marker），骨架卡在它下面；这样地图不会在结果回来时才「跳」出来。
+    render(page)
   }
 
   const result = await fetchSitesWithRetry(queryFor(runtime, 1), bypassCache)
@@ -334,7 +664,8 @@ async function loadFirst(
       render(page)
       return
     }
-    page.setData({ phase: 'neterr' })
+    page.setData({ phase: 'neterr', showMapBand: false })
+    clearMapWatchdog(runtime)
     return
   }
 
@@ -343,6 +674,10 @@ async function loadFirst(
   runtime.total = result.data.total
   runtime.page = 1
   runtime.exhausted = records.length >= result.data.total
+  // 结果集变了：选中站点若已不在屏上，选中态一起清掉，避免全屏卡片指向旧站点。
+  if (!records.some((site) => site.siteId === runtime.selectedSiteId)) {
+    runtime.selectedSiteId = 0
+  }
 
   const phase: NearbyPhase =
     records.length === 0
@@ -409,7 +744,7 @@ async function openCityPicker(
   const result = await fetchCitiesWithRetry(bypassCache)
   if (!result.ok) {
     if (runtime.city === '') {
-      page.setData({ showCityPicker: false, phase: 'neterr' })
+      page.setData({ showCityPicker: false, phase: 'neterr', showMapBand: false })
     } else {
       // 已有列表时城市清单失败：保留屏上的真实旧数据，只提示这次切换没成功。
       page.setData({ showCityPicker: false })
@@ -460,6 +795,9 @@ function requestLocation(page: NearbyPageInstance): void {
     success: (result) => {
       runtime.coords = { lat: result.latitude, lng: result.longitude }
       runtime.locationState = 'located'
+      // 用户主动定位 = 明确要「以我为中心」，固定地图中心，后续刷新不抢。
+      runtime.mapCenter = { lat: result.latitude, lng: result.longitude }
+      runtime.mapCenterFixed = true
       render(page)
       void loadFirst(page, 'locate')
     },
@@ -495,6 +833,19 @@ Component({
     page: 0,
     listHeader: '',
     selectedSiteId: 0,
+
+    showMapBand: false,
+    mapFailed: false,
+    mapFailTitle: NEARBY_COPY.mapFailTitle,
+    mapFailHint: NEARBY_COPY.mapFailHint,
+    mapFullscreenLabel: NEARBY_COPY.mapFullscreen,
+    mapExitLabel: NEARBY_COPY.mapExit,
+    mapLatitude: MAP_DEFAULT_CENTER.lat,
+    mapLongitude: MAP_DEFAULT_CENTER.lng,
+    mapScale: MAP_SCALE_NEAR,
+    markers: [],
+    showFullscreenMap: false,
+    selectedCard: emptySelectedCard(),
 
     showCityPicker: false,
     cities: [],
@@ -563,6 +914,8 @@ Component({
       }
 
       runtime.activeKeyword = keyword
+      // 结果集变了，地图中心跟随新结果的第一条；用户随后拖动/选卡会重新固定。
+      runtime.mapCenterFixed = false
       page.setData({
         keywordDraft: keyword,
         activeKeyword: keyword,
@@ -576,6 +929,7 @@ Component({
       const page = this as unknown as NearbyPageInstance
       const runtime = runtimeOf(page)
       runtime.activeKeyword = ''
+      runtime.mapCenterFixed = false
       page.setData({ keywordDraft: '', activeKeyword: '', showClear: false })
       // 清除是用户显式回到半径结果：绕过缓存，避免把搜索前的旧快照当成「现在」。
       void loadFirst(page, 'clear', true)
@@ -587,6 +941,7 @@ Component({
       const runtime = runtimeOf(page)
       if (runtime.radiusMeters >= EXPANDED_RADIUS_METERS) return
       runtime.radiusMeters = EXPANDED_RADIUS_METERS
+      runtime.mapCenterFixed = false
       page.setData({ radiusMeters: EXPANDED_RADIUS_METERS })
       void loadFirst(page, 'expand')
     },
@@ -615,6 +970,9 @@ Component({
       wx.setStorageSync(CITY_STORAGE_KEY, city)
       runtime.city = city
       runtime.activeKeyword = ''
+      runtime.selectedSiteId = 0
+      runtime.mapCenter = null
+      runtime.mapCenterFixed = false
       page.setData({
         city,
         showCityPicker: false,
@@ -682,24 +1040,118 @@ Component({
       const page = this as unknown as NearbyPageInstance
       const siteId = event.detail?.siteId
       if (typeof siteId !== 'number') return
-      const site = runtimeOf(page).sites.find((entry) => entry.siteId === siteId)
-      if (site === undefined || site.lng === null || site.lat === null) return
-
-      wx.openLocation({
-        latitude: site.lat,
-        longitude: site.lng,
-        scale: 18,
-        name: site.name,
-        ...(site.address === null ? {} : { address: site.address }),
-      })
+      openSiteLocation(page, siteId)
     },
 
-    /** 站点卡选中 —— 供 #73 地图与列表共享选中态；本票没有可见副作用。 */
+    /** 站点卡选中 —— 点列表卡 → marker 高亮并居中；列表不滚动。 */
     onSiteSelect(event: WechatMiniprogram.CustomEvent<{ siteId?: number }>): void {
       const page = this as unknown as NearbyPageInstance
       const siteId = event.detail?.siteId
       if (typeof siteId !== 'number') return
-      page.setData({ selectedSiteId: siteId })
+      selectSite(page, siteId, { center: true, scroll: false })
+    },
+
+    /** 点 marker → 选中并滚到对应列表卡；全屏里只更新卡片，不滚背后的列表。 */
+    onMarkerTap(event: WechatMiniprogram.CustomEvent<{ markerId?: number }>): void {
+      const page = this as unknown as NearbyPageInstance
+      const raw = event.detail?.markerId
+      const siteId = typeof raw === 'number' ? raw : Number(raw)
+      if (!Number.isFinite(siteId)) return
+      selectSite(page, siteId, { center: false, scroll: !runtimeOf(page).fullscreen })
+    },
+
+    /**
+     * 地图拖动结束 → 记住中心。
+     *
+     * ⚠️ 只写运行时，不 `setData`：地图拖动过程中回写 latitude/longitude 会和手势抢控制；
+     * 全屏进出时再由 `render` 一次性回填。
+     */
+    onRegionChange(
+      event: WechatMiniprogram.CustomEvent<{
+        type?: string
+        centerLocation?: { latitude?: number; longitude?: number }
+      }>,
+    ): void {
+      const page = this as unknown as NearbyPageInstance
+      const runtime = runtimeOf(page)
+      const detail = event.detail
+      // 只忽略拖动开始；`end` 才有 `centerLocation`，缺 type 的测试/旧基础库也按结束处理。
+      if (detail?.type === 'begin') return
+      const latitude = detail.centerLocation?.latitude
+      const longitude = detail.centerLocation?.longitude
+      if (
+        typeof latitude !== 'number' ||
+        !Number.isFinite(latitude) ||
+        typeof longitude !== 'number' ||
+        !Number.isFinite(longitude)
+      ) {
+        return
+      }
+      runtime.mapCenter = { lat: latitude, lng: longitude }
+      runtime.mapCenterFixed = true
+    },
+
+    /** 地图首次渲染完成 —— 看门狗解除；重复事件无副作用。 */
+    onMapUpdated(): void {
+      const runtime = runtimeOf(this as unknown as NearbyPageInstance)
+      runtime.mapReady = true
+      clearMapWatchdog(runtime)
+    },
+
+    /** 同层渲染失败 —— 官方建议的降级信号（spec §8 `maperr`）。 */
+    onMapRenderError(): void {
+      failMap(this as unknown as NearbyPageInstance)
+    },
+
+    /** 手动重试地图 —— 只重挂地图，不重发站点请求。 */
+    onMapRetry(): void {
+      const page = this as unknown as NearbyPageInstance
+      const runtime = runtimeOf(page)
+      runtime.mapFailure = false
+      runtime.mapReady = false
+      clearMapWatchdog(runtime)
+      render(page)
+    },
+
+    /**
+     * 进入全屏地图 —— 同一页的次级状态，不是新路由。
+     *
+     * 没有选中 / 选中的站点没有坐标时，选中第一条有坐标的站点，保证卡片浮层有内容。
+     * 地图中心与选中站点都只存在页面运行时里，返回时原样保留。
+     */
+    onOpenFullscreen(): void {
+      const page = this as unknown as NearbyPageInstance
+      const runtime = runtimeOf(page)
+      if (runtime.mapFailure) return
+      const current = runtime.sites.find((site) => site.siteId === runtime.selectedSiteId)
+      if (current === undefined || !hasSiteCoordinates(current)) {
+        const first = firstLocatedSite(runtime.sites)
+        if (first !== null) runtime.selectedSiteId = first.siteId
+      }
+      runtime.fullscreen = true
+      render(page)
+    },
+
+    /** 退出全屏 —— 地图中心与选中站点保持在页面栈内，不落 storage。 */
+    onCloseFullscreen(): void {
+      const page = this as unknown as NearbyPageInstance
+      runtimeOf(page).fullscreen = false
+      render(page)
+    },
+
+    /** 全屏卡片浮层的「导航」—— 与列表卡同一个平台调用。 */
+    onFullscreenNavigate(): void {
+      const page = this as unknown as NearbyPageInstance
+      openSiteLocation(page, runtimeOf(page).selectedSiteId)
+    },
+
+    /** 页面隐藏 / 卸载时停掉看门狗，避免对已不可见的地图开罚单。 */
+    onHide(): void {
+      clearMapWatchdog(runtimeOf(this as unknown as NearbyPageInstance))
+    },
+
+    onUnload(): void {
+      clearMapWatchdog(runtimeOf(this as unknown as NearbyPageInstance))
     },
   },
 })

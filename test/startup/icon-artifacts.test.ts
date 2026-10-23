@@ -12,6 +12,7 @@ import { decodePng, alphaBBox, opaqueColors } from '../helpers/png'
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
 const miniprogramDir = join(repoRoot, 'miniprogram')
 const tabbarDir = join(miniprogramDir, 'assets', 'tabbar')
+const mapDir = join(miniprogramDir, 'assets', 'map')
 const iconDir = join(miniprogramDir, 'components', 'icon')
 
 const ROUTES = ['index', 'order-list', 'nearby', 'profile'] as const
@@ -73,6 +74,34 @@ describe('#60 tabBar PNG：8 张、81×81 RGBA、两态颜色来自 token', () =
       const active = decodePng(readFileSync(join(tabbarDir, `${route}-active.png`)))
       expect(opaqueColors(normal), `${route}.png 出现了非 token 色`).toEqual([weak])
       expect(opaqueColors(active), `${route}-active.png 出现了非 token 色`).toEqual([main])
+    }
+  })
+})
+
+describe('#73 地图 marker PNG：3 张、48×48 RGBA、颜色来自可用状态 token', () => {
+  const MARKERS = [
+    ['marker-available.png', 'color-primary'],
+    ['marker-full.png', 'color-warning'],
+    ['marker-unavailable.png', 'color-info'],
+  ] as const
+
+  it('⚠️ 恰好三张 marker，没有多余图片', () => {
+    expect(existsSync(mapDir), '缺少 miniprogram/assets/map/').toBe(true)
+    expect(readdirSync(mapDir).sort()).toEqual(MARKERS.map(([file]) => file))
+  })
+
+  it('⚠️ 48×48、8-bit RGBA、透明底；填充色 = 状态 token，描边 = 卡片白', () => {
+    const ring = token('color-bg-card')
+    for (const [file, tokenName] of MARKERS) {
+      const full = join(mapDir, file)
+      const png = decodePng(readFileSync(full))
+      expect([png.width, png.height], `${rel(full)} 尺寸`).toEqual([48, 48])
+      expect(png.bitDepth).toBe(8)
+      expect(png.colorType).toBe(6)
+      expect(png.interlace).toBe(0)
+      const colors = opaqueColors(png)
+      expect(colors, `${rel(full)} 缺状态色`).toContain(token(tokenName))
+      expect(colors, `${rel(full)} 缺白色描边`).toContain(ring)
     }
   })
 })

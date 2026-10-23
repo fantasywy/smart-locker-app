@@ -4,7 +4,9 @@
 // 1. Regenerate every artifact in memory and byte-compare with git-tracked files.
 // 2. Validate each tabBar PNG: IHDR 81×81, 8-bit RGBA, non-interlaced, transparent
 //    background, content box ≤ 72, fully opaque pixels exactly the expected token color.
-// 3. Validate `app.json` tabBar `color` / `selectedColor` equal `$color-text-weak` /
+// 3. Validate each map marker PNG: 48×48 RGBA, transparent background, opaque pixels
+//    exactly `{ availability token, $color-bg-card }` (fill + white ring).
+// 4. Validate `app.json` tabBar `color` / `selectedColor` equal `$color-text-weak` /
 //    `$color-text-main`.
 //
 // This is NOT chained into `verify:tokens` (spec §12): icon drift and token drift
@@ -21,6 +23,8 @@ const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(here, '..')
 const miniprogramDir = join(repoRoot, 'miniprogram')
 const tabbarDir = join(miniprogramDir, 'assets', 'tabbar')
+const mapDir = join(miniprogramDir, 'assets', 'map')
+const manifestPath = join(here, 'icons', 'manifest.json')
 const generatedPath = join(miniprogramDir, 'components', 'icon', 'icons.generated.ts')
 const variablesPath = join(miniprogramDir, 'styles', '_variables.scss')
 const appJsonPath = join(miniprogramDir, 'app.json')
@@ -187,6 +191,56 @@ function inspectPng(png, file, expectedColor) {
   return errors
 }
 
+/**
+ * 地图 marker —— 48×48、透明底、两种不透明色（状态色 + 白描边）。
+ *
+ * 与 tabBar 分开校验：marker 是地图原生组件消费的图片，尺寸与内容盒规则不同；
+ * 合并成一条会让「81×81 的 tabBar 图标」与「48×48 的水滴」互相迁就。
+ */
+function inspectMarkerPng(png, file, fill, ring) {
+  const errors = []
+  if (png.width !== 48 || png.height !== 48) {
+    errors.push(`${rel(file)}: expected 48×48, got ${png.width}×${png.height}`)
+  }
+  for (const corner of [
+    [0, 0],
+    [png.width - 1, 0],
+    [0, png.height - 1],
+    [png.width - 1, png.height - 1],
+  ]) {
+    const alpha = png.pixels[(corner[1] * png.width + corner[0]) * 4 + 3]
+    if (alpha !== 0) errors.push(`${rel(file)}: corner ${corner.join(',')} is not transparent`)
+  }
+  const colors = new Set()
+  for (let i = 0; i < png.pixels.length; i += 4) {
+    if (png.pixels[i + 3] !== 255) continue
+    colors.add(
+      `#${png.pixels[i].toString(16).padStart(2, '0')}${png.pixels[i + 1]
+        .toString(16)
+        .padStart(2, '0')}${png.pixels[i + 2].toString(16).padStart(2, '0')}`,
+    )
+  }
+  // 抗锯齿会在 fill 与白描边之间留下整条混色带 —— 它们都是两种 token 色的线性混合，
+  // 因此判据是「两种 token 色都在，且没有第三种色相」而不是「只有两种色值」。
+  const channelsOf = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+  const [fillChannels, ringChannels] = [channelsOf(fill), channelsOf(ring)]
+  const bounds = fillChannels.map((value, index) => {
+    const other = ringChannels[index]
+    return [Math.min(value, other), Math.max(value, other)]
+  })
+  for (const color of colors) {
+    const channels = channelsOf(color)
+    const blended = channels.every(
+      (value, index) => value >= bounds[index][0] && value <= bounds[index][1],
+    )
+    if (!blended) errors.push(`${rel(file)}: opaque color ${color} is outside fill/ring blend`)
+  }
+  if (!colors.has(fill) || !colors.has(ring)) {
+    errors.push(`${rel(file)}: missing fill ${fill} or ring ${ring}`)
+  }
+  return errors
+}
+
 async function main() {
   const errors = []
   const expected = await buildArtifacts()
@@ -223,7 +277,43 @@ async function main() {
     }
   }
 
-  // 2) generated manifest is current.
+  // 2) map marker artifacts: exactly the manifest set, byte-identical, two-color pins.
+  const actualMarkerFiles = existsSync(mapDir) ? (await readdir(mapDir)).sort() : []
+  const expectedMarkerFiles = [...expected.mapPngs.keys()].map((file) => basename(file)).sort()
+  if (JSON.stringify(actualMarkerFiles) !== JSON.stringify(expectedMarkerFiles)) {
+    errors.push(
+      `${rel(mapDir)}: files ${actualMarkerFiles.join(', ') || '(none)'} != ` +
+        `${expectedMarkerFiles.join(', ')}`,
+    )
+  }
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+  const ring = tokens.get('color-bg-card')
+  if (!ring) throw new Error('$color-bg-card not found in _variables.scss')
+  for (const [file, bytes] of expected.mapPngs) {
+    let actual
+    try {
+      actual = await readFile(file)
+    } catch {
+      errors.push(`${rel(file)}: missing artifact`)
+      continue
+    }
+    if (!actual.equals(bytes)) errors.push(`${rel(file)}: bytes differ from regenerated output`)
+    const key = basename(file).replace(/^marker-|\.png$/g, '')
+    const tokenName = manifest.mapMarkers?.[key]?.replace(/^\$/, '')
+    const fill = tokenName === undefined ? undefined : tokens.get(tokenName)
+    if (fill === undefined) {
+      errors.push(`${rel(file)}: no token for marker "${key}" in manifest`)
+      continue
+    }
+    try {
+      errors.push(...inspectMarkerPng(decodePng(actual, file), file, fill, ring))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      errors.push(message.startsWith(rel(file)) ? message : `${rel(file)}: ${message}`)
+    }
+  }
+
+  // 3) generated manifest is current.
   let generated
   try {
     generated = await readFile(generatedPath)
@@ -234,7 +324,7 @@ async function main() {
     errors.push(`${rel(generatedPath)}: bytes differ from regenerated output`)
   }
 
-  // 3) app.json colors stay tied to the tokens (native config can't read SCSS).
+  // 4) app.json colors stay tied to the tokens (native config can't read SCSS).
   const appJson = JSON.parse(await readFile(appJsonPath, 'utf8'))
   const tabBar = appJson.tabBar ?? {}
   if (tabBar.color !== weak) errors.push(`app.json tabBar.color ${tabBar.color} != ${weak}`)
@@ -250,7 +340,8 @@ async function main() {
   }
 
   process.stdout.write(
-    `verify:icons ok: ${expected.pngs.size} PNGs (81×81 RGBA), generated manifest, app.json colors\n`,
+    `verify:icons ok: ${expected.pngs.size} tabBar PNGs (81×81 RGBA), ` +
+      `${expected.mapPngs.size} map markers (48×48 RGBA), generated manifest, app.json colors\n`,
   )
 }
 
