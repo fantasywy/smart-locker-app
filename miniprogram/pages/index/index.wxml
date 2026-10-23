@@ -4,7 +4,7 @@
   三条分支**互斥**，由闸门的 phase 一个变量驱动（失败出口由**启动态**驱动，
   不下放到各页面的数据区）：
     loading → 首页同构骨架（品牌块 / 圆按钮 / 一卡 / 入口条，纯图形无文字）
-    ready   → 品牌区 → 112px 圆形扫码按钮 → 进行中订单区 → （附近入口随 #72）
+    ready   → 品牌区 → 112px 圆形扫码按钮 → 进行中订单区 → 附近入口条
     failed  → 全局唯一失败出口（说明 + 重试 + 静态出口）
 
   ⚠️ **导航栏标题留空**（只留胶囊）：spec §2 的首页身份是「一个主行动」，
@@ -26,11 +26,12 @@
   <skeleton wx:if="{{ phase === 'loading' }}" variant="home" />
 
   <!--
-    ② 首页 —— 品牌区 + 扫码主行动 + 进行中订单区。
+    ② 首页 —— 品牌区 + 扫码主行动 + 进行中订单区 + 附近入口条。
 
     ⚠️ 订单卡只画「我在办的事」：站点名 / 状态 / 格口 / 存入时间 / 取件码；
        不显示参考金额、实付或支付按钮（spec §2）。
-    ⚠️ **附近入口条不在这里**：它随 #72 与附近 tab 同一次发版露出（spec §1）。
+    ⚠️ **附近入口条在订单区之后**：它随 #72 与附近 tab 同一次发版露出（spec §1），
+       只指路、不带距离 / 余位等动态数据。
   -->
   <view wx:elif="{{ phase === 'ready' }}" class="home">
     <!--
@@ -117,6 +118,26 @@
           bind:tap="onOrderTap"
         />
       </view>
+    </view>
+
+    <!--
+      附近入口条 —— 56px 白底行，只指路。
+      ⚠️ 无距离 / 无余位 / 无任何动态数据；点击 switchTab 到附近 tab。
+    -->
+    <view
+      class="home__nearby"
+      bindtap="onNearby"
+      hover-class="home__nearby_active"
+      hover-start-time="0"
+      hover-stay-time="0"
+      aria-role="button"
+      aria-label="{{ nearbyLabel }}"
+    >
+      <view class="home__nearby-mark">
+        <icon name="nearby.station" tone="primary" size="{{20}}" />
+      </view>
+      <view class="home__nearby-label">{{ nearbyLabel }}</view>
+      <icon name="nav.disclosure" tone="weak" size="{{16}}" />
     </view>
   </view>
 

@@ -218,3 +218,45 @@ page {
   color: v.$color-primary-pressed;
   background: v.$color-bg-page;
 }
+
+// ---------------------------------------------------------------------------
+// 附近入口条（#72）
+// ---------------------------------------------------------------------------
+// 56px 白底行 = 112rpx；16px 圆角 / 16px 内边距；左侧 32px 浅绿圆 + map-pinned
+// 20px，中间 14px / 500，右侧 16px chevron。无距离 / 余位 / 动态数据。
+.home__nearby {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-md;
+  // 56px 行高；32px 圆 + 上下 12px 留白恰好落在 56px 内，左右仍为 16px。
+  height: 112rpx;
+  padding: 0 v.$spacing-lg;
+  background: v.$color-bg-card;
+  border: 1px solid v.$color-border;
+  border-radius: v.$radius-card;
+  box-sizing: border-box;
+}
+
+.home__nearby-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: v.$color-primary-tint;
+  flex-shrink: 0;
+}
+
+.home__nearby-label {
+  flex: 1;
+  min-width: 0;
+  color: v.$color-text-main;
+  font-size: v.$font-size-body;
+  font-weight: v.$font-weight-medium;
+  line-height: 1.5;
+}
+
+.home__nearby_active {
+  background: v.$color-bg-page;
+}

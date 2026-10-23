@@ -3,7 +3,7 @@
 // 本文件守两半：
 //   1. **行为**：四种扫码结果各走到哪里（进柜机页 / 留在首页提示 / 静默 / 提示）；
 //   2. **形状**：闸门三态仍由 `phase` 驱动、按下反馈是 0ms 换色、路径只有一个家、
-//      不探测相机权限、不建订单卡 / 附近入口、页面不碰 storage。
+//      不探测相机权限、页面不碰 storage；#67 订单区与 #72 附近入口各自接线。
 //
 // ⚠️ 断言落在页面外部行为上：`wx.scanCode` 收到了什么、`wx.navigateTo` 去了哪里、
 // `showToast` 说了哪句话。不测页面内部怎么组织方法。
@@ -18,7 +18,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { installWxStub, jsonResponse, networkFailure, reply, seedStorage } from '../helpers/wx'
 import { respondInOrder, sentRequests, urlsOf } from '../helpers/http'
 import { BASE_URL } from '../../miniprogram/request/config'
-import { HOME_PAGE_COPY, ORDER_LIST_PATH, PAGE_TITLES } from '../../miniprogram/startup/copy'
+import {
+  HOME_PAGE_COPY,
+  NEARBY_PATH,
+  ORDER_LIST_PATH,
+  PAGE_TITLES,
+} from '../../miniprogram/startup/copy'
 import { LOCKER_PATH, ORDER_DETAIL_PATH } from '../../miniprogram/utils/routes'
 import type { OrderSummary } from '../../miniprogram/types/orders'
 import type { InstalledWxStub } from '../helpers/wx'
@@ -513,7 +518,7 @@ describe('#67 首页 · 进行中订单区', () => {
     expect(wx.switchTab).toHaveBeenCalledWith({ url: `/${ORDER_LIST_PATH}` })
   })
 
-  it('⚠️ 首页卡只用 home 变体，不出现金额 / 取件层 / 附近入口', () => {
+  it('⚠️ 首页卡只用 home 变体，不出现金额 / 取件层', () => {
     const wxml = stripComments(indexWxml())
     const source = stripComments(indexSource())
     expect(wxml).toContain('<order-card')
@@ -521,7 +526,6 @@ describe('#67 首页 · 进行中订单区', () => {
     expect(wxml).toMatch(/<skeleton[^>]*variant="card"/)
     expect(wxml).not.toContain('payOrder')
     expect(wxml).not.toContain('pickup-sheet')
-    expect(wxml).not.toContain('nearby')
     expect(source).not.toContain('formatMoney')
     expect(source).not.toContain('pickup-sheet')
   })
@@ -600,12 +604,34 @@ describe('#61 首页 · 硬约束（源码守卫）', () => {
     }
   })
 
-  it('⚠️ 订单区已接线，但附近入口仍不出现（随 #72 同一次发版）', () => {
+  it('⚠️ 订单区（#67）与附近入口条（#72）同屏接线，互不占位', () => {
     const wxml = stripComments(indexWxml())
     expect(wxml).toContain('<order-card')
     expect(wxml).toContain('variant="home"')
-    expect(wxml).not.toContain('nearby')
-    expect(wxml).not.toContain('switchTab')
+    expect(wxml).toContain('class="home__nearby"')
+    expect(wxml).toContain('bindtap="onNearby"')
+    expect(wxml).not.toContain('ordersPlaceholder')
+  })
+
+  it('⚠️ 附近入口条只指路：无动态数据，点击 switchTab 到 NEARBY_PATH', async () => {
+    const wx = installWxStub()
+    wx.switchTab.mockImplementation(() => {})
+    const def = await loadPage()
+    const page = instantiate(def)
+
+    ;(page.onNearby as (() => void) | undefined)?.()
+
+    expect(wx.switchTab).toHaveBeenCalledTimes(1)
+    expect(wx.switchTab.mock.calls[0]?.[0]).toMatchObject({ url: `/${NEARBY_PATH}` })
+    expect(wx.getLocation).not.toHaveBeenCalled()
+    expect(wx.request).not.toHaveBeenCalled()
+
+    const wxml = stripComments(indexWxml())
+    expect(wxml).toContain('class="home__nearby"')
+    expect(wxml).toContain('{{ nearbyLabel }}')
+    expect(wxml).toContain('name="nearby.station"')
+    expect(wxml).not.toMatch(/nearby[^>]*(distance|count|余位)/i)
+    expect(page.data.nearbyLabel).toBe(HOME_PAGE_COPY.nearbyEntry)
   })
 
   it('⚠️ 按下反馈只有 0ms 换色：hover-class 换 `$color-primary-pressed`，无 transition / transform / opacity', () => {

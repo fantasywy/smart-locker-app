@@ -58,6 +58,32 @@
 </view>
 
 <!--
+  附近柜机页骨架（#72）—— 搜索行 + 三张站点卡。
+  ⚠️ 三张卡对应首屏 `SKELETON_ROW_COUNT`，纯图形、无文字；地图带不在本票范围。
+-->
+<view
+  wx:elif="{{ variant === 'nearby' }}"
+  class="skeleton skeleton--nearby"
+  aria-role="skeleton"
+>
+  <view class="skeleton__nearby-search"></view>
+  <view class="skeleton__nearby-card" wx:for="{{ rows }}" wx:key="*this">
+    <view class="skeleton__nearby-head">
+      <view class="skeleton__block skeleton__nearby-name"></view>
+      <view class="skeleton__chip"></view>
+    </view>
+    <view class="skeleton__block skeleton__nearby-line"></view>
+    <view class="skeleton__block skeleton__nearby-line skeleton__nearby-line--short"></view>
+    <view class="skeleton__nearby-cells">
+      <view class="skeleton__nearby-cell"></view>
+      <view class="skeleton__nearby-cell"></view>
+      <view class="skeleton__nearby-cell"></view>
+      <view class="skeleton__nearby-cell"></view>
+    </view>
+  </view>
+</view>
+
+<!--
   「我的」页身份区骨架（#69）—— 形状对照真实版式：64px 圆形头像 + 两行短块。
   ⚠️ 与信用分卡**各自一份**：两块的形状不同，且读取失败时各自在块内给一行提示。
 -->

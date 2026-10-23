@@ -150,6 +150,7 @@ export const SCORE_LOGS_COPY = {
  *   • `wordmark` / `tagline` / `scanButton` —— 品牌区与主按钮定稿；
  *   • `notLockerCode` —— 「这不是柜机码，请扫柜机上的二维码」；
  *   • `scanFailed` —— 「扫码没成功，请重试」；
+ *   • `nearbyEntry` —— 附近入口条「附近柜机」；
  *   • `ordersTitle` —— 分组标题「进行中」；
  *   • `viewAll` —— 「查看全部 N 个」的模板（N 是过滤后的条数）；
  *   • `ordersLoadFailed` / `ordersRetry` —— 订单区页内失败块；
@@ -170,6 +171,14 @@ export const HOME_PAGE_COPY = {
   notLockerCode: '这不是柜机码，请扫柜机上的二维码',
   /** 扫码失败（取消之外）的提示 —— 逐字；不按成因分叉。 */
   scanFailed: '扫码没成功，请重试',
+
+  /**
+   * 首页附近入口条的唯一一句 —— 逐字「附近柜机」。
+   *
+   * ⚠️ 入口条**不带距离 / 余位 / 任何动态数据**：它只是一条指路，数据在附近 tab 里。
+   * 点击走 `switchTab`，目标取 `NEARBY_PATH`。
+   */
+  nearbyEntry: '附近柜机',
 
   /**
    * 进行中订单区的分组标题 —— 逐字「进行中」。
@@ -335,6 +344,7 @@ export type EmptyStateCopy = (typeof EMPTY_STATES)[keyof typeof EMPTY_STATES]
 export const PAGE_TITLES = {
   'pages/index/index': '首页',
   'pages/order-list/order-list': '订单',
+  'pages/nearby/nearby': '附近柜机',
   'pages/profile/profile': '我的',
   'pages/locker/locker': '储物柜',
   'pages/order-detail/order-detail': '订单详情',
@@ -365,6 +375,88 @@ export type PagePath = keyof typeof PAGE_TITLES
  * 读 `app.json` 断言本常量**确实是 tabBar 的一项** —— 那次比对是唯一的兜底。
  */
 export const ORDER_LIST_PATH: PagePath = 'pages/order-list/order-list'
+
+/**
+ * **附近柜机 tab 的页面路径** —— 首页入口条与附近页自身的 `switchTab` 目标。
+ *
+ * ⚠️ 与 `ORDER_LIST_PATH` 同理：`wx.switchTab` 的 url 必须是 `app.json` 的
+ * `tabBar.list[].pagePath` 之一，写错一个字符就是静默失败。`NEARBY_PATH`
+ * 与 `PAGE_TITLES` 的键、`app.json` 的注册表由守卫扣在一起。
+ */
+export const NEARBY_PATH: PagePath = 'pages/nearby/nearby'
+
+/**
+ * **附近柜机页**的全部用户可见文案 —— spec #57 §8 的逐字表 + 数据质量口径。
+ *
+ * ⚠️ 搜索提示带 `{city}` 占位符、列表头带 `{count}`、无结果标题带 `{keyword}`、
+ * 柜机折叠带 `{count}`：这些是**模板**，页面替换后才上屏。
+ *
+ * ⚠️ 本表**没有** `lockerId` / 柜机码 / 下单 / 预约 / 查看柜机等任何写动作的字。
+ * 站点卡唯一动作是「导航」，导航目标由经纬度决定，不需要任何柜机标识。
+ *
+ * ⚠️ 四档余位只写档名与数量：`cellLabels` 是「小 / 中 / 大 / 特大」，
+ * 不写尺寸、不写示例物品（后端没有尺寸字段）。
+ */
+export const NEARBY_COPY = {
+  /** 页内失败句 / 重试按钮 —— 与全站共用。 */
+  loadFailed: LOAD_FAILED_DETAIL,
+  retry: RETRY_LABEL,
+  networkTitle: FAILURE_TITLE,
+  networkDetail: FAILURE_DETAIL,
+
+  /** 搜索框占位符 —— 逐字。 */
+  searchPlaceholder: '搜索站点名称或地址',
+  /** 搜索提示 —— 模板；城市取自当前选择。 */
+  searchHint: '在{city}搜索「嘉里」',
+  /** 搜索提交按钮 —— 只描述动作。 */
+  searchAction: '搜索',
+  /** 搜索清除按钮的读屏文案（视觉上是一个 × 图标）。 */
+  clearSearch: '清除搜索',
+
+  /** 未定位横幅 —— 逐字两行。 */
+  locationBanner: '未定位 · 按站点名排序',
+  enableLocation: '开启定位',
+
+  /** 列表头 —— 模板；N 只在这里出现。 */
+  listHeader: '附近 {count} 个站点 · 按可用状态、距离排序',
+
+  /** 附近为空（3 km 无站点）—— 逐字。 */
+  emptyTitle: '附近 3 公里内没有柜机',
+  emptyHint: '可以扩大范围，或换个城市看看',
+  expandRadius: '扩大到 10 公里',
+  switchCity: '切换城市',
+
+  /** 搜索无结果 —— 标题带关键词，说明句逐字。 */
+  noResultTitle: '没有找到「{keyword}」',
+  noResultHint: '换个关键词，或切换到其他城市试试',
+
+  /** 城市选择器 —— 逐字；取消复用全局按钮词。 */
+  cityPickerTitle: '选择城市',
+  cityPickerCancel: CONFIRM_COPY.cancel,
+
+  /** 站点卡可用状态标签 —— 1 / 2 / 3 的固定映射。 */
+  statusAvailable: '可存件',
+  statusFull: '已满',
+  statusUnavailable: '暂不可用',
+
+  /** 四档档名 —— 只写档名，不写尺寸。 */
+  cellLabels: {
+    small: '小',
+    medium: '中',
+    large: '大',
+    extraLarge: '特大',
+  },
+
+  /** 卡内柜机位置区 —— 标签 / 折叠句（模板）/ 唯一动作 / 只读说明。 */
+  lockerPositionLabel: '柜机位置',
+  lockerMore: '共 {count} 台',
+  navigate: '导航',
+  footer: '只读信息 · 存件请扫柜机码',
+
+  /** 距离格式 —— 服务端只给整数米，单位与小数位是文案层的事。 */
+  distanceMeters: '{value} m',
+  distanceKilometers: '{value} km',
+} as const
 
 /**
  * **订单状态标签** —— 订单列表与订单详情共用的一张表（spec §6「状态标签」）。

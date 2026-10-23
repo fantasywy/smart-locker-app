@@ -27,9 +27,10 @@
 //
 // - **不做相机权限探测 / 引导**（spec §2 末段）：`wx.scanCode` 不写 `authSetting`，
 //   `wx.getSetting()` 无法区分「未请求」与「被拒绝」，任何「请开启相机权限」都是假归因。
-// - **不做附近入口**：它随 #72 的同一次发版露出；提前做一个假入口会违反「不造假入口」。
-// - **不写页面路径字面量**：柜机页 / 详情页 / 订单 tab 的路径都来自 `utils/routes.ts`
-//   与 `startup/copy.ts`。`wx.*To` 拿到不存在的路径是**静默失败**。
+// - **附近入口只指路**：它已随 #72 与附近 tab 同一次发版露出；入口条不带距离 / 余位 /
+//   任何动态数据，点击只 `switchTab`。
+// - **不写页面路径字面量**：柜机页 / 详情页 / 订单 tab / 附近 tab 的路径都来自
+//   `utils/routes.ts` 与 `startup/copy.ts`。`wx.*To` 拿到不存在的路径是**静默失败**。
 //
 // ⚠️ 用的是 `Component()` 而不是 `Page()` —— 全端页面都按这一形态落地，
 // 且 `Component` 的 `lifetimes` 让「订阅在 `attached`、退订在 `detached`」这件事
@@ -38,7 +39,7 @@
 import { getOrders } from '../../api/orders'
 import { createStartupGate } from '../../startup/gate'
 import type { StartupGate, StartupState } from '../../startup/gate'
-import { HOME_PAGE_COPY, ORDER_LIST_PATH } from '../../startup/copy'
+import { HOME_PAGE_COPY, NEARBY_PATH, ORDER_LIST_PATH } from '../../startup/copy'
 import { showToast } from '../../utils/feedback'
 import { resolveLockerCode } from '../../utils/locker-code'
 import { mergeActiveOrders } from '../../utils/order-active'
@@ -96,6 +97,9 @@ interface IndexPageData {
   viewAllLabel: string
   ordersLoadFailedTitle: string
   ordersRetryLabel: string
+
+  /** 附近入口条的唯一一句文案 —— 无距离 / 余位等动态数据。 */
+  nearbyLabel: string
 }
 
 interface IndexPageInstance {
@@ -270,6 +274,12 @@ Component({
     viewAllLabel: '',
     ordersLoadFailedTitle: HOME_PAGE_COPY.ordersLoadFailed,
     ordersRetryLabel: HOME_PAGE_COPY.ordersRetry,
+
+    /**
+     * 附近入口条的唯一一句文案 —— 没有距离 / 余位 / 动态数据。
+     * 点击只做 `switchTab`，目标来自 `NEARBY_PATH`（tab 路径写错是静默失败）。
+     */
+    nearbyLabel: HOME_PAGE_COPY.nearbyEntry,
   } as IndexPageData,
 
   lifetimes: {
@@ -397,6 +407,16 @@ Component({
         return
       }
       void gate?.start()
+    },
+
+    /**
+     * 附近入口 —— 只 `switchTab` 到附近 tab。
+     *
+     * ⚠️ 入口条不承载任何动态数据：不发请求、不探测定位、不显示距离 / 余位。
+     * 那是附近页自己的事；首页这里只负责“指路”。
+     */
+    onNearby(): void {
+      wx.switchTab({ url: `/${NEARBY_PATH}` })
     },
 
     /**
