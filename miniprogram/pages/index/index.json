@@ -1,9 +1,11 @@
 {
+  "enablePullDownRefresh": true,
   "usingComponents": {
     "navigation-bar": "/components/navigation-bar/navigation-bar",
     "skeleton": "/components/skeleton/skeleton",
     "failure-exit": "/components/failure-exit/failure-exit",
     "icon": "/components/icon/icon",
+    "order-card": "/components/order-card/order-card",
     "van-toast": "@vant/weapp/toast/index"
   }
 }

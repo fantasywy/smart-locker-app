@@ -1,44 +1,49 @@
-// 首页 —— **启动闸门的承载页 + 唯一主行动（扫码存件）**。
+// 首页 —— **启动闸门的承载页 + 唯一主行动（扫码存件）+ 进行中订单区**。
 //
-// ## 本页的两件事
+// ## 本页的三件事
 //
 // 1. **闸门**：登录链跑完之前画首页同构骨架；登录失败落全局失败出口；成功后进首页。
-//    闸门的形态是 #20 的交付物，本票（#61）**不改它的行为**，只把 ready 的占位
-//    换成真正的首页版式。
+//    闸门的形态是 #20 的交付物，本票（#61 / #67）**不改它的行为**。
 // 2. **扫码主行动**：`wx.scanCode` → `resolveLockerCode()` → 柜机页。
 //    四种结果各走各的路（spec §2）：
 //       • 解析出柜机码 → `navigateTo` 柜机页，带 `code`；
 //       • 非柜机码     → 留在首页，一句提示，可立刻重扫；
 //       • 用户取消     → 静默；
 //       • 其他失败     → 一句「扫码没成功，请重试」，不按成因分叉。
+// 3. **进行中订单区**（#67）：两条流 `status=2` / `status=4`（各 `pageSize=100`）取数，
+//    过滤后合并去重，按「已超时 → 待存入 → 已存入」+ id 倒序排序；前两张上卡，
+//    `N > 2` 时给「查看全部 N 个」切到订单 tab。
 //
-// ## 三条纪律
+// ## 四条纪律
 //
 // 1. **页面不持有登录态**：登录态只在请求层与闸门内部，页面只读 `phase`。
-// 2. **不做本地业务数据缓存**：页面没有任何 `storage` 读写。
-// 3. **失败态不在页面数据区里再写一份**：失败落到 `components/failure-exit/`，
-//    页面只负责把它 `wx:if` 出来 —— 「唯一」由那个组件承担。
+// 2. **不做本地业务数据缓存**：页面没有任何 `storage` 读写；每次 `onShow` 都重新取数。
+// 3. **失败态不在页面数据区里再写一份**：登录失败落到 `components/failure-exit/`；
+//    订单区自己的失败是**页内重试块**，不把扫码按钮拖下水。
+// 4. **订单区与订单列表同一口径**：候选集合与排序只来自 `utils/order-active.ts`，
+//    不在本页另写一遍 `status` / `endAt` 判断。
 //
 // ## 本票刻意不做的事
 //
 // - **不做相机权限探测 / 引导**（spec §2 末段）：`wx.scanCode` 不写 `authSetting`，
 //   `wx.getSetting()` 无法区分「未请求」与「被拒绝」，任何「请开启相机权限」都是假归因。
-// - **不做进行中订单区与附近入口**：订单区在本票仍是占位，由 #67 接手；附近入口
-//   随 #72 的同一次发版露出。提前做一个假入口会违反「不造假入口」。
-// - **不写页面路径字面量**：柜机页路径来自 `utils/routes.ts` 的 `LOCKER_PATH`。
-//   `wx.*To` 拿到不存在的路径是**静默失败** —— 与「点了没反应」同一个症状。
+// - **不做附近入口**：它随 #72 的同一次发版露出；提前做一个假入口会违反「不造假入口」。
+// - **不写页面路径字面量**：柜机页 / 详情页 / 订单 tab 的路径都来自 `utils/routes.ts`
+//   与 `startup/copy.ts`。`wx.*To` 拿到不存在的路径是**静默失败**。
 //
-// ⚠️ 用的是 `Component()` 而不是 `Page()` —— 全端 10 个页面都按这一形态落地
-// （出处是 quickstart 的既有写法，`pages/logs` 那处残留已由 #22 删除），
+// ⚠️ 用的是 `Component()` 而不是 `Page()` —— 全端页面都按这一形态落地，
 // 且 `Component` 的 `lifetimes` 让「订阅在 `attached`、退订在 `detached`」这件事
 // 有明确的挂载点。
 
+import { getOrders } from '../../api/orders'
 import { createStartupGate } from '../../startup/gate'
 import type { StartupGate, StartupState } from '../../startup/gate'
-import { HOME_PAGE_COPY } from '../../startup/copy'
+import { HOME_PAGE_COPY, ORDER_LIST_PATH } from '../../startup/copy'
 import { showToast } from '../../utils/feedback'
 import { resolveLockerCode } from '../../utils/locker-code'
-import { LOCKER_PATH, STATIC_EXIT_PATHS } from '../../utils/routes'
+import { mergeActiveOrders } from '../../utils/order-active'
+import { LOCKER_PATH, ORDER_DETAIL_PATH, STATIC_EXIT_PATHS } from '../../utils/routes'
+import type { OrderCardOrder, OrderSummary } from '../../types/orders'
 
 /**
  * 闸门实例 —— **模块级的单例**，不是 `data` 里的一员。
@@ -50,29 +55,176 @@ import { LOCKER_PATH, STATIC_EXIT_PATHS } from '../../utils/routes'
  *
  * ⚠️ 它**不等于引入 store**（这条禁令针对的是业务状态的集中存放）。闸门里只有
  * 「登录到哪一步了」这一个变量，**没有任何业务数据** —— 页面依然从 `api/` 拿数据。
- * 这与 `App.globalData` 仅承载请求层自身需要的少量值这一点，是同一性质。
  */
 let gate: StartupGate | null = null
+
+/** 进行中两条查询的页大小 —— spec §2 的上限值（超过 100 的极端情况不做）。 */
+const ACTIVE_PAGE_SIZE = 100
+
+/** 首页订单区最多渲染几张卡；超过这个数才出现「查看全部」。 */
+const HOME_ORDER_LIMIT = 2
+
+/** 订单区自己的状态 —— 与启动闸门的 `phase` 相互独立。 */
+type OrdersPhase = 'loading' | 'ready' | 'loadFailed'
+
+/** 一次订单读取是首屏 / 回前台静默刷新 / 下拉刷新 / 失败后的页内重试。 */
+type OrdersSource = 'initial' | 'refresh' | 'pull' | 'retry'
 
 /**
  * 当前订阅的退订函数 —— 页面 `detached` 时用它，避免监听器泄漏。
  *
- * ⚠️ **它挂在页面实例上，不是模块级变量**（第一版是模块级的，review 的变异测试
- * 顺带暴露了它的后果）：
- *   • 模块级时，两个实例会**争同一个槽位** —— 第二个 `attached` 覆盖第一个的退订句柄，
- *     于是第一个实例 `detached` 时拿到的可能是**别人的**退订函数（或 `null`），
- *     真正的泄漏反而被掩盖。
- *   • 挂在实例上，「谁订的、谁退」这条对应关系就是显然的，
- *     且 `detached` 的退订变成一个**可观测**的行为（测试能验它）。
- *
- * 类型上它是页面实例的一个私有字段 —— 小程序 `Component` 没有为「实例私有字段」
- * 提供官方位置，所以挂在这里并由 `applyState` / `attached` / `detached` 读写。
+ * ⚠️ **它挂在页面实例上，不是模块级变量**：模块级时两个实例会争同一个槽位，
+ * 第二个 `attached` 覆盖第一个的退订句柄，真正的泄漏反而被掩盖。
  */
+interface IndexPageData {
+  phase: StartupState['phase']
+  wordmark: string
+  tagline: string
+  scanLabel: string
+
+  /** 进行中订单区 —— 组标题、状态与卡片。 */
+  ordersTitle: string
+  ordersPhase: OrdersPhase
+  activeOrders: OrderCardOrder[]
+  orderCount: number
+  showOrders: boolean
+  showOrdersTitle: boolean
+  showViewAll: boolean
+  viewAllLabel: string
+  ordersLoadFailedTitle: string
+  ordersRetryLabel: string
+}
+
 interface IndexPageInstance {
   /** 本实例的退订函数 —— `attached` 里写入，`detached` 里消费。 */
   unsubscribeFromGate?: (() => void) | null
-  data: { phase: StartupState['phase'] }
-  setData(patch: Record<string, unknown>): void
+  data: IndexPageData
+  setData(patch: Partial<IndexPageData>): void
+}
+
+/** 页面实例 → 订单区的运行时（不缓存业务数据，只挂「是否已经展示过」与飞行态）。 */
+interface OrdersRuntime {
+  /** `onShow` 是否已经发生过 —— 首查由可见生命周期触发。 */
+  shown: boolean
+  /** 首查是否已经起过 —— 决定下一次 `onShow` 是 initial 还是 refresh。 */
+  started: boolean
+  /** 是否有读取在飞 —— 挡住 `onShow` / 下拉刷新 / 重试的重入。 */
+  inFlight: boolean
+}
+
+const runtimes = new WeakMap<IndexPageInstance, OrdersRuntime>()
+
+function runtimeOf(page: IndexPageInstance): OrdersRuntime {
+  let runtime = runtimes.get(page)
+  if (runtime === undefined) {
+    runtime = { shown: false, started: false, inFlight: false }
+    runtimes.set(page, runtime)
+  }
+  return runtime
+}
+
+/** 卡片只接收自己的子集 —— `orderNo` / `lockerId` / `cellType` 不进渲染模型。 */
+function cardOrderOf(order: OrderSummary): OrderCardOrder {
+  return {
+    id: order.id,
+    status: order.status,
+    startAt: order.startAt,
+    endAt: order.endAt,
+    payAmount: order.payAmount,
+    estimatedAmount: order.estimatedAmount,
+    pickupCode: order.pickupCode,
+    siteName: order.siteName,
+    lockerNo: order.lockerNo,
+    cellNo: order.cellNo,
+  }
+}
+
+/** 把过滤后的条数填进「查看全部」模板 —— N 不是两次查询 `total` 的合计。 */
+function viewAllLabelOf(count: number): string {
+  return HOME_PAGE_COPY.viewAll.replace('{count}', String(count))
+}
+
+/**
+ * 把合并后的进行中单画到界面上。
+ *
+ * ⚠️ **`N = 0` 时整区（含标题）不渲染**：`showOrders` / `showOrdersTitle` 同时为 false。
+ * `N > 2` 时只把前两张交给 `order-card`，`orderCount` 仍是真实过滤后条数。
+ */
+function renderOrders(page: IndexPageInstance, orders: readonly OrderSummary[]): void {
+  const count = orders.length
+  page.setData({
+    ordersPhase: 'ready',
+    activeOrders: orders.slice(0, HOME_ORDER_LIMIT).map(cardOrderOf),
+    orderCount: count,
+    showOrders: count > 0,
+    showOrdersTitle: count > 0,
+    showViewAll: count > HOME_ORDER_LIMIT,
+    viewAllLabel: count > HOME_ORDER_LIMIT ? viewAllLabelOf(count) : '',
+  })
+}
+
+/** 首屏 / 重试的订单区骨架 —— 一张卡骨架，标题等 N 确定后再出现。 */
+function showOrdersSkeleton(page: IndexPageInstance): void {
+  page.setData({
+    ordersPhase: 'loading',
+    activeOrders: [],
+    orderCount: 0,
+    showOrders: true,
+    showOrdersTitle: false,
+    showViewAll: false,
+    viewAllLabel: '',
+  })
+}
+
+/**
+ * 订单区失败归因 —— 三类失败互不混淆：
+ *   • 首屏 / 重试 → 页内「订单加载失败 / 重试」；
+ *   • 下拉刷新   → toast「刷新失败，请稍后重试」，保留旧卡；
+ *   • onShow     → 静默，保留旧卡（用户回到前台不应被一条历史失败打断）。
+ */
+function handleOrdersFailure(page: IndexPageInstance, source: OrdersSource): void {
+  if (source === 'initial' || source === 'retry') {
+    page.setData({
+      ordersPhase: 'loadFailed',
+      activeOrders: [],
+      orderCount: 0,
+      showOrders: true,
+      showOrdersTitle: false,
+      showViewAll: false,
+      viewAllLabel: '',
+      ordersLoadFailedTitle: HOME_PAGE_COPY.ordersLoadFailed,
+      ordersRetryLabel: HOME_PAGE_COPY.ordersRetry,
+    })
+    return
+  }
+  if (source === 'pull') showToast(HOME_PAGE_COPY.refreshFailed)
+}
+
+/**
+ * 取两条进行中流并合并。
+ *
+ * ⚠️ **事务式替换**：两条流都成功之前不动界面 —— 刷新失败时用户看到的仍是上一份
+ * 成功数据。`Promise.all` 并行的原因：两条流互不依赖，串行只会让首屏多等一个往返。
+ */
+async function loadOrders(page: IndexPageInstance, source: OrdersSource): Promise<void> {
+  const runtime = runtimeOf(page)
+  if (runtime.inFlight) return
+  runtime.inFlight = true
+  runtime.started = true
+  if (source === 'initial' || source === 'retry') showOrdersSkeleton(page)
+
+  const [status2, status4] = await Promise.all([
+    getOrders({ status: 2, pageSize: ACTIVE_PAGE_SIZE }),
+    getOrders({ status: 4, pageSize: ACTIVE_PAGE_SIZE }),
+  ])
+  runtime.inFlight = false
+
+  if (!status2.ok || !status4.ok) {
+    handleOrdersFailure(page, source)
+    return
+  }
+
+  renderOrders(page, mergeActiveOrders(status2.data.records, status4.data.records))
 }
 
 Component({
@@ -97,15 +249,20 @@ Component({
     scanLabel: HOME_PAGE_COPY.scanButton,
 
     /**
-     * 订单区占位文案 —— ⚠️ **过渡期的债**，随 #67 的进行中订单区落地一起删。
-     *
-     * 本票的票面明确「页内订单区仍是占位，由后续票接手」。保留它，是为了让
-     * 「闸门通了、首页真的渲染出来了」在真机上一眼可见；它**不是**订单卡，
-     * 也不承载任何业务数据。
+     * 进行中订单区 —— 默认展示一张卡骨架（闸门 ready、订单未回）。
+     * `N = 0` 时 `showOrders` 会变成 false，整区（含标题）消失。
      */
-    ordersPlaceholderTitle: HOME_PAGE_COPY.ordersPlaceholderTitle,
-    ordersPlaceholderHint: HOME_PAGE_COPY.ordersPlaceholderHint,
-  },
+    ordersTitle: HOME_PAGE_COPY.ordersTitle,
+    ordersPhase: 'loading' as OrdersPhase,
+    activeOrders: [] as OrderCardOrder[],
+    orderCount: 0,
+    showOrders: true,
+    showOrdersTitle: false,
+    showViewAll: false,
+    viewAllLabel: '',
+    ordersLoadFailedTitle: HOME_PAGE_COPY.ordersLoadFailed,
+    ordersRetryLabel: HOME_PAGE_COPY.ordersRetry,
+  } as IndexPageData,
 
   lifetimes: {
     attached() {
@@ -142,18 +299,83 @@ Component({
 
   methods: {
     /**
-     * 把闸门状态画到界面上。
+     * 把闸门状态画到界面上，并在 ready 且页面已展示时起订单首查。
      *
      * ⚠️ 只取 `phase` 一个字段：`'failed'` 携带的 `UnifiedError` **不进界面**
      * （失败出口的文案是逐字定稿，不含错误码）。
      * 少搬一个字段，就少一条「把错误码画到屏幕上」的路。
      */
     applyState(state: StartupState): void {
-      if (this.data.phase === state.phase) return
-      this.setData({ phase: state.phase })
+      if (this.data.phase !== state.phase) this.setData({ phase: state.phase })
+      if (state.phase !== 'ready') return
+
+      const page = this as unknown as IndexPageInstance
+      const runtime = runtimeOf(page)
+      // `onShow` 先到、闸门后到：这里补起首查；已经起过就不重复。
+      if (runtime.shown && !runtime.started) void loadOrders(page, 'initial')
     },
 
-    /** 失败出口的「重试」—— **重跑启动链**。 */
+    /**
+     * 回前台 / 首次展示 —— **每次 onShow 都重新取数**，没有本地业务缓存。
+     *
+     * ⚠️ 首查放在这里而不是 `attached`：真实运行时 `onShow` 紧跟 `attached`，
+     * 它才是「用户看到这一屏」的时间点；页面重建时也是如此。
+     */
+    onShow(): void {
+      const page = this as unknown as IndexPageInstance
+      const runtime = runtimeOf(page)
+      runtime.shown = true
+      if (page.data.phase !== 'ready') return
+      void loadOrders(page, runtime.started ? 'refresh' : 'initial')
+    },
+
+    /** 离开前台 —— 闸门 ready 的通知不再触发首查，等下一次 onShow。 */
+    onHide(): void {
+      runtimeOf(this as unknown as IndexPageInstance).shown = false
+    },
+
+    /**
+     * 下拉刷新 —— 与 onShow 一样重置两条流；失败只 toast，旧卡保留。
+     * 无论成功失败都要结束转圈。
+     */
+    onPullDownRefresh(): void {
+      const page = this as unknown as IndexPageInstance
+      if (page.data.phase !== 'ready') {
+        wx.stopPullDownRefresh()
+        return
+      }
+      void loadOrders(page, 'pull').finally(() => {
+        wx.stopPullDownRefresh()
+      })
+    },
+
+    /** 订单区首屏失败的页内重试 —— 只重取订单，不重跑启动链。 */
+    onOrdersRetry(): void {
+      const page = this as unknown as IndexPageInstance
+      if (page.data.phase !== 'ready' || page.data.ordersPhase !== 'loadFailed') return
+      void loadOrders(page, 'retry')
+    },
+
+    /** 整卡点击 → 订单详情（navigateTo，带 id）。 */
+    onOrderTap(event: { detail?: { id?: number } }): void {
+      const id = event.detail?.id
+      if (typeof id !== 'number') return
+      wx.navigateTo({ url: `/${ORDER_DETAIL_PATH}?id=${id}` })
+    },
+
+    /** 与订单列表同名的卡片事件入口 —— 两页的宿主接线保持同一个动作名。 */
+    onCardTap(event: { detail?: { id?: number } }): void {
+      this.onOrderTap(event)
+    },
+
+    /** 「查看全部 N 个」→ 订单 tab（tab 页之间只 `switchTab`）。 */
+    onViewAll(): void {
+      const page = this as unknown as IndexPageInstance
+      if (!page.data.showViewAll) return
+      wx.switchTab({ url: `/${ORDER_LIST_PATH}` })
+    },
+
+    /** 失败出口的「重试」—— **重跑启动链**（不是重取订单）。 */
     onRetry(): void {
       void gate?.start()
     },
@@ -166,8 +388,7 @@ Component({
      *
      * ⚠️ **按 id 选目标，不按 label**：`STATIC_EXITS` 的 id 是行为选择器；
      * 用文案当选择器会在改词那天让入口静默失效。
-     * ⚠️ 「联系客服」不走这里：它是 `open-type="contact"`，由微信原生承载
-     * （不做运行时降级、不做电话双出口）。未知 / 客服 id 到这里就是什么都不做。
+     * ⚠️ 「联系客服」不走这里：它是 `open-type="contact"`，由微信原生承载。
      */
     onStaticExit(event: WechatMiniprogram.CustomEvent<{ exitId?: string }>): void {
       const exitId = event.detail?.exitId

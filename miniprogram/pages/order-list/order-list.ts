@@ -39,6 +39,7 @@ import {
 } from '../../startup/copy'
 import { showToast } from '../../utils/feedback'
 import { resolveLockerCode } from '../../utils/locker-code'
+import { mergeActiveOrders } from '../../utils/order-active'
 import { resolveOrderStatus } from '../../utils/order-status'
 import { LOCKER_PATH, ORDER_DETAIL_PATH, WAITING_PATH } from '../../utils/routes'
 import type { PageOf } from '../../utils/pagination'
@@ -163,11 +164,6 @@ function isEnded(order: OrderSummary): boolean {
   )
 }
 
-/** 进行中判定 —— 2，或 4 且 `endAt` 为空；`status=1` 按进行中兜底（一期不产生）。 */
-function isActive(order: OrderSummary): boolean {
-  return order.status === 1 || order.status === 2 || (order.status === 4 && order.endAt === null)
-}
-
 /** 同一组内按 `id` 去重，保留首个。 */
 function dedupe(orders: readonly OrderSummary[]): OrderSummary[] {
   const byId = new Map<number, OrderSummary>()
@@ -178,25 +174,13 @@ function dedupe(orders: readonly OrderSummary[]): OrderSummary[] {
 }
 
 /**
- * 进行中排序权重 —— 已超时 → 待存入 → 已存入。
+ * 合并两条进行中流 —— 过滤、去重、排序；同档按 id 倒序。
  *
- * `status=1` 落最后一档：它只作为兜底出现，不该插到真实在途单前面。
+ * ⚠️ **判定与排序不在本页**：首页进行中区用的是同一段 `mergeActiveOrders()`
+ * （`utils/order-active.ts`）。两处各写一遍的后果是同一张单在两个页面上分组不同。
  */
-function activeRank(order: OrderSummary): number {
-  if (order.status === 4 && order.endAt === null) return 0
-  if (order.status === 2 && order.startAt === null) return 1
-  if (order.status === 2) return 2
-  return 3
-}
-
-/** 合并两条进行中流 —— 过滤、去重、排序；同档按 id 倒序。 */
 function mergedActive(runtime: OrderListRuntime): OrderSummary[] {
-  const merged = dedupe([...runtime.active2.items, ...runtime.active4.items].filter(isActive))
-  return merged.sort((left, right) => {
-    const rank = activeRank(left) - activeRank(right)
-    if (rank !== 0) return rank
-    return right.id - left.id
-  })
+  return mergeActiveOrders(runtime.active2.items, runtime.active4.items)
 }
 
 /** 服务端的一页 → 某条进行中流的一页（过滤掉不属于该流的状态）。 */

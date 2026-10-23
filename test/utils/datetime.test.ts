@@ -17,6 +17,7 @@ import {
   formatReservationRange,
   formatRestrictionSince,
   formatSlotTime,
+  formatStoredTime,
 } from '../../miniprogram/utils/datetime'
 
 /** 服务端回显的形态：带 `+08:00`（已实测）。 */
@@ -92,6 +93,27 @@ describe('#23 七种时间写法', () => {
   })
 })
 
+describe('#67 首页卡 · 存入时间三档写法', () => {
+  const now = new Date('2026-10-23T12:00:00+08:00')
+
+  it('当天 → `今天 HH:mm`；当年 → `MM-DD HH:mm`；跨年 → `YYYY-MM-DD HH:mm`', () => {
+    expect(formatStoredTime('2026-10-23T09:05:00+08:00', now)).toBe('今天 09:05')
+    expect(formatStoredTime('2026-04-01T09:00:00+08:00', now)).toBe('04-01 09:00')
+    expect(formatStoredTime('2025-04-01T09:00:00+08:00', now)).toBe('2025-04-01 09:00')
+  })
+
+  it('「今天」按服务端时刻的东八区日期判定，不受运行设备时区影响', () => {
+    expect(formatStoredTime('2026-10-23T00:30:00+08:00', now)).toBe('今天 00:30')
+    expect(formatStoredTime('2026-10-22T23:30:00+08:00', now)).toBe('10-22 23:30')
+  })
+
+  it('解析不出时返回空串，不编一个时刻出来', () => {
+    expect(formatStoredTime('', now)).toBe('')
+    expect(formatStoredTime('not-a-date', now)).toBe('')
+    expect(formatStoredTime('2026-10-23T09:05:00+08:00', new Date(Number.NaN))).toBe('')
+  })
+})
+
 describe('#23 时区硬规则：只用服务端回显的值，不用客户端本地时钟重算', () => {
   it('⚠️ 服务端说几点，屏上就是几点 —— 与运行设备的时区无关', () => {
     // 附注逐字：「展示的是**服务端回显**的时刻（响应带 `+08:00`）。
@@ -128,6 +150,7 @@ describe('#23 时区硬规则：只用服务端回显的值，不用客户端本
         'formatReservationRange',
         'formatRestrictionSince',
         'formatSlotTime',
+        'formatStoredTime',
       ])
     })
   })

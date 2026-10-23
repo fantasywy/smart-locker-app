@@ -15,10 +15,12 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { installWxStub, jsonResponse, reply } from '../helpers/wx'
-import { respondInOrder } from '../helpers/http'
-import { HOME_PAGE_COPY, PAGE_TITLES } from '../../miniprogram/startup/copy'
-import { LOCKER_PATH } from '../../miniprogram/utils/routes'
+import { installWxStub, jsonResponse, networkFailure, reply, seedStorage } from '../helpers/wx'
+import { respondInOrder, sentRequests, urlsOf } from '../helpers/http'
+import { BASE_URL } from '../../miniprogram/request/config'
+import { HOME_PAGE_COPY, ORDER_LIST_PATH, PAGE_TITLES } from '../../miniprogram/startup/copy'
+import { LOCKER_PATH, ORDER_DETAIL_PATH } from '../../miniprogram/utils/routes'
+import type { OrderSummary } from '../../miniprogram/types/orders'
 import type { InstalledWxStub } from '../helpers/wx'
 
 const mocks = vi.hoisted(() => ({
@@ -104,9 +106,82 @@ function instantiate(def: Record<string, unknown>): PageInstance {
   return instance
 }
 
-/** 让挂起的微任务链走完（登录链是纯微任务驱动的）。 */
+/** 让挂起的微任务链走完（登录链与两条进行中流都是纯微任务驱动的）。 */
 async function settle(): Promise<void> {
-  for (let i = 0; i < 10; i += 1) await Promise.resolve()
+  for (let i = 0; i < 20; i += 1) await Promise.resolve()
+}
+
+const ORDERS_URL = `${BASE_URL}/api/app/v1/orders`
+const ACTIVE_2 = `${ORDERS_URL}?status=2&pageSize=100`
+const ACTIVE_4 = `${ORDERS_URL}?status=4&pageSize=100`
+
+/** 一份 `13.8` 行形状的订单；每个用例只覆盖它要测的字段。 */
+function order(overrides: Partial<OrderSummary> = {}): OrderSummary {
+  return {
+    id: 1001,
+    orderNo: '20250401001',
+    lockerId: 11,
+    lockerNo: 'WD-01',
+    siteName: '万达广场店',
+    cellNo: 'S03',
+    cellType: 2,
+    startAt: null,
+    endAt: null,
+    status: 2,
+    payAmount: null,
+    estimatedAmount: null,
+    pickupCode: null,
+    ...overrides,
+  }
+}
+
+function listBody(rows: OrderSummary[], total = rows.length): Record<string, unknown> {
+  return { code: 0, message: 'ok', data: { list: rows, total } }
+}
+
+type ArrangedResponse = Record<string, unknown> | { errMsg: string }
+
+/**
+ * 进入首页并让进行中订单区完成首查。
+ *
+ * ⚠️ 预置 refresh token 让闸门走「已有登录态」的免请求路径 —— 本组用例要验的是
+ * 订单区本身，登录链的时序已在 `test/startup/page.test.ts` 覆盖。这样 `wx.request`
+ * 的编排里只剩两条进行中流，请求顺序断言不会被登录请求淹没。
+ */
+async function enter(
+  responses: readonly ArrangedResponse[],
+): Promise<{ wx: InstalledWxStub; page: PageInstance }> {
+  const wx = installWxStub()
+  seedStorage('auth.refreshToken', 'REFRESH-1')
+  wx.request.mockImplementation(
+    respondInOrder(
+      responses.map((response) =>
+        typeof response['errMsg'] === 'string'
+          ? { errMsg: response['errMsg'] }
+          : jsonResponse(response),
+      ),
+    ),
+  )
+  wx.navigateTo.mockImplementation(() => {})
+  wx.switchTab.mockImplementation(() => {})
+  wx.scanCode.mockImplementation(() => {})
+  wx.stopPullDownRefresh.mockImplementation(() => {})
+
+  const def = await loadPage()
+  const page = instantiate(def)
+  page.attached?.()
+  // 真实运行时 onShow 紧跟 attached —— 首查由它触发（闸门 ready 后不再重复起一条）。
+  ;(page.onShow as () => void)()
+  await settle()
+  return { wx, page }
+}
+
+function idsOf(page: PageInstance): number[] {
+  return (page.data.activeOrders as OrderSummary[]).map((item) => item.id)
+}
+
+function renderedJson(page: PageInstance): string {
+  return JSON.stringify(page.data)
 }
 
 /**
@@ -217,6 +292,247 @@ describe('#61 首页 · 闸门三态', () => {
   })
 })
 
+describe('#67 首页 · 进行中订单区', () => {
+  it('⚠️ 两条流各取一页（pageSize=100）；N 取过滤后条数，排序与订单列表进行中组一致', async () => {
+    const { wx, page } = await enter([
+      listBody(
+        [
+          order({ id: 10, status: 2, startAt: '2026-10-23T09:00:00+08:00' }),
+          order({ id: 20, status: 2, startAt: null }),
+          order({ id: 30, status: 2, startAt: '2026-10-23T08:00:00+08:00' }),
+        ],
+        // `total` 故意远大于真实行数 —— N 不得用它。
+        99,
+      ),
+      listBody(
+        [
+          order({ id: 40, status: 4, startAt: '2026-10-23T07:00:00+08:00', endAt: null }),
+          // 已补缴取件（4 且 endAt 有值）→ 不属于进行中。
+          order({
+            id: 50,
+            status: 4,
+            startAt: '2026-10-23T07:00:00+08:00',
+            endAt: '2026-10-23T08:00:00+08:00',
+          }),
+        ],
+        88,
+      ),
+    ])
+
+    expect(urlsOf(sentRequests(wx.request))).toEqual([ACTIVE_2, ACTIVE_4])
+    // 40（已超时）→ 20（待存入）→ 30 / 10（已存入，id 倒序）；首页只渲染前两张。
+    expect(idsOf(page)).toEqual([40, 20])
+    expect(page.data.orderCount).toBe(4)
+    expect(page.data.showOrders).toBe(true)
+    expect(page.data.showOrdersTitle).toBe(true)
+    expect(page.data.showViewAll).toBe(true)
+    expect(page.data.viewAllLabel).toBe('查看全部 4 个')
+  })
+
+  it('⚠️ N = 0：整区（含标题）不渲染', async () => {
+    const { page } = await enter([
+      listBody([]),
+      // 唯一一条 status=4 已闭单 → 过滤后为 0。
+      listBody([
+        order({
+          id: 1,
+          status: 4,
+          startAt: '2026-10-23T07:00:00+08:00',
+          endAt: '2026-10-23T08:00:00+08:00',
+        }),
+      ]),
+    ])
+
+    expect(page.data.ordersPhase).toBe('ready')
+    expect(page.data.orderCount).toBe(0)
+    expect(page.data.activeOrders).toEqual([])
+    expect(page.data.showOrders).toBe(false)
+    expect(page.data.showOrdersTitle).toBe(false)
+    expect(page.data.showViewAll).toBe(false)
+  })
+
+  it('⚠️ N = 1：全部显示，无「查看全部」', async () => {
+    const { page } = await enter([
+      listBody([order({ id: 1, status: 2, startAt: null })]),
+      listBody([]),
+    ])
+
+    expect(idsOf(page)).toEqual([1])
+    expect(page.data.orderCount).toBe(1)
+    expect(page.data.showOrders).toBe(true)
+    expect(page.data.showViewAll).toBe(false)
+    expect(page.data.viewAllLabel).toBe('')
+  })
+
+  it('⚠️ N = 2：两张全部显示，无「查看全部」', async () => {
+    const { page } = await enter([
+      listBody([
+        order({ id: 2, status: 2, startAt: null }),
+        order({ id: 1, status: 2, startAt: '2026-10-23T09:00:00+08:00' }),
+      ]),
+      listBody([]),
+    ])
+
+    expect(idsOf(page)).toEqual([2, 1])
+    expect(page.data.orderCount).toBe(2)
+    expect(page.data.showViewAll).toBe(false)
+  })
+
+  it('⚠️ 同 id 出现在两条流时按 id 去重，N 不重复计', async () => {
+    const duplicated = order({ id: 7, status: 2, startAt: null })
+    const { page } = await enter([
+      listBody([duplicated]),
+      listBody([order({ id: 7, status: 4, startAt: '2026-10-23T07:00:00+08:00', endAt: null })]),
+    ])
+
+    expect(page.data.orderCount).toBe(1)
+    expect(idsOf(page)).toEqual([7])
+  })
+
+  it('⚠️ 首屏加载失败只在订单区给「订单加载失败 / 重试」，扫码不受影响', async () => {
+    const { wx, page } = await enter([networkFailure(), listBody([])])
+
+    expect(page.data.phase).toBe('ready')
+    expect(page.data.ordersPhase).toBe('loadFailed')
+    expect(page.data.ordersLoadFailedTitle).toBe('订单加载失败')
+    expect(page.data.ordersRetryLabel).toBe('重试')
+    expect(page.data.showOrders).toBe(true)
+    expect(page.data.showOrdersTitle).toBe(false)
+
+    // 订单区失败不影响扫码主行动。
+    wx.scanCode.mockImplementation((options) => {
+      options.success?.({ result: 'https://locker.example.com/l/WD-01' })
+    })
+    ;(page.onScan as () => void)()
+    expect(wx.navigateTo).toHaveBeenCalledWith({ url: `/${LOCKER_PATH}?code=WD-01` })
+  })
+
+  it('⚠️ 失败后点重试真的重新取两条流，成功后渲染订单', async () => {
+    const { wx, page } = await enter([networkFailure(), listBody([])])
+    expect(page.data.ordersPhase).toBe('loadFailed')
+
+    wx.request.mockImplementation(
+      respondInOrder([
+        jsonResponse(listBody([order({ id: 1, status: 2, startAt: null })])),
+        jsonResponse(listBody([])),
+      ]),
+    )
+    ;(page.onOrdersRetry as () => void)()
+    await settle()
+
+    expect(page.data.ordersPhase).toBe('ready')
+    expect(idsOf(page)).toEqual([1])
+    expect(page.data.showViewAll).toBe(false)
+  })
+
+  it('⚠️ 下拉刷新失败：toast「刷新失败，请稍后重试」，旧卡保留，转圈结束', async () => {
+    const { wx, page } = await enter([
+      listBody([order({ id: 1, status: 2, startAt: null })]),
+      listBody([]),
+    ])
+    expect(idsOf(page)).toEqual([1])
+
+    wx.request.mockImplementation(respondInOrder([networkFailure(), networkFailure()]))
+    ;(page.onPullDownRefresh as () => void)()
+    await settle()
+
+    expect(mocks.showToast).toHaveBeenCalledWith('刷新失败，请稍后重试')
+    expect(idsOf(page)).toEqual([1])
+    expect(page.data.ordersPhase).toBe('ready')
+    expect(wx.stopPullDownRefresh).toHaveBeenCalled()
+  })
+
+  it('⚠️ onShow 静默刷新失败：不提示、保留旧卡、页面仍 ready', async () => {
+    const { wx, page } = await enter([
+      listBody([order({ id: 1, status: 2, startAt: null })]),
+      listBody([]),
+    ])
+    const before = sentRequests(wx.request).length
+
+    wx.request.mockImplementation(respondInOrder([networkFailure(), networkFailure()]))
+    ;(page.onShow as () => void)()
+    await settle()
+
+    expect(mocks.showToast).not.toHaveBeenCalled()
+    expect(idsOf(page)).toEqual([1])
+    expect(page.data.ordersPhase).toBe('ready')
+    // 每次回到前台都真的重新取数 —— 没有本地业务缓存。
+    expect(sentRequests(wx.request).length).toBe(before + 2)
+  })
+
+  it('⚠️ onShow 成功刷新时用新数据替换旧卡', async () => {
+    const { wx, page } = await enter([
+      listBody([order({ id: 1, status: 2, startAt: null })]),
+      listBody([]),
+    ])
+    expect(idsOf(page)).toEqual([1])
+
+    wx.request.mockImplementation(
+      respondInOrder([
+        jsonResponse(listBody([order({ id: 2, status: 2, startAt: null })])),
+        jsonResponse(listBody([])),
+      ]),
+    )
+    ;(page.onShow as () => void)()
+    await settle()
+
+    expect(idsOf(page)).toEqual([2])
+  })
+
+  it('⚠️ 整卡点击 → 订单详情（navigateTo，带 id）', async () => {
+    const { wx, page } = await enter([
+      listBody([order({ id: 40, status: 4, startAt: '2026-10-23T07:00:00+08:00', endAt: null })]),
+      listBody([]),
+    ])
+
+    ;(page.onOrderTap as (event: unknown) => void)({ detail: { id: 40 } })
+
+    expect(wx.navigateTo).toHaveBeenCalledWith({ url: `/${ORDER_DETAIL_PATH}?id=40` })
+  })
+
+  it('⚠️ 「查看全部 N 个」→ switchTab 订单 tab', async () => {
+    const { wx, page } = await enter([
+      listBody([
+        order({ id: 3, status: 2, startAt: null }),
+        order({ id: 2, status: 2, startAt: null }),
+        order({ id: 1, status: 2, startAt: null }),
+      ]),
+      listBody([]),
+    ])
+
+    ;(page.onViewAll as () => void)()
+    expect(wx.switchTab).toHaveBeenCalledWith({ url: `/${ORDER_LIST_PATH}` })
+  })
+
+  it('⚠️ 首页卡只用 home 变体，不出现金额 / 取件层 / 附近入口', () => {
+    const wxml = stripComments(indexWxml())
+    const source = stripComments(indexSource())
+    expect(wxml).toContain('<order-card')
+    expect(wxml).toContain('variant="home"')
+    expect(wxml).toMatch(/<skeleton[^>]*variant="card"/)
+    expect(wxml).not.toContain('payOrder')
+    expect(wxml).not.toContain('pickup-sheet')
+    expect(wxml).not.toContain('nearby')
+    expect(source).not.toContain('formatMoney')
+    expect(source).not.toContain('pickup-sheet')
+  })
+
+  it('⚠️ 页面不发 wx.request、不碰 storage、不写路径字面量；订单号不进渲染模型', async () => {
+    const source = stripComments(indexSource())
+    expect(source).not.toMatch(/wx\.request\b/)
+    expect(source).not.toMatch(/wx\.(getStorageSync|setStorageSync|removeStorageSync|getStorage)\b/)
+    expect(source).not.toMatch(/url\s*:\s*['"`]\/?pages\//)
+    expect(source).toContain('ORDER_LIST_PATH')
+    expect(source).toContain('ORDER_DETAIL_PATH')
+
+    const { page } = await enter([
+      listBody([order({ id: 1, status: 2, startAt: null, orderNo: '20250401001' })]),
+      listBody([]),
+    ])
+    expect(renderedJson(page)).not.toContain('20250401001')
+  })
+})
+
 describe('#61 首页 · 文案与路由只有一个家', () => {
   it('⚠️ 导航栏标题留空，但 PAGE_TITLES 仍登记「首页」', () => {
     const wxml = stripComments(indexWxml())
@@ -248,6 +564,11 @@ describe('#61 首页 · 文案与路由只有一个家', () => {
       HOME_PAGE_COPY.scanButton,
       HOME_PAGE_COPY.notLockerCode,
       HOME_PAGE_COPY.scanFailed,
+      HOME_PAGE_COPY.ordersTitle,
+      HOME_PAGE_COPY.viewAll,
+      HOME_PAGE_COPY.ordersLoadFailed,
+      HOME_PAGE_COPY.ordersRetry,
+      HOME_PAGE_COPY.refreshFailed,
     ]) {
       expect(wxml, `wxml 里出现了文案字面量「${literal}」`).not.toContain(literal)
     }
@@ -270,13 +591,12 @@ describe('#61 首页 · 硬约束（源码守卫）', () => {
     }
   })
 
-  it('⚠️ 订单区仍是占位：没有订单卡组件、没有附近入口、没有 switchTab', () => {
+  it('⚠️ 订单区已接线，但附近入口仍不出现（随 #72 同一次发版）', () => {
     const wxml = stripComments(indexWxml())
-    for (const forbidden of ['order-card', 'nearby', 'switchTab', 'wx:for="{{ orders }}"']) {
-      expect(wxml, `首页提前实现了「${forbidden}」—— 订单区归 #67，附近入口随 #72`).not.toContain(
-        forbidden,
-      )
-    }
+    expect(wxml).toContain('<order-card')
+    expect(wxml).toContain('variant="home"')
+    expect(wxml).not.toContain('nearby')
+    expect(wxml).not.toContain('switchTab')
   })
 
   it('⚠️ 按下反馈只有 0ms 换色：hover-class 换 `$color-primary-pressed`，无 transition / transform / opacity', () => {

@@ -39,6 +39,25 @@
 </view>
 
 <!--
+  首页进行中订单区 · 一张卡骨架（#67）。
+  ⚠️ 只画一张卡：订单区的首屏占位就是「一张卡」的形状，不是整页骨架；
+     颜色仍只有中性 token，无文字。
+-->
+<view
+  wx:elif="{{ variant === 'card' }}"
+  class="skeleton skeleton--card"
+  aria-role="skeleton"
+>
+  <view class="skeleton__row">
+    <view class="skeleton__body">
+      <view class="skeleton__block skeleton__block--title"></view>
+      <view class="skeleton__block skeleton__block--meta"></view>
+    </view>
+    <view class="skeleton__chip"></view>
+  </view>
+</view>
+
+<!--
   「我的」页身份区骨架（#69）—— 形状对照真实版式：64px 圆形头像 + 两行短块。
   ⚠️ 与信用分卡**各自一份**：两块的形状不同，且读取失败时各自在块内给一行提示。
 -->
