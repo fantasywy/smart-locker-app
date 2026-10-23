@@ -39,6 +39,25 @@
 </view>
 
 <!--
+  首页进行中订单区 · 一张卡骨架（#67）。
+  ⚠️ 只画一张卡：订单区的首屏占位就是「一张卡」的形状，不是整页骨架；
+     颜色仍只有中性 token，无文字。
+-->
+<view
+  wx:elif="{{ variant === 'card' }}"
+  class="skeleton skeleton--card"
+  aria-role="skeleton"
+>
+  <view class="skeleton__row">
+    <view class="skeleton__body">
+      <view class="skeleton__block skeleton__block--title"></view>
+      <view class="skeleton__block skeleton__block--meta"></view>
+    </view>
+    <view class="skeleton__chip"></view>
+  </view>
+</view>
+
+<!--
   附近柜机页骨架（#72）—— 搜索行 + 三张站点卡。
   ⚠️ 三张卡对应首屏 `SKELETON_ROW_COUNT`，纯图形、无文字；地图带不在本票范围。
 -->

@@ -1,8 +1,8 @@
-// **时间格式化** —— 7 种时间写法的唯一实现处。issue #23 的交付物之一。
+// **时间格式化** —— 8 种时间写法的唯一实现处。issue #23 的交付物之一（#67 增补第 8 种）。
 //
 // ## 为什么需要一个模块，而不是各页面自己拼
 //
-// 这里有**7 种互不相同**的时间写法，而它们的消费者散在 5 个页面里。
+// 这里有**8 种互不相同**的时间写法，而它们的消费者散在 5 个页面里。
 // 各页面自己拼的后果不是「不好看」，是**同一时刻在不同页面上写成两个样子** ——
 // 而用户会拿这个去对客服。本模块让每种写法只有一处实现，`pnpm test` 逐个钉住。
 //
@@ -18,7 +18,11 @@
 //    没有 `formatNow()`，没有任何函数在缺参数时回落到 `new Date()`。
 //    一个「取当前时间并格式化」的函数在这里根本写不出来。
 //
-// 2. **格式受控，不提供自由拼装。** 本模块只导出 7 个具名函数，**不导出**通用的
+//    ⚠️ **唯一需要「现在」的是** `formatStoredTime()` 的「今天 / 当年」选择；
+//    它的 `now` 是**显式入参**（由调用方在渲染时传入），模块自己不读时钟 ——
+//    那条纪律因此仍然成立：模块内没有一处 `new Date()` 去猜当前时刻。
+//
+// 2. **格式受控，不提供自由拼装。** 本模块只导出 8 个具名函数，**不导出**通用的
 //    `format(date, pattern)`。一个 pattern 参数等于把整张时间写法表重新交给调用方，
 //    下一个人就会拼出第 8 种写法 —— 而那种写法没有任何依据。
 //
@@ -49,6 +53,7 @@ import {
   NOT_YET_STORED_HINT,
   PROFILE_COPY,
   STORED_TIME_PREFIX,
+  TODAY_LABEL,
 } from '../startup/copy'
 
 /**
@@ -130,6 +135,57 @@ export function formatOrderTimeInProgress(instant: ServerInstant): string {
   if (time === '') return ''
   // 前缀只有 `copy.ts` 一个家（时间轴 `OPENED` 用的是同一个词）。
   return `${STORED_TIME_PREFIX} ${time}`
+}
+
+/** 两位补零 —— 比较用的日期字面量固定宽度。 */
+function pad2(value: number): string {
+  return value < 10 ? `0${value}` : String(value)
+}
+
+/**
+ * 把「现在」收敛成**东八区**的日期字面量 —— **只用于「今天 / 当年 / 跨年」这一档选择**。
+ *
+ * ⚠️ 为什么固定 +08:00 而不是读设备本地时区：服务端回显的时刻串带 `+08:00`
+ * （已实测），「今天」是相对于服务端时间基准的相对说法。用设备本地时区判断
+ * 会让一个在东八区之外的用户看到「今天」标在一个不属于他今天的日期上 ——
+ * 那正是本模块文件头规则 1 要挡的「双源真相」。
+ *
+ * ⚠️ 本函数不读时钟：`now` 由调用方传入（页面 / 组件在渲染时提供），
+ * 所以模块仍然没有「自己取当前时间」的入口。
+ */
+function chinaDateOf(now: Date): { date: string; year: string } | null {
+  const time = now.getTime()
+  if (!Number.isFinite(time)) return null
+  // 先把绝对时刻拨到东八区，再用 UTC getter 读「东八区的年月日」——
+  // 这样结果与运行设备的时区设置无关。
+  const china = new Date(time + 8 * 60 * 60 * 1000)
+  const year = china.getUTCFullYear()
+  const month = china.getUTCMonth() + 1
+  const day = china.getUTCDate()
+  return { date: `${year}-${pad2(month)}-${pad2(day)}`, year: String(year) }
+}
+
+/**
+ * **首页进行中卡 · 存入时间** —— `今天 HH:mm` / `MM-DD HH:mm` / `YYYY-MM-DD HH:mm`。
+ *
+ * 契约（spec #2 / §14.3）：当天「今天 HH:mm」，当年 `MM-DD HH:mm`，
+ * 跨年 `YYYY-MM-DD HH:mm`；不使用相对时间。
+ *
+ * ⚠️ **不加「存入」前缀**：首页卡的格口行是 `cellNo · 存入时间`，前缀会让
+ * 同一行读成「S03 · 存入 今天 09:00」—— 状态标签已经说明这是什么时刻。
+ *
+ * ⚠️ `now` 是**显式入参**，不是模块内部 `new Date()`：本模块仍然没有
+ * 「取当前时间」的入口（见文件头规则 1）。调用方在渲染时传入自己的时钟。
+ *
+ * @returns 解析不出 / `now` 非法时返回空串 —— 页面按「没有时刻」处理，不编一个值
+ */
+export function formatStoredTime(instant: ServerInstant, now: Date): string {
+  const parts = partsOf(instant)
+  const today = chinaDateOf(now)
+  if (parts === null || today === null) return ''
+  if (parts.date === today.date) return `${TODAY_LABEL} ${parts.time}`
+  if (parts.date.slice(0, 4) === today.year) return parts.monthDay
+  return parts.full
 }
 
 /**

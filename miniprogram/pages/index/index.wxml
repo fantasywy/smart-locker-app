@@ -4,7 +4,7 @@
   三条分支**互斥**，由闸门的 phase 一个变量驱动（失败出口由**启动态**驱动，
   不下放到各页面的数据区）：
     loading → 首页同构骨架（品牌块 / 圆按钮 / 一卡 / 入口条，纯图形无文字）
-    ready   → 品牌区 → 112px 圆形扫码按钮 → 订单区占位（#67 接手）
+    ready   → 品牌区 → 112px 圆形扫码按钮 → 进行中订单区 → 附近入口条
     failed  → 全局唯一失败出口（说明 + 重试 + 静态出口）
 
   ⚠️ **导航栏标题留空**（只留胶囊）：spec §2 的首页身份是「一个主行动」，
@@ -26,11 +26,10 @@
   <skeleton wx:if="{{ phase === 'loading' }}" variant="home" />
 
   <!--
-    ② 首页 —— 品牌区 + 扫码主行动 + 订单区占位。
+    ② 首页 —— 品牌区 + 扫码主行动 + 进行中订单区 + 附近入口条。
 
-    ⚠️ **订单区仍是占位**（票面：由后续票 #67 接手）。这里刻意不画订单卡、
-       不显示金额 / 取件码、不引入任何订单数据 —— 一个「看起来像订单」的假卡
-       比空白更糟（用户会以为它真的在办）。
+    ⚠️ 订单卡只画「我在办的事」：站点名 / 状态 / 格口 / 存入时间 / 取件码；
+       不显示参考金额、实付或支付按钮（spec §2）。
     ⚠️ **附近入口条在订单区之后**：它随 #72 与附近 tab 同一次发版露出（spec §1），
        只指路、不带距离 / 余位等动态数据。
   -->
@@ -71,10 +70,54 @@
       <view class="home__scan-label">{{ scanLabel }}</view>
     </view>
 
-    <!-- 订单区占位 —— 过渡期的债，见 HOME_PAGE_COPY.ordersPlaceholderTitle 的注释。 -->
-    <view class="home__orders-placeholder">
-      <view class="home__orders-placeholder-title">{{ ordersPlaceholderTitle }}</view>
-      <view class="home__orders-placeholder-hint">{{ ordersPlaceholderHint }}</view>
+    <!--
+      进行中订单区（#67）。
+
+      ⚠️ **N = 0 时整区（含标题）不渲染**：`showOrders` 由页面按过滤后的条数设置。
+      ⚠️ 首屏 / 重试失败是**页内块**，不是整页失败出口 —— 扫码主行动始终可用。
+      ⚠️ 卡片只用 `order-card` 的 `home` 变体：无金额、无支付按钮；取件码有值必显。
+      ⚠️ 「查看全部 N 个」只在 N > 2 时出现，点击切订单 tab。
+    -->
+    <view wx:if="{{ showOrders }}" class="home__orders">
+      <view wx:if="{{ showOrdersTitle }}" class="home__orders-head">
+        <view class="home__orders-title">{{ ordersTitle }}</view>
+        <view
+          wx:if="{{ showViewAll }}"
+          class="home__view-all"
+          bindtap="onViewAll"
+          hover-class="home__view-all_active"
+          hover-start-time="0"
+          hover-stay-time="0"
+          aria-role="button"
+        >
+          <text class="home__view-all-label">{{ viewAllLabel }}</text>
+          <icon name="nav.disclosure" tone="sub" size="{{16}}" />
+        </view>
+      </view>
+
+      <!-- 闸门 ready、订单未回：订单区一张卡骨架（纯图形，无文字）。 -->
+      <skeleton wx:if="{{ ordersPhase === 'loading' }}" variant="card" />
+
+      <view wx:elif="{{ ordersPhase === 'loadFailed' }}" class="home__orders-failed">
+        <view class="home__orders-failed-title">{{ ordersLoadFailedTitle }}</view>
+        <button
+          class="home__orders-failed-action"
+          hover-class="home__orders-failed-action_active"
+          hover-start-time="0"
+          hover-stay-time="0"
+          bindtap="onOrdersRetry"
+        >{{ ordersRetryLabel }}</button>
+      </view>
+
+      <view wx:else class="home__orders-cards">
+        <order-card
+          wx:for="{{ homeOrders }}"
+          wx:key="id"
+          order="{{ item }}"
+          variant="home"
+          bind:tap="onOrderTap"
+        />
+      </view>
     </view>
 
     <!--

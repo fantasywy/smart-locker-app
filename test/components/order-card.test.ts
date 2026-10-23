@@ -435,6 +435,37 @@ describe('#66 order-card · 字段 / 金额 / 主行动矩阵', () => {
     expect(instance.data.pickupCode).toBe('385214')
   })
 
+  it('⚠️ home 变体：存入时间按「今天 / 当年 / 跨年」三档写法显示', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-23T12:00:00+08:00'))
+
+    const today = await render(
+      order({ status: 2, cellNo: 'S03', startAt: '2026-10-23T09:05:00+08:00' }),
+      'home',
+    )
+    expect(today.data.cellLine).toBe('S03 · 今天 09:05')
+
+    const sameYear = await render(
+      order({ status: 2, cellNo: 'S03', startAt: '2026-04-01T09:00:00+08:00' }),
+      'home',
+    )
+    expect(sameYear.data.cellLine).toBe('S03 · 04-01 09:00')
+
+    const crossYear = await render(
+      order({ status: 2, cellNo: 'S03', startAt: '2025-04-01T09:00:00+08:00' }),
+      'home',
+    )
+    expect(crossYear.data.cellLine).toBe('S03 · 2025-04-01 09:00')
+  })
+
+  it('⚠️ home 变体：未存入时不显示时间，只留格口', async () => {
+    const instance = await render(
+      order({ status: 2, cellNo: 'S03', startAt: null }),
+      'home',
+    )
+    expect(instance.data.cellLine).toBe('S03')
+  })
+
   it('⚠️ 金额缺值时不编一个「¥0.00」出来', async () => {
     const instance = await render(
       order({ status: 2, startAt: '2025-04-01T09:00:00+08:00', estimatedAmount: null }),
