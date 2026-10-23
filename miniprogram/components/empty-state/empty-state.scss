@@ -5,7 +5,7 @@
 // ⚠️ **单位分工**：**布局几何用 `rpx`**（`750rpx` = 屏宽，不同屏宽下版式一致），
 //    **字号与 1px 级细节用 `px`**。所以尺寸一律 `rpx`，字号一律走 `v.$font-size-*`
 //    （那些 token 本身是 px，同属这条约定）。
-//    ⚠️ 这条在本仓库是**真会咬人**的：`scripts/verify-visual-tokens.mjs` 的 68 条断言里
+//    ⚠️ 这条在本仓库是**真会咬人**的：`scripts/verify-visual-tokens.mjs` 的既有断言里
 //    **没有一条**查 px/rpx，所以走查与评审是唯一的网（#23 review 抓到过一次）。
 //
 // ⚠️ 语气上它是**中性**的：「还没有订单」不是错误，不该染任何语义色。
@@ -61,20 +61,19 @@
   height: 88rpx;
   line-height: 88rpx;
   padding: 0 v.$spacing-xl;
-  background: v.$color-primary;
+  // 主按钮填充用 `$color-primary-active`（#008655）：白字 4.62 ≥ AA。
+  // `$color-primary` 原值压白只有 2.66，只能做装饰，不得承载白字。
+  background: v.$color-primary-active;
   color: v.$color-bg-card;
   font-size: v.$font-size-body;
-  border-radius: v.$radius-component;
+  border-radius: v.$radius-control;
 }
 
 // 按下反馈 —— 小程序没有 :hover，用 hover-class 挂这个类（与 weui 骨架的 weui-active 同法）。
 //
-// ⚠️ 用 `$color-primary-hover` 而不是 `$color-primary-active`：这两个 token
-//    分了**不同的语义** —— `-hover` 是「按下态」（`_variables.scss` 的注释逐字：
-//    「按下态（小程序无 hover，留给『按下』反馈）」），`-active` 是「正常/激活档」，
-//    它同时是绿色文字的 ink（白底 4.62）与「白字压绿底」的底色。
-//    拿 ink 当按下态底色是两回事，且会与 `failure-exit__retry` 的按下态分叉 ——
-//    同一个概念两个 token。
+// ⚠️ 按下态用 `$color-primary-pressed`（#00744a，白字 5.84）：它是**按下**的专用填充，
+//    与正常态的 `$color-primary-active`（#008655，白字 4.62）分开。两个都过 AA，
+//    但按下态必须更深一档，否则用户看不出「这一下已经按到了」。
 .empty-state__action_active {
-  background: v.$color-primary-hover;
+  background: v.$color-primary-pressed;
 }

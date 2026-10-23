@@ -49,15 +49,14 @@
 //    按钮语义），这在「一个空屏上只做一件事」的场合值得那两行 `::after` reset
 //    （小程序 `<button>` 自带一层边框）的代价。「我的」页的客服出口也走 `<button>`。
 //
-// 5. ⚠️ **按下态用 `$color-primary-hover`，不是 `$color-primary-active`**。
-//    `_variables.scss` 给这两个 token 分了不同的语义：`-hover` 是「按下态」
-//    （注释逐字：「按下态（小程序无 hover，留给『按下』反馈）」），`-active` 是
-//    「正常/激活档」，它同时是**绿色文字的 ink**（白底 4.62）与「白字压绿底」的底色。
-//    拿 ink 当按下态底色是两回事，且会与 `failure-exit__retry` 的按下态分叉 ——
-//    同一个概念两个 token，正是要避免的那种漂移。
+// 5. ⚠️ **正常态用 `$color-primary-active`，按下态用 `$color-primary-pressed`**。
+//    `_variables.scss` 给这两个 token 分了不同的语义：`-active` 是「正常/激活档」，
+//    同时是**绿色文字的 ink**（白底 4.62）与「白字压绿底」的底色；`-pressed` 才是
+//    按下态（白字 5.84）。拿 ink 当按下态底色、或拿按下态当常态，都会与
+//    `failure-exit__retry` 的同一组状态分叉 —— 同一个概念两个 token，正是要避免的漂移。
 //
 // ⚠️ **尺寸单位：布局几何用 `rpx`，字号与 1px 细节用 `px`** ——
-//    本仓库**没有**守卫查这一条（`verify-visual-tokens.mjs` 的 68 条断言里一条都不查），
+//    本仓库**没有**守卫查这一条（`verify-visual-tokens.mjs` 的既有断言里一条都不查），
 //    所以 #23 的 review 抓到过一次 `px` 误用。改样式时请按这条规则再核一遍。
 
 Component({

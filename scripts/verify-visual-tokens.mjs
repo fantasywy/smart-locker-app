@@ -1,19 +1,29 @@
 #!/usr/bin/env node
-// 色调层验收脚本 —— 8 条可判定事实。
+// 视觉 token 验收脚本 —— 逐值断言 + 动效白名单。
 //
-// 为什么是脚本而不是「靠眼睛」：色调层的取值全是**可判定的离散事实**，而它出过的两次事故
-// （device 的 1.23 对比度、V25 的 2.06 数值漂移）都是眼睛看不出来的。⚠️ 尤其第 3 条 ——
+// 为什么是脚本而不是「靠眼睛」：token 层全是**可判定的离散事实**，而它出过的两次事故
+// （device 的 1.23 对比度、V25 的 2.06 数值漂移）都是眼睛看不出来的。⚠️ 尤其对比度 ——
 // device 的单测只断言 `< AA`、不断言具体数值，所以一个错误的 2.06 能一直躺在文档里。
 // 本脚本断言**具体数值**，让同类漂移下次立刻报警。
+//
+// 三类判据：
+//   1. token 表逐值（颜色 / 圆角五档 / 四条阴影 / 字号 / 行高 / 字重 / 间距）；
+//   2. 对比度（含负向断言：语义原值与 tint 上的绿字都必须 < AA）；
+//   3. 结构（已删除 token 不得复现；transition / animation / @keyframes 只允许白名单）。
 //
 // 用法：node scripts/verify-visual-tokens.mjs
 // 退出码 0 = 全过；1 = 有断言失败（打印哪一条、期望值、实际值）。
 
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const variablesPath = fileURLToPath(new URL('../miniprogram/styles/_variables.scss', import.meta.url))
-const mixinsPath = fileURLToPath(new URL('../miniprogram/styles/_mixins.scss', import.meta.url))
+const repoRoot = fileURLToPath(new URL('../', import.meta.url))
+const miniprogramDir = join(repoRoot, 'miniprogram')
+const variablesPath = join(miniprogramDir, 'styles', '_variables.scss')
+const mixinsPath = join(miniprogramDir, 'styles', '_mixins.scss')
+const appScssPath = join(miniprogramDir, 'app.scss')
+const scriptPath = fileURLToPath(import.meta.url)
 
 const failures = []
 let checks = 0
@@ -38,6 +48,24 @@ function readTokens(scss) {
     if (m?.[1] !== undefined && m[2] !== undefined) tokens[m[1]] = m[2].replace(/\/\/.*$/, '').trim()
   }
   return tokens
+}
+
+/** 递归收集目录下的指定后缀文件（跳过 node_modules / miniprogram_npm）。 */
+function collect(dir, extensions) {
+  const found = []
+  let entries
+  try {
+    entries = readdirSync(dir)
+  } catch {
+    return found
+  }
+  for (const entry of entries) {
+    if (entry === 'node_modules' || entry === 'miniprogram_npm') continue
+    const full = join(dir, entry)
+    if (statSync(full).isDirectory()) found.push(...collect(full, extensions))
+    else if (extensions.some((ext) => entry.endsWith(ext))) found.push(full)
+  }
+  return found
 }
 
 const scss = readFileSync(variablesPath, 'utf8')
@@ -73,6 +101,12 @@ const round2 = (n) => Math.round(n * 100) / 100
 const AA = 4.5
 const WHITE = '#ffffff'
 
+function checkContrast(label, fg, bg, expected) {
+  const ratio = round2(contrast(fg, bg))
+  check(label, ratio, expected)
+  return ratio
+}
+
 // ---------- 第 0 条：解析器兜底 ----------
 // 解析器一旦静默返回空表（比如换了导入方式），下面所有否定式断言都会假通过。
 checkTrue(
@@ -81,10 +115,13 @@ checkTrue(
   `只解析到 ${Object.keys(tokens).length} 个 token`,
 )
 
-// ---------- 第 1 条：五档 token 取值逐值一致 ----------
-const EXPECTED_TOKENS = {
+// ---------- 第 1 条：颜色 token 逐值一致 ----------
+const EXPECTED_COLORS = {
   'color-primary': '#00b578',
+  'color-primary-pressed': '#00744a',
   'color-primary-active': '#008655',
+  'color-primary-tint': '#e8f7f0',
+  'color-success': '#00b578',
   'color-warning': '#e6a23c',
   'color-danger': '#f56c6c',
   'color-info': '#909399',
@@ -96,51 +133,97 @@ const EXPECTED_TOKENS = {
   'color-bg-page': '#f5f7fa',
   'color-bg-card': '#ffffff',
   'color-border': '#dcdfe6',
-  'color-primary-hover': '#009a68',
-  'color-success': '#00b578',
+  'color-overlay': 'rgba(0, 0, 0, 0.45)',
 }
-for (const [name, expected] of Object.entries(EXPECTED_TOKENS)) check(`$${name}`, token(name), expected)
+for (const [name, expected] of Object.entries(EXPECTED_COLORS)) check(`$${name}`, token(name), expected)
 
-// ---------- 第 2 条：ink 压白底全部 ≥ AA（断言具体数值） ----------
+// ---------- 第 2 条：白字只允许压三个已批准的底色 ----------
+// §12 硬规则 1：白字只允许压 #008655 / #00744a / #1f2329 / #474747。
+// 后两个是中性深色（正文色之一与 Vant 深色复合底），这里断言前三个 token 上的取值。
+const PRIMARY_FILL = token('color-primary-active')
+const PRIMARY_PRESSED = token('color-primary-pressed')
+const TEXT_MAIN = token('color-text-main')
+
+const WHITE_TEXT_ON = [
+  ['$color-primary-active（主按钮填充）', PRIMARY_FILL, 4.62],
+  ['$color-primary-pressed（按下态）', PRIMARY_PRESSED, 5.84],
+  ['$color-text-main（正文深色底）', TEXT_MAIN, 15.78],
+]
+for (const [label, bg, expected] of WHITE_TEXT_ON) {
+  const ratio = checkContrast(`白字压 ${label} 对比度`, WHITE, bg, expected)
+  checkTrue(`白字压 ${label} ≥ AA`, ratio >= AA, `实际 ${ratio}`)
+}
+
+// 负向：这些底色**不得**承载白字。旧按下态色值也必须在「白字压它只有 3.61」这条上被钉死。
+const OLD_PRESSED_HEX = '#009a' + '68'
+const VANT_PRESSED_COMPOSITE = '#0072' + '48'
+const FORBIDDEN_WHITE_BACKGROUNDS = [
+  ['$color-primary（装饰原值）', token('color-primary'), 2.66],
+  ['旧按下态色值', OLD_PRESSED_HEX, 3.61],
+  ['$color-warning（警示原值）', token('color-warning'), 2.19],
+  ['$color-danger（危险原值）', token('color-danger'), 2.90],
+  ['$color-info（中性原值）', token('color-info'), 3.08],
+]
+for (const [label, bg, expected] of FORBIDDEN_WHITE_BACKGROUNDS) {
+  const ratio = checkContrast(`白字压 ${label} 对比度`, WHITE, bg, expected)
+  checkTrue(`白字不得压 ${label}（< AA）`, ratio < AA, `实际 ${ratio}`)
+}
+
+// Vant 按下态的复合色（#59 接线时使用）—— 这里只钉住 §12 的对比度事实。
+const vantPressedRatio = checkContrast('白字压 Vant 按下态复合色对比度', WHITE, VANT_PRESSED_COMPOSITE, 6.0)
+checkTrue('白字压 Vant 按下态复合色 ≥ AA', vantPressedRatio >= AA, `实际 ${vantPressedRatio}`)
+
+// ---------- 第 3 条：tint / 页面底上的文字与绿色 ----------
+const TINT = token('color-primary-tint')
+const PAGE_BG = token('color-bg-page')
+const TEXT_SUB = token('color-text-sub')
+
+const primaryOnTint = checkContrast('$color-primary-active 压 tint 对比度', PRIMARY_FILL, TINT, 4.18)
+checkTrue(
+  '$color-primary-active 在 tint 上只能做图标 / 描边（< AA，不得当文字）',
+  primaryOnTint < AA,
+  `实际 ${primaryOnTint}`,
+)
+const subOnTint = checkContrast('$color-text-sub 压 tint 对比度', TEXT_SUB, TINT, 4.93)
+checkTrue('$color-text-sub 压 tint ≥ AA', subOnTint >= AA, `实际 ${subOnTint}`)
+const mainOnTint = checkContrast('$color-text-main 压 tint 对比度', TEXT_MAIN, TINT, 14.27)
+checkTrue('$color-text-main 压 tint ≥ AA', mainOnTint >= AA, `实际 ${mainOnTint}`)
+
+const subOnPage = checkContrast('$color-text-sub 压页面底对比度', TEXT_SUB, PAGE_BG, 5.08)
+checkTrue('$color-text-sub 压页面底 ≥ AA', subOnPage >= AA, `实际 ${subOnPage}`)
+const mainOnPage = checkContrast('$color-text-main 压页面底对比度', TEXT_MAIN, PAGE_BG, 14.70)
+checkTrue('$color-text-main 压页面底 ≥ AA', mainOnPage >= AA, `实际 ${mainOnPage}`)
+
+// ---------- 第 4 条：ink 压白底 / 标签底全部 ≥ AA ----------
 const INK_ON_WHITE = {
   'color-warning-ink': 4.77,
   'color-danger-ink': 4.53,
   'color-primary-active': 4.62,
 }
 for (const [name, expected] of Object.entries(INK_ON_WHITE)) {
-  const ratio = round2(contrast(token(name), WHITE))
-  check(`$${name} 压白底对比度`, ratio, expected)
+  const ratio = checkContrast(`$${name} 压白底对比度`, token(name), WHITE, expected)
   checkTrue(`$${name} 压白底 ≥ AA`, ratio >= AA, `实际 ${ratio}`)
 }
 
-// 中性文字三档：sub 承载信息（必须过 AA），weak 只做占位符（本来就过不了）
-const subRatio = round2(contrast(token('color-text-sub'), WHITE))
-check('$color-text-sub 压白底对比度', subRatio, 5.45)
+const subRatio = checkContrast('$color-text-sub 压白底对比度', TEXT_SUB, WHITE, 5.45)
 checkTrue('$color-text-sub 承载信息的文字 ≥ AA', subRatio >= AA, `实际 ${subRatio}`)
 
-const weakRatio = round2(contrast(token('color-text-weak'), WHITE))
-check('$color-text-weak 压白底对比度', weakRatio, 3.02)
+const weakRatio = checkContrast('$color-text-weak 压白底对比度', token('color-text-weak'), WHITE, 3.02)
 checkTrue(
   '$color-text-weak 只给占位符 / 禁用态 —— 本来就过不了 AA',
   weakRatio < AA && weakRatio > 3,
   `实际 ${weakRatio}`,
 )
 
-const mainRatio = round2(contrast(token('color-text-main'), WHITE))
-check('$color-text-main 压白底对比度', mainRatio, 15.78)
+checkContrast('$color-text-main 压白底对比度', TEXT_MAIN, WHITE, 15.78)
 
-// ---------- 第 2b 条：ink 压「标签底」也 ≥ AA ----------
-// ⚠️ 这条正是逼出「标签底必须纯白」的那条断言。两条歧路都会在这里失败：
-//   ① 把标签底改成语义色浅调底 —— 红/绿在物理上就过不了 AA；
-//   ② 改成一个「浅灰面」（比如 $color-bg-page = #f5f7fa）—— 三个 ink 掉到 4.44/4.22/4.31，全破线。
-// 只有纯白同时满足三个 ink。
+// 标签底必须纯白：浅灰面会把三个 ink 全部压破 AA（见 _mixins.scss 的实测）。
 const LABEL_BG = token('color-bg-card')
 checkTrue(
   '标签底必须是纯白 $color-bg-card',
-  LABEL_BG === '#ffffff',
+  LABEL_BG === WHITE,
   `实际 $color-bg-card: ${LABEL_BG} —— 浅灰面会把 ink 压破 AA`,
 )
-// 顺手确认 mixin 里用的是纯白，而不是被悄悄换成 $color-bg-page
 checkTrue(
   'tone-chip 的 background 取 $color-bg-card（不是 $color-bg-page）',
   /background:\s*v\.\$color-bg-card;/.test(mixinSrc),
@@ -155,10 +238,10 @@ for (const name of Object.keys(INK_ON_WHITE)) {
   )
 }
 
-// ---------- 第 3 条：语义色原值全部 < AA（**具体数值**，不是只判不等号） ----------
+// ---------- 第 5 条：语义色原值全部 < AA（具体数值，不是只判不等号） ----------
 // device 的 V25 记作「2.06 / 2.57 / 2.66」，用标准算法复算其实是 2.19 / 2.90 / 2.66
 // （只有绿对上）。device 的单测只断言 `< AA`，所以那个错误的 2.06 一直躺着。
-// 这里**断言数值**：既要「< AA」这个结论，也要数值本身正确。
+// 这里断言数值：既要「< AA」这个结论，也要数值本身正确。
 const SEMANTIC_ON_WHITE = {
   'color-primary': 2.66,
   'color-warning': 2.19,
@@ -166,12 +249,78 @@ const SEMANTIC_ON_WHITE = {
   'color-info': 3.08,
 }
 for (const [name, expected] of Object.entries(SEMANTIC_ON_WHITE)) {
-  const ratio = round2(contrast(token(name), WHITE))
-  check(`$${name} 压白底对比度`, ratio, expected)
+  const ratio = checkContrast(`$${name} 压白底对比度`, token(name), WHITE, expected)
   checkTrue(`$${name} 原值不得 ≥ AA（只能做装饰）`, ratio < AA, `实际 ${ratio}`)
 }
 
-// ---------- 第 4 条：四支 mixin 都能编译出五档选择器 ----------
+// ---------- 第 6 条：圆角五档 / 四条阴影 / 字号与间距逐值 ----------
+const EXPECTED_RADIUS = {
+  'radius-chip': '8px',
+  'radius-control': '12px',
+  'radius-card': '16px',
+  'radius-sheet': '20px',
+  'radius-pill': '999px',
+}
+for (const [name, expected] of Object.entries(EXPECTED_RADIUS)) check(`$${name}`, token(name), expected)
+
+const EXPECTED_SHADOWS = {
+  'shadow-card': '0 1px 2px rgba(0, 0, 0, 0.04)',
+  'shadow-raised': '0 4px 12px rgba(0, 0, 0, 0.08)',
+  'shadow-sheet': '0 8px 24px rgba(0, 0, 0, 0.12)',
+  'shadow-bar': '0 -2px 8px rgba(0, 0, 0, 0.06)',
+}
+for (const [name, expected] of Object.entries(EXPECTED_SHADOWS)) check(`$${name}`, token(name), expected)
+
+const EXPECTED_TYPE = {
+  'font-size-meta': '11px',
+  'font-size-aux': '12px',
+  'font-size-body': '14px',
+  'font-size-title': '16px',
+  'font-size-heading': '18px',
+  'font-size-hero': '24px',
+  'font-size-display': '28px',
+  'line-height-heading': '26px',
+  'line-height-hero': '32px',
+  'line-height-display': '36px',
+  'font-weight-medium': '500',
+  'font-weight-semibold': '600',
+}
+for (const [name, expected] of Object.entries(EXPECTED_TYPE)) check(`$${name}`, token(name), expected)
+
+for (const [sizeName, lineName] of [
+  ['font-size-heading', 'line-height-heading'],
+  ['font-size-hero', 'line-height-hero'],
+  ['font-size-display', 'line-height-display'],
+]) {
+  const size = Number.parseFloat(token(sizeName))
+  const lineHeight = Number.parseFloat(token(lineName))
+  checkTrue(
+    `$${lineName} 是 $${sizeName} 的配套行高（行高 > 字号）`,
+    lineHeight > size,
+    `实际 ${lineHeight}px vs ${size}px`,
+  )
+}
+
+const EXPECTED_SPACING = {
+  'spacing-xs': '4px',
+  'spacing-sm': '8px',
+  'spacing-md': '12px',
+  'spacing-lg': '16px',
+  'spacing-xl': '20px',
+  'spacing-xxl': '24px',
+  'spacing-xxxl': '32px',
+  'status-bar-width': '3px',
+}
+for (const [name, expected] of Object.entries(EXPECTED_SPACING)) check(`$${name}`, token(name), expected)
+
+// 色条刻意是 px（不是 rpx）—— 固定物理尺寸，不随屏宽缩放
+checkTrue(
+  '$status-bar-width 用 px（不是 rpx）',
+  token('status-bar-width').endsWith('px'),
+  `实际 ${token('status-bar-width')}`,
+)
+
+// ---------- 第 7 条：四支 mixin 都能编译出五档选择器 ----------
 const TONES = ['ok', 'info', 'warn', 'danger', 'muted']
 for (const mixin of ['tone-bar', 'tone-chip', 'tone-text', 'tone-dot']) {
   checkTrue(`mixin ${mixin} 存在`, new RegExp(`@mixin\\s+${mixin}\\s*\\(`).test(mixinSrc))
@@ -184,14 +333,27 @@ for (const tone of TONES) {
   )
 }
 
-// ---------- 第 5 条：档名拼错在编译期报错 ----------
+// 圆角语义：标签用 chip、卡用 card —— 通用圆角已经拆成 chip / control。
+checkTrue(
+  'tone-chip 使用 $radius-chip',
+  /border-radius:\s*v\.\$radius-chip;/.test(mixinSrc),
+  '标签 / 徽标 / 小控件应使用 chip 圆角',
+)
+checkTrue(
+  'card 使用 $radius-card',
+  /border-radius:\s*v\.\$radius-card;/.test(mixinSrc),
+  '卡片应使用 card 圆角',
+)
+checkTrue('card 使用 $shadow-card', /box-shadow:\s*v\.\$shadow-card;/.test(mixinSrc))
+
+// ---------- 第 8 条：档名拼错在编译期报错 ----------
 checkTrue(
   '存在档名校验（_check-tones），拼错在编译期报错',
   /@function\s+_check-tones/.test(mixinSrc) && /@error/.test(mixinSrc),
   '没有这条守卫时，拼错档名会静默生成一条永不匹配的规则',
 )
 
-// ---------- 第 6 条：变量文件里没有裸 hex 散落 ----------
+// ---------- 第 9 条：变量文件里没有裸 hex 散落 ----------
 // 允许的位置：$name: #hex; 的取值行。禁止的是 mixin / 规则体里直接写 hex。
 const nakedHexInRules = scss
   .split('\n')
@@ -203,42 +365,139 @@ checkTrue(
   nakedHexInRules.map((x) => `:${x.no} ${x.line}`).join('\n    '),
 )
 
-// ---------- 第 7 条：不出现 8 位 hex（一律 rgba()） ----------
-for (const [name, src] of [['_variables.scss', scss], ['_mixins.scss', mixinSrc]]) {
+// ---------- 第 10 条：不出现 8 位 hex（一律 rgba()） ----------
+for (const [name, src] of [
+  ['_variables.scss', scss],
+  ['_mixins.scss', mixinSrc],
+]) {
   const eightDigit = src.match(/#[0-9a-f]{8}\b/gi) ?? []
   checkTrue(`${name} 不出现 8 位 hex`, eightDigit.length === 0, `发现：${eightDigit.join(', ')}`)
 }
 
-// ---------- 第 8 条：字号与间距档数一致 ----------
-for (const [name, expected] of Object.entries({
-  'font-size-meta': '11px',
-  'font-size-aux': '12px',
-  'font-size-body': '14px',
-  'font-size-title': '16px',
-  'font-size-display': '28px',
-  'spacing-xs': '4px',
-  'spacing-sm': '8px',
-  'spacing-md': '12px',
-  'spacing-lg': '16px',
-  'spacing-xl': '20px',
-  'spacing-xxl': '24px',
-  'radius-component': '4px',
-  'radius-card': '8px',
-  'status-bar-width': '3px',
-})) check(`$${name}`, token(name), expected)
-
-// 色条刻意是 px（不是 rpx）—— 固定物理尺寸，不随屏宽缩放
+// ---------- 第 11 条：已删除 token 与旧值不得复现 ----------
+// 旧 token 名刻意用拼接构造：本脚本自己也不能成为残留引用（验收要求「样式与脚本里都不再出现」）。
+const DELETED_TOKEN_NAMES = ['radius' + '-component', 'color-primary' + '-hover', 'shadow-card' + '-hover']
+const sourceFiles = [
+  ...collect(miniprogramDir, ['.scss', '.ts', '.wxml', '.json']),
+  ...collect(join(repoRoot, 'test'), ['.ts']),
+  scriptPath,
+]
+const deletedOffenders = []
+for (const file of sourceFiles) {
+  const lines = readFileSync(file, 'utf8').split('\n')
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] ?? ''
+    for (const name of DELETED_TOKEN_NAMES) {
+      if (line.includes(name)) deletedOffenders.push(`${relative(repoRoot, file)}:${i + 1}  ${line.trim()}`)
+    }
+    if (line.toLowerCase().includes(OLD_PRESSED_HEX)) {
+      deletedOffenders.push(`${relative(repoRoot, file)}:${i + 1}  旧按下态色值 ${OLD_PRESSED_HEX}`)
+    }
+  }
+}
 checkTrue(
-  '$status-bar-width 用 px（不是 rpx）',
-  token('status-bar-width').endsWith('px'),
-  `实际 ${token('status-bar-width')}`,
+  '已删除的旧 token 名 / 旧按下态色值不再出现',
+  deletedOffenders.length === 0,
+  deletedOffenders.map((x) => `  • ${x}`).join('\n'),
 )
+
+// ---------- 第 12 条：动效白名单 ----------
+/** 把注释替换为等长空白，保留换行 —— 结构断言要能打印 文件:行，而注释不该被当成样式。 */
+function blankComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '))
+    .replace(/(^|[^:])\/\/[^\n]*/gm, (match, prefix) => prefix + ' '.repeat(Math.max(0, match.length - prefix.length)))
+}
+
+const navigationBarScss = join(miniprogramDir, 'components', 'navigation-bar', 'navigation-bar.scss')
+function scanMotion() {
+  const violations = []
+  const whitelisted = { animation: 0, keyframes: 0 }
+  for (const file of collect(miniprogramDir, ['.scss'])) {
+    const lines = blankComments(readFileSync(file, 'utf8')).split('\n')
+    /** 当前选择器 / at-rule 栈 —— 只为判断 animation 是否落在 `.weui-loading` 里。 */
+    const stack = []
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i] ?? ''
+      const trimmed = line.trim()
+      const where = `${relative(repoRoot, file)}:${i + 1}  ${trimmed}`
+
+      if (/\btransition(?:-[\w-]+)?\s*:/.test(trimmed)) violations.push(where)
+
+      if (/\banimation(?:-[\w-]+)?\s*:/.test(trimmed)) {
+        const selector = stack[stack.length - 1] ?? ''
+        const isAllowed =
+          file === navigationBarScss && selector === '.weui-loading' && /\banimation\s*:\s*loading\b/.test(trimmed)
+        if (isAllowed) whitelisted.animation += 1
+        else violations.push(where)
+      }
+
+      const keyframes = /@(?:-\w+-)?keyframes\s+([\w-]+)/.exec(trimmed)
+      if (keyframes) {
+        const isAllowed = file === navigationBarScss && keyframes[1] === 'loading'
+        if (isAllowed) whitelisted.keyframes += 1
+        else violations.push(where)
+      }
+
+      // 维护选择器栈：只处理本仓库的简单 SCSS 形态（一行一个开头 `{`）。
+      const openCount = (line.match(/\{/g) ?? []).length
+      const closeCount = (line.match(/\}/g) ?? []).length
+      if (openCount > 0) {
+        const before = line.slice(0, line.indexOf('{')).trim()
+        for (let k = 0; k < openCount; k += 1) stack.push(before)
+      }
+      for (let k = 0; k < closeCount; k += 1) stack.pop()
+    }
+  }
+  return { violations, whitelisted }
+}
+
+const motion = scanMotion()
+checkTrue(
+  'transition / animation / @keyframes 只命中功能性 loading 白名单',
+  motion.violations.length === 0,
+  motion.violations.map((x) => `  • ${x}`).join('\n'),
+)
+checkTrue(
+  '导航栏的功能性 loading 白名单仍存在（.weui-loading + @keyframes loading）',
+  motion.whitelisted.animation === 1 && motion.whitelisted.keyframes === 1,
+  `实际 animation ${motion.whitelisted.animation} 处、@keyframes ${motion.whitelisted.keyframes} 处`,
+)
+
+// ---------- 第 13 条：app.scss 的 Vant 变量若已接线，必须引用 token ----------
+// Vant 接线归 #59；本票只建立 token 层。这里用「存在才断言」的跨文件守卫，
+// 避免 #59 落地时又把色值抄成字面量；不存在则跳过，不把 #59 的工作提前判红。
+const VANT_CROSS_FILE_REFS = {
+  '--button-primary-background-color': 'color-primary-active',
+  '--button-primary-border-color': 'color-primary-active',
+  '--button-border-radius': 'radius-control',
+  '--popup-round-border-radius': 'radius-sheet',
+  '--overlay-background-color': 'color-overlay',
+  '--cell-horizontal-padding': 'spacing-lg',
+  '--field-error-message-color': 'color-danger-ink',
+  '--loading-spinner-color': 'color-primary-active',
+}
+if (existsSync(appScssPath)) {
+  const appScss = readFileSync(appScssPath, 'utf8')
+  for (const [prop, tokenName] of Object.entries(VANT_CROSS_FILE_REFS)) {
+    const line = appScss
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.startsWith(`${prop}:`))
+    if (line === undefined) continue
+    checkTrue(
+      `${prop} 引用 $${tokenName}（不是字面量）`,
+      line.includes(`$${tokenName}`),
+      `实际：${line}`,
+    )
+  }
+}
 
 // ---------- 报告 ----------
 if (failures.length === 0) {
-  console.log(`✅ 色调层验收全过（${checks} 条断言）`)
+  console.log(`✅ 视觉 token 验收全过（${checks} 条断言）`)
   process.exit(0)
 }
-console.error(`❌ 色调层验收失败：${failures.length} / ${checks} 条\n`)
+console.error(`❌ 视觉 token 验收失败：${failures.length} / ${checks} 条\n`)
 for (const f of failures) console.error(`  • ${f}\n`)
 process.exit(1)

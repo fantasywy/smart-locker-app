@@ -103,7 +103,7 @@ describe('#23 空态的视觉约束（review 补的守卫）', () => {
 
   it('⚠️⚠️ **布局几何用 `rpx`，不写裸 `px`**', () => {
     // ⛔ 这条是本票 review 抓出来的**真违规**，而它此前**没有任何守卫**：
-    // `scripts/verify-visual-tokens.mjs` 的 68 条断言里一条都不查 px/rpx，
+    // `scripts/verify-visual-tokens.mjs` 的断言里一条都不查 px/rpx，
     // 于是「布局几何用 rpx」这条硬裁决在代码里是**裸奔**的 ——
     // 第一版写了 `padding: 96px` 与 `line-height: 2.5`（≈35px，比 44px 的可点目标下限还小），
     // 全绿通过。
@@ -128,15 +128,21 @@ describe('#23 空态的视觉约束（review 补的守卫）', () => {
     ).toEqual([])
   })
 
-  it('⚠️ 主行动的按下态用 `$color-primary-hover`，不是 `-active`', () => {
-    // `_variables.scss` 给这两个 token 分了不同语义：`-hover` 是**按下态**，
-    // `-active` 是「正常/激活档」，后者同时是绿色文字的 ink 与「白字压绿底」的底色。
-    // 拿 ink 当按下态的底色是两回事，且会与 `failure-exit__retry` 的按下态**分叉**。
+  it('⚠️ 主行动：正常态用 `$color-primary-active`，按下态用 `$color-primary-pressed`', () => {
+    // 白字只允许压 #008655（4.62）与 #00744a（5.84），因此：
+    //   • 正常态填充 = `$color-primary-active`（`$color-primary` 原值只有 2.66，只能做装饰）；
+    //   • 按下态填充 = `$color-primary-pressed`（更深一档，用户能看出按到了）。
+    // 两者分开，且与 `failure-exit__retry` / 柜机页主行动保持同一组语义。
     const scss = stripped(join(emptyStateDir, 'empty-state.scss'))
+    const actionBlock = /\.empty-state__action\s*\{([\s\S]*?)\n\}/.exec(scss)?.[1] ?? ''
+    expect(actionBlock, '没找到 __action 的规则体').not.toBe('')
+    expect(actionBlock).toContain('$color-primary-active')
+    expect(actionBlock, '正常态不得用按下态填充').not.toContain('$color-primary-pressed')
+
     const activeBlock = /\.empty-state__action_active\s*\{([^}]*)\}/.exec(scss)?.[1] ?? ''
     expect(activeBlock, '没找到 __action_active 的规则体').not.toBe('')
-    expect(activeBlock).toContain('$color-primary-hover')
-    expect(activeBlock, '按下态用了 -active（那是 ink / 激活档，不是按下态）').not.toContain(
+    expect(activeBlock).toContain('$color-primary-pressed')
+    expect(activeBlock, '按下态用了 -active（那是正常态填充 / ink，不是按下态）').not.toContain(
       '$color-primary-active',
     )
   })
