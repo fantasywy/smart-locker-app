@@ -1,165 +1,179 @@
 <!--
-  柜机页 —— 扫码落地页。
+  柜机页 —— 扫码落地页（四档）。
 
-  ⚠️⚠️ **本文件里没有一句文案字面量。** 用户可见的每一个字都从 `startup/copy.ts` 的
-     `LOCKER_PAGE_COPY` 来，页面的 `data` 只是把它转手。
-     `test/startup/conventions.test.ts` 有一条守卫从 `copy.ts` 反推文案字面量 ——
-     在本文件里写死一句「开始存件」会被它当场抓住。
-
-  ⚠️ **三种长相由 `phase` 一个变量驱动**（见 `locker.ts` 的裁决 2）：
-       loading      → 骨架屏（页面结构先出现，数据区等 `13.6`）
-       entryFailed  → 入口失效页 —— **覆盖两种情况**（解析不出 code / `1002`），
-                      只换标题与说明句（「同一个页面，文案换为…」）
-       ready        → 柜机信息 + 三档入口 + 预约入口
-
-  ⚠️⚠️ **`ready` 那一支里没有「错误」这一支** —— 柜机不可用（`online=false`）与
-     某档余位 0 都落在这里，靠 `cells[].enabled` / `lockerUsable` 置灰 + 一行原因。
-     `§16 #29` 逐字：它们是**正常响应而非错误**。
-     把它们做成弹窗，用户会以为自己扫错了；而弹窗本身还不携带「这台柜机还在」这个信息。
--->
-
-<!--
-  ⚠️ **`ordersButton` 是硬要求，不是可选项**（#59 把导航栏收敛成四个入参：
-     title / back / homeButton / ordersButton）。
-     柜机页经通道 A 冷启动时是**栈深 1 的非 tab 页**：系统返回 = 直接退回微信、
-     底部 tabBar 不显示 ⇒ 顶部这个「我的订单」出口是屏幕上**唯一**通往订单列表的可见路径。
-     组件自己就会 `wx.switchTab(ORDER_LIST_PATH)`（缺省行为必须可用），
-     **本页不接 `bind:orders`** —— 接了也只是把同一件事写成两份。
-     ⚠️ 栈深 1 时左出口应换成「首页」（`homeButton`），栈深 > 1 才是返回箭头；
-     这段栈深判断归 #62 的柜机页改造，本票只保证组件能力就位。
+  ⚠️ **本文件里没有一句文案字面量。** 用户可见的每个字都从 `startup/copy.ts`
+     的 `LOCKER_PAGE_COPY` 来，页面的 `data` 只是把它转手。
+  ⚠️ 四个相位由 `phase` 一个变量驱动：
+       loading      → 站点 + 四张卡的骨架（纯图形，无文字）
+       entryFailed  → 入口失效页（解析不出 code / 13.6 → 1002，只换文案）
+       loadFailed   → 页内「加载失败，请重试」+ 重试
+       ready        → 站点信息 + 2×2 四档 + 预约入口 + 事实行 + 吸底行动条
+  ⚠️ ready 里没有「错误」这一支 —— 柜机离线与四档全满是正常响应，
+     靠 `cells[].state` / `reserveEnabled` 置灰 + 页内原因呈现。
 -->
 <navigation-bar
   title="{{ title }}"
-  back="{{true}}"
-  ordersButton="{{true}}"
+  back="{{ navBack }}"
+  homeButton="{{ navHome }}"
+  ordersButton="{{ navOrders }}"
 ></navigation-bar>
 
 <view class="page">
-  <!--
-    ① 骨架屏 —— `13.6` 还没回来（结构先出现、数据区等 token）。
-       ⚠️ 纯图形占位、无文字，组件不接任何数据。
-  -->
-  <skeleton wx:if="{{ phase === 'loading' }}" />
-
-  <!--
-    ② 入口失效页 —— **解析不出 code** 与 **`13.6` → `1002`** 共用这一支
-       （「**同一个页面**，文案换为『可能是旧贴纸』+ 引导联系客服」）。
-       ⇒ 结构只写一份，差别全在 `entryFailedTitle` / `entryFailedDetail` 两个字上。
-       这是本票的验收「`1002` 与『解析不出 code』走同一个页面（只换文案）」在模板里的落地。
-
-       ⚠️ 两个出口的文案固定为：
-          〔**重新扫码**〕〔**我的订单**〕—— 一个都不多、一个都不少。
-       ⚠️ 「我的订单」在这里**必须**是页面自己的按钮（`)` 里那个 `bindtap="onMyOrders"`）：
-          这一屏把整个数据区换掉了，但导航栏还在 —— 用户**同时**看得见导航栏那个房子图标。
-          两个入口指向同一件事，文案也必须是同一句（同一个动作一个名字）。
-  -->
-  <view wx:elif="{{ phase === 'entryFailed' }}" class="entry-failed">
-    <view class="entry-failed__title">{{ entryFailedTitle }}</view>
-    <view class="entry-failed__detail">{{ entryFailedDetail }}</view>
-    <view class="entry-failed__actions">
-      <button
-        class="entry-failed__primary"
-        hover-class="entry-failed__primary_active"
-        bindtap="onRescan"
-      >{{ rescanLabel }}</button>
-      <button
-        class="entry-failed__secondary"
-        hover-class="entry-failed__secondary_active"
-        bindtap="onMyOrders"
-      >{{ myOrdersLabel }}</button>
-    </view>
-  </view>
-
-  <!--
-    ②b 加载失败 —— `13.6` 回来了但失败了（且**不是** `1002`）。
-
-    ⚠️ 它**不是**入口失效：成因不同（网络/5xx vs 码本身没用），出路也不同
-       （**重试** vs 换一张贴纸）。混成一个页面会把一次网络抖动说成「你扫的码是废的」，
-       用户于是走开去换一张贴纸 —— 而真正该做的是重试。
-
-    ⚠️⚠️ 它也**不是骨架屏**：骨架屏在语义上说的是「还在加载」，而此刻请求已经回来、
-       并且失败了。本块的第一版就是停在骨架屏上，结果是**一屏永远不动的占位** ——
-       用户既不知道出了什么事，也没有任何重试入口。文案取既有的那一行
-       （「**加载失败，请重试**」），所以它不是自编文案。
-
-    ⚠️ 复用入口失效页那套 `entry-failed__*` 样式 —— 两者版式同形（一句说明 + 主行动），
-       多造一套 class 只会多一份要同步的样式。标题位**留空**（那一行只有
-       说明句 + 重试，没有标题）—— 不为了「凑一块标题」编一句话。
-  -->
-  <view wx:elif="{{ phase === 'loadFailed' }}" class="entry-failed">
-    <view class="entry-failed__title"></view>
-    <view class="entry-failed__detail">{{ loadFailedDetail }}</view>
-    <view class="entry-failed__actions">
-      <button
-        class="entry-failed__primary"
-        hover-class="entry-failed__primary_active"
-        bindtap="onRetryLoad"
-      >{{ retryLabel }}</button>
-    </view>
-  </view>
-
-  <!--
-    ③ 柜机信息 + 入口 —— **正常响应**（含 `online=false` 与余位 0 这两种）。
-
-       ⚠️ 本页**天然只有一屏**：`13.6` **不返回价格、不返回格口清单**
-          （`cellNo` 只在建单后返回）⇒ 这里只有 站点名 + 位置 + 三档余位 + 两个入口。
-          别在这里给「价格」或「格口列表」留位置 —— 那两样没有数据来源。
-
-       ⚠️ 置灰是**服务端回显驱动**的（这是明确允许的例外：
-          「`13.6` 回显驱动的入口置灰 —— 那是服务端说的」）。它不是「事前阻断」。
-  -->
-  <view wx:else class="locker">
-    <view class="locker__header">
-      <view class="locker__site">{{ siteName }}</view>
-      <view class="locker__position">{{ position }}</view>
-      <!--
-        柜机不可用的原因 —— **页内一行字，不是弹窗、不是 toast**（「置灰并写明原因」）。
-        ⚠️ 它只在不可用时才有内容（可点时是空串）。
-      -->
-      <view wx:if="{{ lockerReason }}" class="locker__reason">{{ lockerReason }}</view>
-    </view>
-
-    <!-- 三档规格各自的入口 —— **逐档独立置灰**，各自写明原因。 -->
-    <view class="locker__cells">
-      <view class="cell" wx:for="{{ cells }}" wx:key="type">
-        <button
-          class="cell__button {{ item.enabled ? '' : 'is-disabled' }}"
-          hover-class="{{ item.enabled ? 'cell__button_active' : 'none' }}"
-          disabled="{{ !item.enabled }}"
-          data-cell-type="{{ item.type }}"
-          bindtap="onStartStoring"
-        >
-          <text class="cell__label">{{ item.label }}</text>
-          <text class="cell__available">{{ item.available }}</text>
-        </button>
-        <!--
-          ⚠️ 置灰的**原因**在这里，而不是一个通用错误文案。
-             「该规格已满」与柜机不可用那句都是既有措辞。
-             ⚠️ 余位 0 时**不得**引导「去预约」——
-             预约同样只认 FREE 格口，唯一真出口是「换一台柜机」。
-             所以这里只有一句陈述，没有任何指向别处的建议。
-        -->
-        <view wx:if="{{ item.reason }}" class="cell__reason">{{ item.reason }}</view>
+  <view class="page__body">
+    <!-- ① 加载骨架 —— 结构先出现，数据区等 13.6。无文字。 -->
+    <view wx:if="{{ phase === 'loading' }}" class="locker-loading">
+      <view class="locker-loading__header"></view>
+      <view class="locker-loading__grid">
+        <view class="locker-loading__card" wx:for="{{ loadingCards }}" wx:key="*this"></view>
       </view>
     </view>
 
     <!--
-      两个入口 —— 主行动 + 预约（都是既有文案）。
-
-      ⚠️ 预约入口与「开始存件」**同等置灰**：柜机不可用、**或任一档
-         余位为 0** 时都置灰，并写明是哪一个原因。⚠️ **不得**因为「预约是以后的事」
-         就放行它 —— 预约同样只认 FREE 格口（13.12 无空闲 → 8002），
-         这条例外已被明确堵死。
+      ② 入口失效页 —— 解析不出 code 与 13.6 → 1002 共用这一支，
+         只换标题 / 说明句。两个出口：重新扫码 / 我的订单。
     -->
-    <view class="locker__actions">
-      <button
-        class="locker__reserve {{ reserveEnabled ? '' : 'is-disabled' }}"
-        hover-class="{{ reserveEnabled ? 'locker__reserve_active' : 'none' }}"
-        disabled="{{ !reserveEnabled }}"
-        bindtap="onReserve"
-      >{{ reserveLabel }}</button>
-      <!-- 置灰原因 —— 同一条纪律：置灰必须写明原因，且它是页内一行字而不是弹窗。 -->
-      <view wx:if="{{ reserveReason }}" class="locker__reserve-reason">{{ reserveReason }}</view>
+    <view wx:elif="{{ phase === 'entryFailed' }}" class="entry-failed">
+      <view class="entry-failed__title">{{ entryFailedTitle }}</view>
+      <view class="entry-failed__detail">{{ entryFailedDetail }}</view>
+      <view class="entry-failed__actions">
+        <button
+          class="entry-failed__primary"
+          hover-class="entry-failed__primary_active"
+          bindtap="onRescan"
+        >{{ rescanLabel }}</button>
+        <button
+          class="entry-failed__secondary"
+          hover-class="entry-failed__secondary_active"
+          bindtap="onMyOrders"
+        >{{ myOrdersLabel }}</button>
+      </view>
+    </view>
+
+    <!-- ②b 加载失败 —— 请求已经回来且失败了，绝不能停在骨架屏。 -->
+    <view wx:elif="{{ phase === 'loadFailed' }}" class="entry-failed">
+      <view class="entry-failed__title"></view>
+      <view class="entry-failed__detail">{{ loadFailedDetail }}</view>
+      <view class="entry-failed__actions">
+        <button
+          class="entry-failed__primary"
+          hover-class="entry-failed__primary_active"
+          bindtap="onRetryLoad"
+        >{{ retryLabel }}</button>
+      </view>
+    </view>
+
+    <!-- ③ 正常响应（含离线与四档全满）。 -->
+    <view wx:else class="locker">
+      <view class="locker__header">
+        <view class="locker__title-row">
+          <view class="locker__site">{{ siteName }}</view>
+          <text wx:if="{{ !lockerUsable }}" class="locker__pill">{{ offlinePill }}</text>
+        </view>
+        <view class="locker__position">{{ position }}</view>
+        <view wx:if="{{ lockerReason }}" class="locker__reason">{{ lockerReason }}</view>
+      </view>
+
+      <!-- 2×2 四档，顺序固定小 / 中 / 大 / 特大（数组顺序 = 视觉顺序）。 -->
+      <view class="locker__cells">
+        <view class="locker__cell" wx:for="{{ cells }}" wx:key="type">
+          <cell-card
+            class="locker__cell-card"
+            type="{{ item.type }}"
+            label="{{ item.label }}"
+            available="{{ item.available }}"
+            state="{{ item.state }}"
+            selected="{{ item.selected }}"
+            bind:select="onSelectCell"
+          />
+        </view>
+      </view>
+
+      <!-- 预约入口：只在离线 / 四档全满时置灰并写明原因。 -->
+      <view class="locker__reserve-row">
+        <view
+          class="locker__reserve {{ reserveEnabled ? '' : 'is-disabled' }}"
+          hover-class="{{ reserveEnabled ? 'locker__reserve_active' : 'none' }}"
+          aria-role="button"
+          aria-label="{{ reserveLabel }}"
+          bindtap="onReserve"
+        >
+          <text class="locker__reserve-label">{{ reserveLabel }}</text>
+          <icon name="nav.disclosure" tone="{{ reserveEnabled ? 'sub' : 'weak' }}" size="16" />
+        </view>
+        <view wx:if="{{ reserveReason }}" class="locker__reserve-reason">{{ reserveReason }}</view>
+      </view>
+
+      <!-- 两条事实行。 -->
+      <view class="locker__facts">
+        <view class="locker__fact">{{ factCellAssigned }}</view>
+        <view class="locker__fact">{{ factPaymentLater }}</view>
+      </view>
     </view>
   </view>
+
+  <!-- 提交失败 —— 底栏上方一行，就地解释，不弹 toast / modal。 -->
+  <view wx:if="{{ submitError }}" class="locker__submit-error">{{ submitError }}</view>
+
+  <!--
+    吸底行动条 —— 入口失效页不渲染（那一屏只有两个出口）。
+    未选中：请选择格口 / 四档均可存，CTA 置灰；
+    选中：已选 {档名} / 余 N 个，CTA 可点。
+    ⚠️ 任何状态都不出现金额。
+  -->
+  <view wx:if="{{ phase !== 'entryFailed' }}" class="locker__bar">
+    <view class="locker__bar-text">
+      <view class="locker__bar-title">{{ barTitle }}</view>
+      <view class="locker__bar-hint">{{ barHint }}</view>
+    </view>
+    <van-button
+      custom-class="locker__cta"
+      type="primary"
+      loading="{{ ctaLoading }}"
+      loading-text="{{ ctaLabel }}"
+      disabled="{{ !ctaEnabled && !ctaLoading }}"
+      bind:click="onPrimary"
+    >{{ ctaLabel }}</van-button>
+  </view>
+
+  <!--
+    确认弹层 —— 站点 / 档位 / 余位三行 + 取消 / 确认存件。
+    ⚠️ 提交中 `confirmOverlayClosable=false`，遮罩不可关；取消按钮也禁用。
+  -->
+  <van-popup
+    show="{{ confirmVisible }}"
+    position="bottom"
+    round="{{ true }}"
+    custom-class="app-popup-shadow locker-sheet"
+    close-on-click-overlay="{{ confirmOverlayClosable }}"
+    bind:click-overlay="onCancelSheet"
+  >
+    <view class="locker-sheet__title">{{ confirmTitle }}</view>
+    <view class="locker-sheet__row">
+      <text class="locker-sheet__label">{{ confirmSiteLabel }}</text>
+      <text class="locker-sheet__value">{{ confirmSiteName }}</text>
+    </view>
+    <view class="locker-sheet__row">
+      <text class="locker-sheet__label">{{ confirmCellLabel }}</text>
+      <text class="locker-sheet__value">{{ confirmCellValue }}</text>
+    </view>
+    <view class="locker-sheet__row">
+      <text class="locker-sheet__label">{{ confirmRemainingLabel }}</text>
+      <text class="locker-sheet__value">{{ confirmRemainingValue }}</text>
+    </view>
+    <view class="locker-sheet__actions">
+      <van-button
+        custom-class="locker-sheet__cancel"
+        disabled="{{ submitting }}"
+        bind:click="onCancelSheet"
+      >{{ cancelLabel }}</van-button>
+      <van-button
+        custom-class="locker-sheet__confirm"
+        type="primary"
+        loading="{{ submitting }}"
+        loading-text="{{ ctaLabel }}"
+        disabled="{{ submitting }}"
+        bind:click="onConfirmCreate"
+      >{{ confirmActionLabel }}</van-button>
+    </view>
+  </van-popup>
 </view>

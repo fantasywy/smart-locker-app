@@ -1,33 +1,32 @@
-// **柜机页**的验收 —— issue #26 的全部行为断言。
+// **柜机页（四档）** 的验收 —— issue #62，spec #57 §3。
 //
-// ## 这个文件为什么必须存在（它挡的是什么）
+// ## 这个文件挡的是什么
 //
-// 票面有 12 条 Acceptance criteria，其中**只有 2 条**是纯函数能覆盖的
-// （`resolveLockerCode` 的三来源与零 storage 的源码守卫）。
-// 剩下的全部关于**页面的行为**：四种非正常进入是不是同一个页面、置灰有没有写明原因、
-// 「开始存件」用的是 `redirectTo` 还是 `navigateTo`、`openTimeoutMinutes` 从哪来。
+// 四档改造里最像「看着能跑」的错，全都不报错、手测也未必看得出来：
+//   • 格口类型仍是字符串枚举 —— 请求发得到，但服务端认不出，订单建不出来；
+//   • `extraLarge` 漏掉 —— 第四档永远显示 0 / 不可点，用户以为柜机没有特大格；
+//   • 任一档为 0 就把「预约」整体置灰 —— 旧三档页的行为，已被 spec 明确推翻；
+//   • 建单成功用 `navigateTo` —— 返回键会退回一个**已经建过单**的页面；
+//   • 提交中不防重复 —— `13.7` 不幂等，连点两次真的抢两个格口；
+//   • 首屏预选一档 —— 用户以为自己已经选好了。
 //
-// 这些恰好是**最像「看着能跑」的错**：
-//   • 把 `online=false` 做成 `wx.showModal` —— 手测时「弹窗出现了，功能正常」，
-//     而票面明说那是**正常响应**、要做成页内说明；
-//   • 用 `navigateTo` 进等待态 —— 功能上照样能跳，「等待态渲染出来了」全绿，
-//     而返回键会退回柜机页并**再开一次门**；
-//   • `openTimeoutMinutes` 写死 10 —— 一辈子看不出来，直到运营改了配置。
+// ⇒ 断言一律落在**外部行为**上：页面 `data`（界面画了什么）、`wx.*` 调用
+// （跳转去了哪、用了哪个 API）、请求体（发出去的到底是什么）。
 //
-// ⇒ 判据全部落在**外部行为**上：`setData` 收到了什么（界面画了什么）、
-// `wx.*` 被调了什么（跳转与请求）、请求体里发了什么。不测页面内部怎么组织方法。
-//
-// 柜机上下文只能来自扫码：`docs/adr/0001-c-end-no-locker-browsing.md`。
+// ⚠️ 柜机上下文只能来自扫码：`docs/adr/0001-c-end-no-locker-browsing.md`。
+// 本页零 storage —— 下面有运行期与源码两道守卫。
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { installWxStub, jsonResponse, reply } from '../helpers/wx'
 import { respondInOrder, requestsTo, sentRequests } from '../helpers/http'
+import { deferred } from '../helpers/timers'
 import { BASE_URL } from '../../miniprogram/request/config'
-import { LOCKER_PAGE_COPY, PAGE_TITLES } from '../../miniprogram/startup/copy'
+import { LOCKER_PAGE_COPY, PAGE_TITLES, RETRY_LABEL } from '../../miniprogram/startup/copy'
 import { RESERVATION_CREATE_PATH, WAITING_PATH } from '../../miniprogram/utils/routes'
+import type { WxRequestOptions, WxRequestSuccessResult } from '../helpers/wx'
 import type { InstalledWxStub } from '../helpers/wx'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -35,8 +34,7 @@ const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
 const LOCKER_URL = `${BASE_URL}/api/app/v1/lockers/by-code?code=WD-01`
 const CREATE_ORDER_URL = `${BASE_URL}/api/app/v1/orders`
 
-
-/** 一份契约形状的 `13.6` 响应体 —— 默认是一台**完全可用**的柜机。 */
+/** 一份契约形状的 `13.6` 响应体 —— 默认是一台**四档都有余位**的柜机。 */
 function lockerBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     code: 0,
@@ -48,8 +46,8 @@ function lockerBody(overrides: Record<string, unknown> = {}): Record<string, unk
       siteName: '望京 SOHO T1',
       position: 'B1 层 3 号电梯口',
       online: true,
-      status: 'ONLINE',
-      cellAvailability: { small: 4, medium: 2, large: 0 },
+      status: 1,
+      cellAvailability: { small: 4, medium: 2, large: 1, extraLarge: 3 },
       ...overrides,
     },
   }
@@ -69,13 +67,13 @@ function businessError(code: number, message = 'boom'): Record<string, unknown> 
   return { code, message, data: null }
 }
 
-/**
- * 装好桩、接住 `Component()` 定义、并加载柜机页。
- *
- * ⚠️ 每例都要 `resetModules()`：页面在**模块级**持有登录链的飞行态
- * （与首页的闸门同一个理由），vitest 的模块缓存会让第二个用例复用第一个的模块状态。
- */
 let definition: Record<string, unknown> | null = null
+
+/** 控制栈深 —— 柜机页的导航出口按 `getCurrentPages().length` 分叉。 */
+function setPageDepth(depth: number): void {
+  ;(globalThis as unknown as Record<string, unknown>).getCurrentPages = () =>
+    Array.from({ length: depth }, () => ({}))
+}
 
 beforeEach(() => {
   definition = null
@@ -83,6 +81,11 @@ beforeEach(() => {
   host.Component = (def: Record<string, unknown>): void => {
     definition = def
   }
+  setPageDepth(1)
+})
+
+afterEach(() => {
+  delete (globalThis as unknown as Record<string, unknown>).getCurrentPages
 })
 
 async function loadPage(): Promise<Record<string, unknown>> {
@@ -92,12 +95,10 @@ async function loadPage(): Promise<Record<string, unknown>> {
   return definition
 }
 
-/** 页面实例 —— `data` / `setData` / `triggerEvent`，方法都绑到这个实例上。 */
 interface PageInstance {
   data: Record<string, unknown>
   setData: (patch: Record<string, unknown>) => void
   triggerEvent: (name: string) => void
-  onLoad?: (options: Record<string, string>) => void
   [key: string]: unknown
 }
 
@@ -112,68 +113,28 @@ function instantiate(def: Record<string, unknown>): PageInstance {
   for (const [name, fn] of Object.entries((def.methods as Record<string, unknown>) ?? {})) {
     instance[name] = (fn as (...args: unknown[]) => unknown).bind(instance)
   }
-  // ⚠️ **`onLoad` 在 `methods` 里，不在顶层。** 这是「用 `Component()` 写页面」的形态
-  // （仓库既有取向，`#22` 定的）：页面生命周期钩子挂在 `methods` 上，由
-  // `Component<..., TIsPage = true>` 的类型参数让 TS 认出来。
-  //
-  // ⚠️ 第一版在循环**之后**又读了一次 `def['onLoad']`（那是 `Page({...})` 的写法）
-  // 并把它赋给 `instance.onLoad` —— 于是恒为 `undefined`，把循环刚绑好的那个冲掉。
-  // 症状很隐蔽：**单文件跑时全绿**（那次循环确实绑上了），只有全套一起跑、
-  // 模块缓存命中时才暴露成「页面参数丢了」。
-  // ⇒ 现在的写法对「钩子挂在哪」**不敏感**：两处都读一遍，缺了就直接报错，
-  //   而不是留一个 `undefined` 让后面每个用例都以「界面没渲染」的形式失败。
-  const topLevelOnLoad = def['onLoad'] as ((options: Record<string, string>) => void) | undefined
-  if (topLevelOnLoad !== undefined) instance.onLoad = topLevelOnLoad.bind(instance)
   if (typeof instance.onLoad !== 'function') {
     throw new Error('locker.ts 没有可调用的 onLoad —— 页面参数无处可去')
   }
   return instance
 }
 
-/**
- * 一次 `wx.request` 的编排值 —— **契约响应体**（`{code, message, data}`）
- * 或**网络失败**（`{errMsg}`）。
- *
- * ⚠️ 写成联合而不是 `WxRequestSuccessResult | {errMsg}`：用例里写的是**响应体**，
- * `jsonResponse()` 的包封由本文件统一加。直接把 `WxRequestSuccessResult`
- * 当类型会让每个用例都得先手写一遍 `jsonResponse(...)` —— 而那层噪音
- * 会把「这条用例编排了几个响应」这个真正重要的信息埋掉。
- */
 type BodyOrFailure =
   | { body: Record<string, unknown> }
   | { failure: { errMsg: string } }
 
-/**
- * 装桩 → 加载页面 → 用给定的 `onLoad(options)` 进入。
- *
- * ⚠️⚠️ **本页不发登录请求。** 这是与首页（闸门的承载页）最容易被搞混的一点：
- * 首页在 `attached` 里跑整条登录链（`wx.login` → `13.1`），而**柜机页不跑** ——
- * 它直接发 `13.6`，登录由**请求层**按需处理（`13.6` 需要 access，
- * 而没有 token 时……）。
- *
- * ⚠️ 本仓库当前的事实是：冷启动的登录链挂在**首页**上（`pages/index/index.ts` 的闸门）。
- * 通道 A 是**冷启动直达柜机页**、栈深 1 —— 首页根本没被挂载过。
- * 那条链路的登录归属不在本页（`13.6` 需要 access ⇒ 扫码链路
- * 必须先完成登录），本票**不为它编一个实现**：请求层对 `401` 的恢复是现成的
- * （`#19`），柜机页要做的只是**不吞掉失败**。
- *
- * ⇒ 测试因此把 `13.6` 的响应放在**第一个**位置，`wx.login` 的编排只在
- *    「真的发生了重登」时才被消费（`respondInOrder` 会为未被消费的响应报错，
- *    所以这里显式只给业务响应）。
- */
+/** 装桩 → 加载页面 → 用给定的 `onLoad(options)` 进入。 */
 async function enter(
   options: Record<string, string>,
   responses: readonly BodyOrFailure[],
+  depth = 1,
 ): Promise<{ wx: InstalledWxStub; page: PageInstance }> {
   const wx = installWxStub()
+  setPageDepth(depth)
   wx.login.mockImplementation(reply({ code: 'WX-CODE', errMsg: 'login:ok' }))
   wx.request.mockImplementation(
     respondInOrder(responses.map((r) => ('failure' in r ? r.failure : jsonResponse(r.body)))),
   )
-  // ⚠️ 四个跳转/弹层 API **全部编排成 no-op**，而**不是**留着「未编排即抛错」：
-  // 它们的正确用量就是 0 次，而「一次都没被调用」由各用例的显式断言（或反向断言）负责。
-  // 留着抛错会让「这条用例根本不该跳转」这件事以**异常**的形式爆出来 ——
-  // 失败信息指向桩，而不是指向那条被违反的规则。
   wx.switchTab.mockImplementation(() => {})
   wx.navigateTo.mockImplementation(() => {})
   wx.redirectTo.mockImplementation(() => {})
@@ -182,67 +143,256 @@ async function enter(
 
   const def = await loadPage()
   const page = instantiate(def)
-  page.onLoad?.(options)
+  ;(page.onLoad as (options: Record<string, string>) => void)(options)
   await settle()
   return { wx, page }
 }
 
-/** 让挂在微任务队列上的登录链 + 业务请求全部落定。 */
 async function settle(): Promise<void> {
   for (let i = 0; i < 12; i += 1) await Promise.resolve()
 }
 
-/** 一档规格在界面上的那一行 —— 三档渲染成 `cells` 数组，断言都从这里取。 */
+/** 四档渲染行 —— 断言一律走它，避免依赖页面内部的字段组织方式。 */
 interface CellRowView {
-  type: string
+  type: number
   label: string
   available: number
-  enabled: boolean
-  reason: string
+  state: 'normal' | 'soldout' | 'offline'
+  selected: boolean
 }
 
-/**
- * 取某一档的渲染行 —— **断言一律走它**，不走页面上的别的字段。
- *
- * ⚠️ 为什么这点值得一个 helper：三档在界面上是**同一块模板渲染出来的三行**
- * （`cells` 数组），而「逐档独立置灰」是本票的硬要求。
- * 若测试改从三个平铺的 `data` 字段（`smallEnabled` / `mediumEnabled` / …）取，
- * 就默认了「实现会平铺三个字段」—— 而那不是契约，是实现细节。
- * 走数组则无论是平铺还是数组，测的都是同一件事。
- */
-function cellOf(page: PageInstance, type: 'SMALL' | 'MEDIUM' | 'LARGE'): CellRowView {
+function cellOf(page: PageInstance, type: 1 | 2 | 3 | 4): CellRowView {
   const cells = page.data.cells as CellRowView[]
   const row = cells.find((cell) => cell.type === type)
   if (row === undefined) {
     throw new Error(
-      `界面上没有 ${type} 档 —— 实际渲染的三档是 [${cells.map((c) => c.type).join(', ')}]`,
+      `界面上没有第 ${type} 档 —— 实际渲染的是 [${cells.map((c) => c.type).join(', ')}]`,
     )
   }
   return row
 }
 
-describe('#26 柜机页 · 正常渲染', () => {
-  it('⚠️ 渲染站点名 + 位置 + 三档余位 + 三个入口', async () => {
-    const { page } = await enter({ q: 'https%3A%2F%2Flocker.example.com%2Fl%2FWD-01' }, [
-      { body: lockerBody() },
+function selectCell(page: PageInstance, type: 1 | 2 | 3 | 4): void {
+  ;(page.onSelectCell as (event: { detail: { type: number } }) => void)({ detail: { type } })
+}
+
+function openConfirm(page: PageInstance): void {
+  ;(page.onPrimary as () => void)()
+}
+
+function confirmCreate(page: PageInstance): void {
+  ;(page.onConfirmCreate as () => void)()
+}
+
+describe('#62 柜机页 · 四档渲染与选择', () => {
+  it('⚠️ 渲染站点名 + 位置 + 四档（小 / 中 / 大 / 特大）与各自余位', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
+
+    expect(page.data.siteName).toBe('望京 SOHO T1')
+    expect(page.data.position).toBe('B1 层 3 号电梯口')
+    expect((page.data.cells as CellRowView[]).map((c) => c.type)).toEqual([1, 2, 3, 4])
+    expect(cellOf(page, 1)).toMatchObject({
+      label: LOCKER_PAGE_COPY.cellTypeLabels[1],
+      available: 4,
+      state: 'normal',
+    })
+    expect(cellOf(page, 2)).toMatchObject({
+      label: LOCKER_PAGE_COPY.cellTypeLabels[2],
+      available: 2,
+      state: 'normal',
+    })
+    expect(cellOf(page, 3)).toMatchObject({
+      label: LOCKER_PAGE_COPY.cellTypeLabels[3],
+      available: 1,
+      state: 'normal',
+    })
+    expect(cellOf(page, 4)).toMatchObject({
+      label: LOCKER_PAGE_COPY.cellTypeLabels[4],
+      available: 3,
+      state: 'normal',
+    })
+  })
+
+  it('⚠️ 首屏不预选：底栏「请选择格口 / 四档均可存」，CTA 置灰', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
+
+    expect(page.data.selectedType).toBeNull()
+    for (const type of [1, 2, 3, 4] as const) {
+      expect(cellOf(page, type).selected, `第 ${type} 档首屏不该被选中`).toBe(false)
+    }
+    expect(page.data.barTitle).toBe(LOCKER_PAGE_COPY.chooseCell)
+    expect(page.data.barHint).toBe(LOCKER_PAGE_COPY.allCellsAvailable)
+    expect(page.data.ctaEnabled).toBe(false)
+    expect(page.data.ctaLabel).toBe(LOCKER_PAGE_COPY.cta)
+  })
+
+  it('⚠️ 选中一档 → 底栏「已选 中格口 / 余 2 个」，CTA 可点，且只有这一档被选中', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
+
+    selectCell(page, 2)
+
+    expect(page.data.selectedType).toBe(2)
+    expect(page.data.barTitle).toBe(LOCKER_PAGE_COPY.selectedCell.replace('{label}', '中格口'))
+    expect(page.data.barHint).toBe(LOCKER_PAGE_COPY.remaining.replace('{count}', '2'))
+    expect(page.data.ctaEnabled).toBe(true)
+    expect(cellOf(page, 2).selected).toBe(true)
+    for (const type of [1, 3, 4] as const) {
+      expect(cellOf(page, type).selected).toBe(false)
+    }
+  })
+
+  it('⚠️ 售罄 / 离线档点了不会选中，也不会成为建单规格', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [
+      { body: lockerBody({ cellAvailability: { small: 4, medium: 0, large: 0, extraLarge: 3 } }) },
+    ])
+
+    selectCell(page, 2)
+    selectCell(page, 3)
+
+    expect(page.data.selectedType).toBeNull()
+    expect(page.data.ctaEnabled).toBe(false)
+  })
+
+  it('⚠️ 任何状态都不出现金额 —— 页面 data 里没有金额字样 / 符号', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
+    selectCell(page, 2)
+
+    const visible = JSON.stringify(page.data)
+    expect(visible).not.toContain('¥')
+    expect(visible).not.toContain('金额')
+    expect(visible).not.toContain('价格')
+  })
+})
+
+describe('#62 柜机页 · 逐档置灰与预约入口', () => {
+  it('⚠️ 某档为 0 只灰该档，其他档照常可点，预约入口**不**整体置灰', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [
+      { body: lockerBody({ cellAvailability: { small: 4, medium: 0, large: 2, extraLarge: 0 } }) },
+    ])
+
+    expect(cellOf(page, 1).state).toBe('normal')
+    expect(cellOf(page, 2).state).toBe('soldout')
+    expect(cellOf(page, 3).state).toBe('normal')
+    expect(cellOf(page, 4).state).toBe('soldout')
+    expect(cellOf(page, 1).available).toBe(4)
+    expect(cellOf(page, 3).available).toBe(2)
+
+    // ⚠️ 旧三档页在「任一档为 0」时把预约入口整体置灰，spec §3 明确推翻：
+    // 预约页自己按档位判断，本页只在离线 / 四档全满时拦住。
+    expect(page.data.reserveEnabled).toBe(true)
+    expect(page.data.reserveReason).toBe('')
+  })
+
+  it('⚠️ 柜机离线是正常响应：完整渲染 + 四档「不可用」+ 页内原因，不弹 toast / modal', async () => {
+    const { wx, page } = await enter({ code: 'WD-01' }, [
+      {
+        body: lockerBody({
+          online: false,
+          status: 2,
+          cellAvailability: { small: 0, medium: 0, large: 0, extraLarge: 0 },
+        }),
+      },
     ])
 
     expect(page.data.siteName).toBe('望京 SOHO T1')
     expect(page.data.position).toBe('B1 层 3 号电梯口')
-    // ⚠️ 三档余位**各自**都要在界面上有值 —— 票面要求「三档规格各自独立置灰」。
-    // 只断言「有数据」会让「三档合成一个布尔」的实现全绿。
-    expect(cellOf(page, 'SMALL').available).toBe(4)
-    expect(cellOf(page, 'MEDIUM').available).toBe(2)
-    expect(cellOf(page, 'LARGE').available).toBe(0)
-    // 两档有余位 ⇒ 可点；大档为 0 ⇒ 不可点（下面那条专门验「逐档独立」）。
-    expect(cellOf(page, 'SMALL').enabled).toBe(true)
-    expect(cellOf(page, 'MEDIUM').enabled).toBe(true)
+    expect(page.data.lockerUsable).toBe(false)
+    expect(page.data.lockerReason).toBe(LOCKER_PAGE_COPY.lockerUnavailableReason)
+    expect(page.data.phase).toBe('ready')
+    for (const type of [1, 2, 3, 4] as const) {
+      expect(cellOf(page, type).state, `离线时第 ${type} 档没有置灰`).toBe('offline')
+    }
+    expect(page.data.barTitle).toBe(LOCKER_PAGE_COPY.offlineBarTitle)
+    expect(page.data.barHint).toBe(LOCKER_PAGE_COPY.offlineBarHint)
+    expect(page.data.ctaEnabled).toBe(false)
+    expect(page.data.reserveEnabled).toBe(false)
+    expect(page.data.reserveReason).toBe(LOCKER_PAGE_COPY.lockerUnavailableReason)
+    expect(wx.showModal).not.toHaveBeenCalled()
+    expect(wx.showToast).not.toHaveBeenCalled()
   })
 
-  it('⚠️ 页面只认 `code` —— 三个来源进入时 `13.6` 的查询串**逐字相同**', async () => {
-    // 票面：「**页面只认 `code`，不关心来源** —— 『用户从哪进来』这个变量在收敛之后
-    // 从产品里消失」。落成断言的方式：三个来源各进入一次，**发出的请求逐字相同**。
-    // 若实现按来源分叉（比如通道 B 直接拿 result 当 code），这一条会红。
+  it('⚠️ 四档全满也是正常响应：四档「已满」+ 底栏「暂无可存格口」+ 不弹窗', async () => {
+    const { wx, page } = await enter({ code: 'WD-01' }, [
+      { body: lockerBody({ cellAvailability: { small: 0, medium: 0, large: 0, extraLarge: 0 } }) },
+    ])
+
+    expect(page.data.phase).toBe('ready')
+    for (const type of [1, 2, 3, 4] as const) {
+      expect(cellOf(page, type).state).toBe('soldout')
+    }
+    expect(page.data.barTitle).toBe(LOCKER_PAGE_COPY.allSoldOutBarTitle)
+    expect(page.data.barHint).toBe(LOCKER_PAGE_COPY.allSoldOutBarHint)
+    expect(page.data.ctaEnabled).toBe(false)
+    expect(page.data.reserveEnabled).toBe(false)
+    expect(page.data.reserveReason).toBe(LOCKER_PAGE_COPY.allSoldOutReserveReason)
+    expect(wx.showModal).not.toHaveBeenCalled()
+    expect(wx.showToast).not.toHaveBeenCalled()
+  })
+
+  it('⚠️ 预约入口只在离线 / 四档全满时置灰，点击带 lockerId 用 navigateTo', async () => {
+    const { wx, page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
+
+    expect(page.data.reserveEnabled).toBe(true)
+    ;(page.onReserve as () => void)()
+    await settle()
+
+    const url = (wx.navigateTo.mock.calls[0]?.[0] as { url: string } | undefined)?.url ?? ''
+    expect(url).toContain(RESERVATION_CREATE_PATH)
+    expect(url).toContain('lockerId=11')
+    // 预约是「去看一眼」，不是移交 —— 必须是 navigateTo。
+    expect(wx.redirectTo).not.toHaveBeenCalled()
+  })
+
+  it('⚠️ 置灰的预约入口点了什么都不做', async () => {
+    const { wx, page } = await enter({ code: 'WD-01' }, [
+      { body: lockerBody({ cellAvailability: { small: 0, medium: 0, large: 0, extraLarge: 0 } }) },
+    ])
+    expect(page.data.reserveEnabled).toBe(false)
+
+    ;(page.onReserve as () => void)()
+    await settle()
+
+    expect(wx.navigateTo).not.toHaveBeenCalled()
+  })
+
+  it('⚠️ 可用性只读 `online` —— 不在客户端维护 status 清单', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [
+      {
+        body: lockerBody({
+          online: true,
+          // 2 是 OFFLINE 的原始码；服务端收敛后的 online=true 才是权威。
+          status: 2,
+          cellAvailability: { small: 2, medium: 2, large: 2, extraLarge: 2 },
+        }),
+      },
+    ])
+
+    expect(page.data.lockerUsable).toBe(true)
+    expect(cellOf(page, 2).state).toBe('normal')
+  })
+})
+
+describe('#62 柜机页 · 入口失效 / 加载失败', () => {
+  it('⚠️ 解析不出 code → 入口失效页，且不发 13.6', async () => {
+    const { wx, page } = await enter({}, [])
+
+    expect(page.data.phase).toBe('entryFailed')
+    expect(page.data.entryFailedTitle).toBe(LOCKER_PAGE_COPY.unusableCodeTitle)
+    expect(requestsTo(sentRequests(wx.request), LOCKER_URL)).toEqual([])
+  })
+
+  it('⚠️ 13.6 → 1002 与解析失败是**同一个页面**，只换文案', async () => {
+    const { page: invalid } = await enter({ q: 'https%3A%2F%2Fx.com%2Fl%2F' }, [])
+    const { page: gone } = await enter({ code: 'WD-01' }, [
+      { body: businessError(1002, '柜机不存在') },
+    ])
+
+    expect(gone.data.phase).toBe(invalid.data.phase)
+    expect(gone.data.entryFailedTitle).toBe(LOCKER_PAGE_COPY.staleStickerTitle)
+    expect(gone.data.entryFailedTitle).not.toBe(invalid.data.entryFailedTitle)
+  })
+
+  it('⚠️ 三个来源进入时 13.6 的查询串逐字相同', async () => {
     const seen: string[] = []
     const entries: Record<string, string>[] = [
       { q: 'https%3A%2F%2Flocker.example.com%2Fl%2FWD-01' },
@@ -254,132 +404,27 @@ describe('#26 柜机页 · 正常渲染', () => {
       const urls = sentRequests(wx.request).map((r) => r.url)
       seen.push(urls.find((u) => u.includes('by-code')) ?? '(没有查柜机)')
     }
-    expect(seen[0]).toBe(LOCKER_URL)
-    expect(seen[1]).toBe(LOCKER_URL)
-    expect(seen[2]).toBe(LOCKER_URL)
-  })
-})
-
-describe('#26 柜机页 · 四种非正常进入', () => {
-  it('⚠️ 解析不出 `code` → 入口失效页（不出站名、不发 `13.6`）', async () => {
-    // 第一种：解析不出 `code` → 入口失效 → 「这个码没用」页。
-    // ⚠️ 判据是**两条**：界面进了入口失效态，**且没有发出查询请求** ——
-    // 后者才是真正会漏的那一半（拿空串去查柜机，界面照样画入口失效页，
-    // 但那是一次无意义的往返，且服务端的 `1002` 会掩盖真正的「解析失败」）。
-    const { wx, page } = await enter({}, [])
-
-    expect(page.data.phase).toBe('entryFailed')
-    expect(page.data.entryFailedTitle).toBe(LOCKER_PAGE_COPY.unusableCodeTitle)
-    expect(requestsTo(sentRequests(wx.request), LOCKER_URL)).toEqual([])
+    expect(seen).toEqual([LOCKER_URL, LOCKER_URL, LOCKER_URL])
   })
 
-  it('⚠️ `13.6` → `1002` → **同一个页面**，只换文案', async () => {
-    // 第二种：**同一个页面**，文案换为「可能是旧贴纸」+ 引导联系客服。
-    //
-    // ⚠️ 断言必须同时钉住「同一个」与「只换文案」两件事：
-    //   • 第一个 `phase` 相等 ⇒ **同一个**（若实现给 `1002` 另造一个状态/页面，这里会红）；
-    //   • 第二个标题不同 ⇒ **只换文案**（若实现照抄了「这个码没用」，这里会红）。
-    const { page: invalid } = await enter({ q: 'https%3A%2F%2Fx.com%2Fl%2F' }, [])
-    const { page: gone } = await enter({ code: 'WD-01' }, [{ body: businessError(1002, '柜机不存在') }])
-
-    expect(gone.data.phase).toBe(invalid.data.phase)
-    expect(gone.data.entryFailedTitle).toBe(LOCKER_PAGE_COPY.staleStickerTitle)
-    expect(gone.data.entryFailedTitle).not.toBe(invalid.data.entryFailedTitle)
-  })
-
-  it('⚠️⚠️ `online = false` 是**正常响应**：完整渲染柜机信息 + 入口置灰 + 写明原因', async () => {
-    // 票面逐字：「**完整渲染柜机信息**，入口**置灰并写明原因**」，且
-    // 「**后两种是正常响应而非错误**（`§16 #29`）—— 把它们做成错误弹窗，
-    // 用户会以为自己扫错了。**拿到数据意味着用户能看见『确实有这么台柜机、
-    // 只是现在不能用』，这是有效信息。**」
-    //
-    // ⇒ 三条断言缺一不可：
-    //   1. 站名与位置**照样画出来**（这才叫「完整渲染」）；
-    //   2. 三个入口**都**置灰（不只是主入口 —— 预约入口同样走不通）；
-    //   3. 置灰的**原因在界面上**（不是弹窗、不是 toast）。
-    const { wx, page } = await enter({ code: 'WD-01' }, [
-      {
-        body: lockerBody({
-          online: false,
-          status: 'OFFLINE',
-          cellAvailability: { small: 0, medium: 0, large: 0 },
-        }),
-      },
-    ])
-
-    // ① 完整渲染 —— 站名与位置一个不少。
-    expect(page.data.siteName).toBe('望京 SOHO T1')
-    expect(page.data.position).toBe('B1 层 3 号电梯口')
-    // 三档**全部**不可点（不只是主入口），且原因写明（不是弹窗）。
-    for (const type of ['SMALL', 'MEDIUM', 'LARGE'] as const) {
-      expect(cellOf(page, type).enabled, `${type} 档在柜机不可用时没有置灰`).toBe(false)
-      expect(cellOf(page, type).reason).toBe(LOCKER_PAGE_COPY.lockerUnavailableReason)
-    }
-    // ② 入口置灰 + 原因在页内。
-    expect(page.data.lockerUsable).toBe(false)
-    expect(page.data.lockerReason).toBe(LOCKER_PAGE_COPY.lockerUnavailableReason)
-    // ③ ⚠️ 它**不是**错误态 —— 页面不得进任何失败分支。
-    expect(page.data.phase).toBe('ready')
-    // ④ ⚠️ 不是通用错误弹窗：整条路径上一次 modal 都没弹过。
-    expect(wx.showModal).not.toHaveBeenCalled()
-  })
-
-  it('⚠️⚠️ 某规格余位为 0：**该档**置灰 + 「该规格已满」，其余档照常可点', async () => {
-    // 第四种：`cellAvailability[type] === 0` 是**正常响应**，该类型入口
-    // **置灰**（建单会 `8002`），说明「该规格已满」。
-    //
-    // ⚠️ 关键是**逐档独立**：`large = 0` 而 `small/medium` 有余位时，
-    // 只有大档该灰。写成「任一档为 0 就全灰」会让本来能用的两档点不动 ——
-    // 而那是用户**拿不到**柜门的直接原因（唯一真出口是换一台柜机，
-    // 但那是在**这台柜机确实满了**的前提下）。
-    const { wx, page } = await enter({ code: 'WD-01' }, [
-      { body: lockerBody({ cellAvailability: { small: 4, medium: 2, large: 0 } }) },
-    ])
-
-    expect(cellOf(page, 'SMALL').enabled).toBe(true)
-    expect(cellOf(page, 'MEDIUM').enabled).toBe(true)
-    expect(cellOf(page, 'LARGE').enabled).toBe(false)
-    expect(cellOf(page, 'LARGE').reason).toBe(LOCKER_PAGE_COPY.cellTypeFullReason)
-    // 有余位的那两档**不带**「已满」原因。
-    expect(cellOf(page, 'SMALL').reason).toBe('')
-    expect(cellOf(page, 'MEDIUM').reason).toBe('')
-    // 正常响应，不是错误态；也没有弹窗。
-    expect(page.data.phase).toBe('ready')
-    expect(wx.showModal).not.toHaveBeenCalled()
-  })
-
-  it('⚠️ 非 `1002` 的失败**不留骨架屏** —— 给说明 + 重试出路', async () => {
-    // ⚠️ 这条也是 review 阶段补上的，挡的是本页第一版的一个真实缺口。
-    //
-    // 第一版对非 `1002` 的失败只写了一句 `setData({ phase: 'loading' })`，
-    // 理由是「停在骨架屏，不编一个错误页」。它挡对了一半（**确实不该**冒充
-    // 「这个码没用」，见上面那条），但另一半是错的：
-    // **骨架屏是「还在加载」的形态，而那一刻请求已经回来了、并且失败了。**
-    // 用户于是盯着一屏永远不动的占位 —— 既不知道出了什么事，也**没有重试的入口**。
-    //
-    // ⇒ 正确的形态是「详情页加载失败」那一行：**加载失败，请重试** +
-    //   一个重试出口。它不是「编一个错误页」，而是产品文案里已有的那一行。
+  it('⚠️ 非 1002 的失败 → 页内 loadFailed（不停骨架屏）+ 底栏说明', async () => {
     const { page } = await enter({ code: 'WD-01' }, [
-      // 网络不通 —— `kind: 'network'`，既不是 `1002` 也不是成功。
       { failure: { errMsg: 'request:fail timeout' } },
     ])
 
-    expect(page.data.phase, '取柜机失败却停在骨架屏 —— 用户会永远等下去').toBe('loadFailed')
+    expect(page.data.phase).toBe('loadFailed')
     expect(page.data.loadFailedDetail).toBe(LOCKER_PAGE_COPY.loadFailedDetail)
-    // ⚠️ 且它**不是**入口失效 —— 成因不同、出路也不同（换贴纸 vs 重试）。
+    expect(page.data.barTitle).toBe(LOCKER_PAGE_COPY.loadFailedBarTitle)
+    expect(page.data.barHint).toBe(LOCKER_PAGE_COPY.loadFailedBarHint)
+    expect(page.data.ctaEnabled).toBe(false)
     expect(page.data.entryFailedTitle).not.toBe(LOCKER_PAGE_COPY.staleStickerTitle)
   })
 
-  it('⚠️ 「重试」真的重发 `13.6`，成功后进 ready', async () => {
-    // 有出口还不够 —— 那个按钮必须**真的重发请求**。一个只改 `phase` 的假重试
-    // 会把用户留在「加载失败」页上反复点，而页面看起来「响应了」。
+  it('⚠️ 重试真的重发 13.6，成功后进 ready', async () => {
     const wx = installWxStub()
     wx.login.mockImplementation(reply({ code: 'WX-CODE', errMsg: 'login:ok' }))
     wx.request.mockImplementation(
-      respondInOrder([
-        { errMsg: 'request:fail timeout' },
-        jsonResponse(lockerBody()),
-      ]),
+      respondInOrder([{ errMsg: 'request:fail timeout' }, jsonResponse(lockerBody())]),
     )
     wx.switchTab.mockImplementation(() => {})
     wx.navigateTo.mockImplementation(() => {})
@@ -389,7 +434,7 @@ describe('#26 柜机页 · 四种非正常进入', () => {
 
     const def = await loadPage()
     const page = instantiate(def)
-    page.onLoad?.({ code: 'WD-01' })
+    ;(page.onLoad as (options: Record<string, string>) => void)({ code: 'WD-01' })
     await settle()
     expect(page.data.phase).toBe('loadFailed')
 
@@ -398,188 +443,212 @@ describe('#26 柜机页 · 四种非正常进入', () => {
 
     expect(page.data.phase).toBe('ready')
     expect(page.data.siteName).toBe('望京 SOHO T1')
-    // ⚠️ 判据是「真的又发了一次」—— 只看 `phase` 的话，一个本地翻状态的实现也能过。
     expect(requestsTo(sentRequests(wx.request), LOCKER_URL)).toHaveLength(2)
-  })
-
-  it('⚠️ 可用性判据是 `online` 一个字段 —— `status` **不参与判断**', async () => {
-    // ⚠️ 这条钉的是一个**看起来像漏实现**的设计选择，所以理由要写在测试里。
-    //
-    // 口径把条件写成两个子句（`online = false` **或** `status` 非 `ONLINE`），
-    // 但两者**同义**：「`online`｜口径 = `locker.status == ONLINE`
-    // （已按优先级链收敛）」—— `online` 就是服务端替我们算好的布尔。
-    //
-    // ⇒ 客户端若自己再对 `status` 做集合判断，就是**把后端的收敛逻辑抄一份**，
-    //   而抄的那份会在后端新增枚举时静默过期。
-    //
-    // ⚠️ 断言方式：构造一个 `online: true` 但 `status` **不在「可用」白名单里**的响应
-    // （这里用一个后端当前没有、将来可能加的值）。只读 `online` 的实现 ⇒ 入口可点；
-    // 而任何「自己维护一个可用状态清单」的实现 ⇒ 会把这一档灰掉，从而在这条上红。
-    const { page } = await enter({ code: 'WD-01' }, [
-      {
-        body: lockerBody({
-          // ⚠️ 刻意是一个**当前枚举之外**的值 —— 后端将来加状态时，
-          // `online` 会先跟上，而客户端的清单不会。
-          status: 'DECOMMISSIONED',
-          online: true,
-          cellAvailability: { small: 2, medium: 2, large: 2 },
-        }),
-      },
-    ])
-
-    expect(
-      page.data.lockerUsable,
-      '可用性没有跟着 online 走 —— 说明实现自己维护了一份 status 清单，那会在后端加枚举时静默过期',
-    ).toBe(true)
-    expect(cellOf(page, 'SMALL').enabled).toBe(true)
-  })
-
-  it('⚠️ 余位为 0 时**不出现**「去预约」引导', async () => {
-    // 票面逐字：「**余位 0 时不得引导『去预约』** —— 预约同样只认 `FREE` 格口
-    // （`13.12` 无空闲 → `8002`），唯一真出口是『换一台柜机』」。
-    //
-    // ⚠️ 这条**测不了「不存在的东西」** —— 断言只能落在「界面上出现的字」上。
-    // ⇒ 做法是把本页会渲染的全部文案（`LOCKER_PAGE_COPY` 的每一个值）里
-    //   凡是含「预约」的**摘出来单独看**：它们只能是那个次要入口的按钮名
-    //   （动作词表里的「预约」）与它的置灰原因（`该规格已满`），
-    //   **不得**是任何「去预约 / 试试预约 / 预约使用」式的引导句。
-    const allCopy = JSON.stringify(LOCKER_PAGE_COPY)
-    const guidance = allCopy.match(/[^"'，。]*预约[^"'，。]*/g) ?? []
-    expect(
-      guidance,
-      `柜机页的文案里出现了含「预约」的句子 —— 余位 0 时不得引导去预约：\n` +
-        guidance.map((g) => `  • 「${g}」`).join('\n'),
-    ).toEqual(['预约'])
   })
 })
 
-describe('#26 柜机页 · 开始存件 → 13.7 → 等待态', () => {
-  it('⚠️⚠️ 成功后背 `redirectTo` 进等待态 —— **断言不是 `navigateTo`**', async () => {
-    // ⚠️ **为什么必须 `redirectTo` 而不是 `navigateTo`**：
-    // 移交后**不得再渲染支付界面**。若用 `navigateTo`，
-    // 用户按返回键就退回了那个页面 —— **等于绕过硬约束**…`redirectTo` 让
-    // 『退回支付页』这个状态**物理上不存在**。
-    //
-    // ⚠️ 这条断言的价值全在「不是 `navigateTo`」那一半：「跳过去了」这件事
-    // `navigateTo` 与 `redirectTo` 都做得到，只看前半句的测试**两者都能过**。
-    const { wx, page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }, { body: createOrderBody() }])
+describe('#62 柜机页 · 确认弹层与建单', () => {
+  it('⚠️ 点 CTA 先开二次确认，不直接建单；弹层展示站点 / 档位 / 余位', async () => {
+    const { wx, page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
+    selectCell(page, 2)
 
-    ;(page.onStartStoring as (e: { currentTarget: { dataset: unknown } }) => void)({
-      currentTarget: { dataset: { cellType: 'MEDIUM' } },
-    })
+    openConfirm(page)
+    await settle()
+
+    expect(page.data.confirmVisible).toBe(true)
+    expect(page.data.confirmTitle).toBe(LOCKER_PAGE_COPY.confirmTitle)
+    expect(page.data.confirmSiteName).toBe('望京 SOHO T1')
+    expect(page.data.confirmCellValue).toBe('中格口')
+    expect(page.data.confirmRemainingValue).toBe(
+      LOCKER_PAGE_COPY.remaining.replace('{count}', '2'),
+    )
+    expect(page.data.confirmActionLabel).toBe(LOCKER_PAGE_COPY.confirmAction)
+    expect(page.data.cancelLabel).toBe(LOCKER_PAGE_COPY.cancel)
+    // 二次确认 = 还没下单。
+    expect(requestsTo(sentRequests(wx.request), CREATE_ORDER_URL)).toEqual([])
+    expect(wx.redirectTo).not.toHaveBeenCalled()
+  })
+
+  it('⚠️ 取消关闭弹层，不发建单请求', async () => {
+    const { wx, page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
+    selectCell(page, 2)
+    openConfirm(page)
+
+    ;(page.onCancelSheet as () => void)()
+    await settle()
+
+    expect(page.data.confirmVisible).toBe(false)
+    expect(requestsTo(sentRequests(wx.request), CREATE_ORDER_URL)).toEqual([])
+    expect(wx.redirectTo).not.toHaveBeenCalled()
+  })
+
+  it('⚠️ 确认后请求体是数字码 { lockerId, cellType: 2 }', async () => {
+    const { wx, page } = await enter({ code: 'WD-01' }, [
+      { body: lockerBody() },
+      { body: createOrderBody() },
+    ])
+    selectCell(page, 2)
+    openConfirm(page)
+
+    confirmCreate(page)
+    await settle()
+
+    const posts = requestsTo(sentRequests(wx.request), CREATE_ORDER_URL)
+    expect(posts).toHaveLength(1)
+    expect(posts[0]?.method).toBe('POST')
+    expect(posts[0]?.data).toEqual({ lockerId: 11, cellType: 2 })
+  })
+
+  it('⚠️⚠️ 成功必须 redirectTo 等待页（带 orderId / openTimeoutMinutes / mode=drop），不是 navigateTo', async () => {
+    const { wx, page } = await enter({ code: 'WD-01' }, [
+      { body: lockerBody() },
+      { body: createOrderBody(7) },
+    ])
+    selectCell(page, 2)
+    openConfirm(page)
+    confirmCreate(page)
     await settle()
 
     expect(wx.redirectTo).toHaveBeenCalledTimes(1)
     expect(wx.navigateTo).not.toHaveBeenCalled()
     const url = (wx.redirectTo.mock.calls[0]?.[0] as { url: string }).url
     expect(url).toContain(WAITING_PATH)
-  })
-
-  it('⚠️ 入参是 `orderId` + `openTimeoutMinutes`，且来自**响应**不是硬编码', async () => {
-    // 票面逐字：「入参：`orderId` + **`openTimeoutMinutes`**（⚠️ 这是该字段**唯一**的
-    // 合法来源与唯一合法使用位置）」，且验收：「`openTimeoutMinutes` **只**从 `13.7`
-    // 响应取，**不硬编码、不猜**」。
-    //
-    // ⚠️ 判据刻意用一个**不等于 10 的值**（10 是后端缺省，写死它也能过一条用 10 的断言）。
-    // 用 7 之后，「实现里写着 `?? 10` 或者干脆 `'10'`」这一类会当场红。
-    const { wx, page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }, { body: createOrderBody(7) }])
-
-    ;(page.onStartStoring as (e: { currentTarget: { dataset: unknown } }) => void)({
-      currentTarget: { dataset: { cellType: 'MEDIUM' } },
-    })
-    await settle()
-
-    const url = (wx.redirectTo.mock.calls[0]?.[0] as { url: string }).url
     expect(url).toContain('orderId=1001')
+    // ⚠️ 用 7 而不是缺省 10 —— 写死缺省值的实现会在这条红。
     expect(url).toContain('openTimeoutMinutes=7')
+    expect(url).toContain('mode=drop')
   })
 
-  it('⚠️ 请求体只发 `lockerId` + `cellType`，且 `lockerId` 来自 `13.6`', async () => {
-    // **`lockerId` 的唯一来源是 `13.6`**。用户点的是**规格**，
-    // 不是格口 —— 具体分配哪个格口由服务端在事务里做（`13.7` :1121）。
-    //
-    // ⚠️ 这里必须点一个**有余位**的档（默认响应里 `medium = 2`）：点一个置灰的档
-    // 会被下面那条「置灰不发请求」的规则正确拦下，于是这条用例会以
-    // 「一个请求都没发」的形式失败 —— 而那看起来像「请求体拼错了」，
-    // 实际是「点错了档」。用 MEDIUM 让这条用例只测它自己那件事。
-    const { wx, page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }, { body: createOrderBody() }])
-
-    ;(page.onStartStoring as (e: { currentTarget: { dataset: unknown } }) => void)({
-      currentTarget: { dataset: { cellType: 'MEDIUM' } },
-    })
-    await settle()
-
-    const posts = requestsTo(sentRequests(wx.request), CREATE_ORDER_URL)
-    expect(posts).toHaveLength(1)
-    expect(posts[0]?.method).toBe('POST')
-    expect(posts[0]?.data).toEqual({ lockerId: 11, cellType: 'MEDIUM' })
-  })
-
-  it('⚠️ 同一份模板渲染的三档各自带上自己的 `cellType` —— 不是三块写死的按钮', async () => {
-    // 三档是**同一块模板** `wx:for` 出来的（见 wxml），所以「点小档发 SMALL、
-    // 点大档发 LARGE」这件事完全依赖 `data-cell-type="{{ item.type }}"` 那一处绑定。
-    // ⚠️ 一个把 `cellType` 写死成 `'MEDIUM'` 的实现（三块按钮各写一遍时最容易犯）
-    // 会让用户**选了大格口、拿到的却是中格口** —— 而界面上一切正常。
-    const { wx, page } = await enter({ code: 'WD-01' }, [
-      { body: lockerBody({ cellAvailability: { small: 4, medium: 4, large: 4 } }) },
-      { body: createOrderBody() },
-    ])
-
-    ;(page.onStartStoring as (e: { currentTarget: { dataset: unknown } }) => void)({
-      currentTarget: { dataset: { cellType: 'LARGE' } },
-    })
-    await settle()
-
-    const posts = requestsTo(sentRequests(wx.request), CREATE_ORDER_URL)
-    expect(posts[0]?.data).toEqual({ lockerId: 11, cellType: 'LARGE' })
-  })
-
-  it('⚠️ 建单失败不跳转 —— 留在柜机页（失败归因就地解释）', async () => {
-    // `13.7` 的两个准入类失败码（`4004` / `8002`）在**动作点就地解释**。
-    // 跳进等待态是本票最坏的失败形态：用户会站在柜机前等一个**从没开过的门**。
+  it('⚠️ 每档各自带自己的数字码 —— 选特大档发 4', async () => {
     const { wx, page } = await enter({ code: 'WD-01' }, [
       { body: lockerBody() },
-      { body: businessError(4004, '柜机不可用') },
+      { body: createOrderBody() },
     ])
-
-    ;(page.onStartStoring as (e: { currentTarget: { dataset: unknown } }) => void)({
-      currentTarget: { dataset: { cellType: 'MEDIUM' } },
-    })
+    selectCell(page, 4)
+    openConfirm(page)
+    confirmCreate(page)
     await settle()
 
-    expect(wx.redirectTo).not.toHaveBeenCalled()
-    expect(page.data.phase).toBe('ready')
+    expect(requestsTo(sentRequests(wx.request), CREATE_ORDER_URL)[0]?.data).toEqual({
+      lockerId: 11,
+      cellType: 4,
+    })
   })
 
-  it('⚠️ 请求进行中防抖 —— `13.7` 不幂等，连点不得建两张单（明确允许的例外）', async () => {
-    // `13.7` 的幂等性口径：「**不幂等** —— 每次调用创建新订单 + 新预留格口。
-    // 前端须防止重复提交（如按钮 loading/本地去重）」。
-    // ⚠️ 这条防抖是「绝不事前阻断」规则**明确允许**的唯一两种禁用之一
-    // （「请求进行中的技术性防抖」）—— 所以它不是对「绝不事前阻断」的违反。
-    const { wx, page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }, { body: createOrderBody() }])
-    const tap = page.onStartStoring as (e: { currentTarget: { dataset: unknown } }) => void
+  it('⚠️⚠️ 提交中：保留选中、卡片不可点、CTA「正在下单…」+ spinner、遮罩不可关、防重复', async () => {
+    const gate = deferred<WxRequestSuccessResult>()
+    const wx = installWxStub()
+    wx.login.mockImplementation(reply({ code: 'WX-CODE', errMsg: 'login:ok' }))
+    let call = 0
+    wx.request.mockImplementation((options: WxRequestOptions) => {
+      call += 1
+      if (call === 1) {
+        queueMicrotask(() => options.success?.(jsonResponse(lockerBody())))
+        return
+      }
+      // 建单请求挂在闸门上 —— 测试决定它什么时候回来。
+      void gate.promise.then((response) => options.success?.(response))
+    })
+    wx.switchTab.mockImplementation(() => {})
+    wx.navigateTo.mockImplementation(() => {})
+    wx.redirectTo.mockImplementation(() => {})
+    wx.showModal.mockImplementation(() => {})
+    wx.showToast.mockImplementation(() => {})
 
-    // 连点两次，**不 await 中间那次** —— 这正是用户手快时的真实时序。
-    tap({ currentTarget: { dataset: { cellType: 'MEDIUM' } } })
-    tap({ currentTarget: { dataset: { cellType: 'MEDIUM' } } })
+    const def = await loadPage()
+    const page = instantiate(def)
+    ;(page.onLoad as (options: Record<string, string>) => void)({ code: 'WD-01' })
+    await settle()
+    selectCell(page, 2)
+    openConfirm(page)
+
+    confirmCreate(page)
+    // 第二次点击发生在第一单还挂在半空时。
+    confirmCreate(page)
     await settle()
 
+    expect(page.data.submitting).toBe(true)
+    expect(page.data.selectedType).toBe(2)
+    expect(page.data.ctaLabel).toBe(LOCKER_PAGE_COPY.submitting)
+    expect(page.data.ctaLoading).toBe(true)
+    expect(page.data.ctaEnabled).toBe(false)
+    expect(page.data.confirmOverlayClosable).toBe(false)
+    // 卡片在提交中不可点：再选一档不会改变选择。
+    selectCell(page, 4)
+    expect(page.data.selectedType).toBe(2)
+    // 防重复：只发了一次建单。
     expect(requestsTo(sentRequests(wx.request), CREATE_ORDER_URL)).toHaveLength(1)
+
+    gate.resolve(jsonResponse(createOrderBody()))
+    await settle()
+    expect(wx.redirectTo).toHaveBeenCalledTimes(1)
+  })
+
+  it('⚠️ 提交失败：就地「下单失败，请重试」，保留选择，不跳转、不弹 toast', async () => {
+    const { wx, page } = await enter({ code: 'WD-01' }, [
+      { body: lockerBody() },
+      { body: businessError(5000, 'server exploded') },
+    ])
+    selectCell(page, 2)
+    openConfirm(page)
+    confirmCreate(page)
+    await settle()
+
+    expect(page.data.submitError).toBe(LOCKER_PAGE_COPY.submitFailed)
+    expect(page.data.selectedType).toBe(2)
+    expect(page.data.submitting).toBe(false)
+    expect(page.data.ctaEnabled).toBe(true)
+    expect(page.data.confirmVisible).toBe(false)
+    expect(wx.redirectTo).not.toHaveBeenCalled()
+    expect(wx.showToast).not.toHaveBeenCalled()
+  })
+
+  it('⚠️ 4004 用柜机不可用原因就地解释', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [
+      { body: lockerBody() },
+      { body: businessError(4004, 'locker offline') },
+    ])
+    selectCell(page, 2)
+    openConfirm(page)
+    confirmCreate(page)
+    await settle()
+
+    expect(page.data.submitError).toBe(LOCKER_PAGE_COPY.lockerUnavailableReason)
+  })
+
+  it('⚠️ 8002 用「该规格已满」就地解释', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [
+      { body: lockerBody() },
+      { body: businessError(8002, 'full') },
+    ])
+    selectCell(page, 2)
+    openConfirm(page)
+    confirmCreate(page)
+    await settle()
+
+    expect(page.data.submitError).toBe(LOCKER_PAGE_COPY.cellTypeFullReason)
   })
 })
 
-describe('#26 柜机页 · 两个出口', () => {
-  it('⚠️⚠️ 「我的订单」真的 `wx.switchTab` 到订单 tab', async () => {
-    // 票面：「顶部固定一个『我的订单』出口，走 **`wx.switchTab`** 到订单 tab。
-    // ⚠️ 这不是可选项：通道 A 是冷启动栈深 1、底部 tabBar 不显示 ⇒ 这是屏上
-    // **唯一**通往订单列表的可见路径。」
-    //
-    // ⚠️ 本页**自己写一个 `switchTab`** 是最像「看起来也对」的错 ——
-    // `#59` 已经把这件事修在 `navigation-bar.orders()` 里了，页面再写一份就是
-    // 同一个动作两个家 —— 违反「同一个动作只能有一个名字」的纪律。
-    // ⇒ 断言落在**组件的事件转发**上：页面接住 `bind:home` 之后调 `wx.switchTab`，
-    //   且目标与 `ORDER_LIST_PATH` 逐字一致。
-    const { wx, page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
+describe('#62 柜机页 · 导航出口', () => {
+  it('⚠️ 冷启动栈深 1：左「首页」+ 右「我的订单」，不是返回箭头', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }], 1)
+
+    expect(page.data.navHome).toBe(true)
+    expect(page.data.navOrders).toBe(true)
+    expect(page.data.navBack).toBe(false)
+  })
+
+  it('⚠️ 栈深 > 1：左返回 + 右「我的订单」', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }], 3)
+
+    expect(page.data.navBack).toBe(true)
+    expect(page.data.navHome).toBe(false)
+    expect(page.data.navOrders).toBe(true)
+  })
+
+  it('⚠️ 入口失效页的「我的订单」走 switchTab 到订单 tab', async () => {
+    const { wx, page } = await enter({}, [])
 
     ;(page.onMyOrders as () => void)()
     await settle()
@@ -589,233 +658,128 @@ describe('#26 柜机页 · 两个出口', () => {
     )
   })
 
-  it('⚠️ 「预约」用 `navigateTo` 进预约创建页，并带 `lockerId`', async () => {
-    // 创建入口**只在柜机页**；余位 0 时**同样置灰**。
-    // ⚠️ 这里用 `navigateTo`（不是 `redirectTo`）是**对的** —— 预约创建不是移交，
-    // 用户取消后应当能退回柜机页。移交语义（`redirectTo`）只属于等待态。
-    //
-    // ⚠️ 夹具必须让**三档都有余位**：`lockerBody()` 的缺省大格口是 0，
-    // 预约入口在**任一档**为 0 时就置灰 —— 用缺省夹具的话，
-    // 这条用例会因为「入口本来就该是灰的」而失败，看起来像 `navigateTo` 拼错了。
-    // 让每条用例的夹具只暴露它要测的那一件事。
-    const { wx, page } = await enter({ code: 'WD-01' }, [
-      { body: lockerBody({ cellAvailability: { small: 4, medium: 2, large: 1 } }) },
-    ])
-
-    ;(page.onReserve as () => void)()
-    await settle()
-
-    const url = (wx.navigateTo.mock.calls[0]?.[0] as { url: string } | undefined)?.url ?? ''
-    expect(url).toContain(RESERVATION_CREATE_PATH)
-    // ⚠️ `lockerId` 来自本页的 `13.6`（唯一来源）。
-    expect(url).toContain('lockerId=11')
-  })
-
-  it('⚠️ 柜机不可用时「预约」入口也置灰（与开始存件同等）', async () => {
-    // `cellAvailability[type] === 0` 时，柜机页的「预约」入口
-    // **与「开始存件」同样置灰**并写明「该规格已满」。
-    // 而柜机整体 `online = false` 时更不必说 —— 预约同样建不出来。
-    const { page } = await enter({ code: 'WD-01' }, [
-      {
-        body: lockerBody({
-          online: false,
-          status: 'MAINTAINING',
-          cellAvailability: { small: 0, medium: 0, large: 0 },
-        }),
-      },
-    ])
-
-    expect(page.data.reserveEnabled).toBe(false)
-    expect(page.data.reserveReason).toBe(LOCKER_PAGE_COPY.lockerUnavailableReason)
-  })
-
-  it('⚠️⚠️ 余位 0 时「预约」入口**同样置灰**，原因说「该规格已满」', async () => {
-    // ⚠️⚠️ **这条断言是本票 review 阶段抓出来补上的，而它抓的是一个真实的违规。**
-    //
-    // 实现第一版把预约入口只挂在 `online` 上，并在注释里给自己编了一条理由
-    // （「预约要的是以后有格口，此刻满不代表预约时段也满」）—— 听起来合理，
-    // 但它**恰好是被验收口径明文排除的那个推理**。原文：
-    //
-    // > **余位 0 时不得引导「去预约」** —— 预约同样只认 `FREE` 格口
-    // > （`13.12` 无空闲 → `8002`），唯一真出口是「换一台柜机」。
-    // > **本节不推翻该结论**：`cellAvailability[type] === 0` 时，柜机页的「预约」入口
-    // > **与「开始存件」同样置灰**并写明「该规格已满」。
-    //
-    // ⚠️ 上一句「本节不推翻该结论」说明作者预见到了这个推理 —— 而它还是发生了。
-    // 教训：**当一条验收口径明确写下「不得据 X 推导 Y」时，实现里任何复现那个推导的
-    // 注释都是危险信号**，无论它读起来多合理。口径在这里是权威，不是论据。
-    const { page } = await enter({ code: 'WD-01' }, [
-      // 柜机**可用**，但大格口余位为 0 —— 这正是预约入口该置灰的那个场景。
-      { body: lockerBody({ cellAvailability: { small: 4, medium: 2, large: 0 } }) },
-    ])
-
-    expect(
-      page.data.reserveEnabled,
-      '余位为 0 时预约入口没有置灰 —— 它应与「开始存件」同等置灰',
-    ).toBe(false)
-    expect(page.data.reserveReason).toBe(LOCKER_PAGE_COPY.cellTypeFullReason)
-  })
-
-  it('⚠️ 三档都还有余位时「预约」入口照常可点 —— 置灰只在有余位为 0 时发生', async () => {
-    // 上一条的反面，防止修得过头（把预约入口**永远**灰掉 —— 那会让「预约」这个
-    // 功能在本页彻底不可达，而它正是**创建的唯一切入点**）。
-    const { page } = await enter({ code: 'WD-01' }, [
-      { body: lockerBody({ cellAvailability: { small: 1, medium: 1, large: 1 } }) },
-    ])
-
-    expect(page.data.reserveEnabled).toBe(true)
-    expect(page.data.reserveReason).toBe('')
-  })
-
-  it('⚠️ 置灰的入口不发请求 —— 点了也不建单（防抖之外的第二道）', async () => {
-    // 置灰是**服务端回显驱动**的（事前阻断的容许例外）。既然界面明确说了
-    // 「该规格已满」，那么照着点一下不该真的去打一次注定 `8002` 的请求 ——
-    // 而 `13.7` **不幂等**，多发一次请求在多用户并发下是真的会抢格口的。
-    const { wx, page } = await enter({ code: 'WD-01' }, [
-      { body: lockerBody({ cellAvailability: { small: 0, medium: 0, large: 0 } }) },
-    ])
-
-    ;(page.onStartStoring as (e: { currentTarget: { dataset: unknown } }) => void)({
-      currentTarget: { dataset: { cellType: 'LARGE' } },
+  it('⚠️ 入口失效页「重新扫码」复用同一条解析 + 查询链路', async () => {
+    const wx = installWxStub()
+    wx.login.mockImplementation(reply({ code: 'WX-CODE', errMsg: 'login:ok' }))
+    wx.request.mockImplementation(respondInOrder([jsonResponse(lockerBody())]))
+    wx.switchTab.mockImplementation(() => {})
+    wx.navigateTo.mockImplementation(() => {})
+    wx.redirectTo.mockImplementation(() => {})
+    wx.showModal.mockImplementation(() => {})
+    wx.showToast.mockImplementation(() => {})
+    wx.scanCode.mockImplementation((options) => {
+      options.success?.({ result: 'https://locker.example.com/l/WD-01' })
     })
+
+    const def = await loadPage()
+    const page = instantiate(def)
+    ;(page.onLoad as (options: Record<string, string>) => void)({})
+    await settle()
+    expect(page.data.phase).toBe('entryFailed')
+
+    ;(page.onRescan as () => void)()
     await settle()
 
-    expect(requestsTo(sentRequests(wx.request), CREATE_ORDER_URL)).toEqual([])
-    expect(wx.redirectTo).not.toHaveBeenCalled()
-  })
-
-  it('⚠️ 置灰的**预约**入口同样点了不动 —— 两条入口的守卫必须对称', async () => {
-    // ⚠️ 这条是 review 抓出来的：第一版对「开始存件」有守卫（`if (!row.enabled) return`），
-    // 对「预约」却只判了 `locker` 在不在 —— **`reserveEnabled` 根本没读**。
-    //
-    // 症状是真实的：wxml 上确实有 `disabled="{{ !reserveEnabled }}"`，所以**手点不出来**；
-    // 但「置灰的入口点了什么都不做」这条纪律就成了**只由模板保证**的东西 ——
-    // 而模板的 `disabled` 是**渲染层**的，事件绑定、无障碍触发、或将来把按钮换成
-    // `<view bindtap>` 的任何一次改动，都会让守卫凭空消失。守卫要长在处理函数里。
-    const { wx, page } = await enter({ code: 'WD-01' }, [
-      // 大格口满 ⇒ 预约入口置灰。
-      { body: lockerBody({ cellAvailability: { small: 4, medium: 2, large: 0 } }) },
-    ])
-    expect(page.data.reserveEnabled).toBe(false)
-
-    ;(page.onReserve as () => void)()
-    await settle()
-
-    expect(
-      wx.navigateTo,
-      '置灰的预约入口仍然跳转了 —— 守卫没有落在处理函数里，只靠模板的 disabled',
-    ).not.toHaveBeenCalled()
+    expect(page.data.phase).toBe('ready')
+    expect(requestsTo(sentRequests(wx.request), LOCKER_URL)).toHaveLength(1)
   })
 })
 
-describe('#26 柜机页 · 上下文纪律（ADR-0001）', () => {
-  it('⚠️⚠️ 运行期**零写入** storage —— 柜机上下文不进 storage（ADR-0001 硬规则）', async () => {
-    // 票面逐字：「⚠️ **禁止隐式记住上次柜机** —— **不得**把柜机上下文写入 `storage`。
-    // 最坏结果是用户在**另一台**柜机前被带上别的柜机上下文，**下单成功而门在别处开了**。
-    // 省一次扫码的收益与开错柜门的风险严重不对称。（ADR-0001）」
-    //
-    // ⚠️ 判据为什么是「**零写入**」而不是「零调用」：本页走的是真实的请求层，
-    // 而请求层**要读** storage 里的 access token（token 持久化）——
-    // 那是登录身份，**不是**柜机上下文。把「读」也算违规会让这条断言
-    // 只能靠在桩上做手脚来通过，而那就测不到真东西了。
-    // ⇒ ADR-0001 禁的是「**记住**上次柜机」，而「记住」这个动作只有 `setStorageSync`
-    //   做得到。**读**单独由下一条源码守卫钉住（它断言本页连读都没写过）。
+
+describe('#62 柜机页 · 模板结构（页面 data 真的被画出来）', () => {
+  function template(): string {
+    return readFileSync(
+      join(repoRoot, 'miniprogram', 'pages', 'locker', 'locker.wxml'),
+      'utf8',
+    )
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+  }
+
+  it('⚠️ 2×2 网格逐档渲染 cell-card，五个入参全部接线', () => {
+    const wxml = template()
+    expect(wxml).toContain('<cell-card')
+    for (const prop of ['type', 'label', 'available', 'state', 'selected']) {
+      expect(wxml, `cell-card 没有接 ${prop}`).toContain(`${prop}="{{ item.${prop} }}"`)
+    }
+    expect(wxml).toContain('bind:select="onSelectCell"')
+  })
+
+  it('⚠️ 导航栏三个出口与确认弹层都在模板里', () => {
+    const wxml = template()
+    expect(wxml).toContain('homeButton="{{ navHome }}"')
+    expect(wxml).toContain('ordersButton="{{ navOrders }}"')
+    expect(wxml).toContain('back="{{ navBack }}"')
+    expect(wxml).toContain('<van-popup')
+    expect(wxml).toContain('close-on-click-overlay="{{ confirmOverlayClosable }}"')
+    expect(wxml).toContain('bind:click-overlay="onCancelSheet"')
+    expect(wxml).toContain('bind:click="onConfirmCreate"')
+  })
+
+  it('⚠️ 提交中不靠整页透明度 —— 页面样式里没有 opacity', () => {
+    const scss = readFileSync(
+      join(repoRoot, 'miniprogram', 'pages', 'locker', 'locker.scss'),
+      'utf8',
+    )
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1')
+    expect(scss).not.toMatch(/opacity\s*:/)
+  })
+})
+
+describe('#62 柜机页 · 上下文与工程纪律', () => {
+  it('⚠️ 运行期零写入 storage —— 柜机上下文不进 storage（ADR-0001）', async () => {
     const { wx } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
 
     expect(wx.setStorageSync).not.toHaveBeenCalled()
     expect(wx.removeStorageSync).not.toHaveBeenCalled()
-    // ⚠️ 读是允许的 —— 但那一次读**必须来自请求层**（key 是 `auth.accessToken`），
-    // 而不是本页在翻自己的柜机上下文。这一条断言把「是谁在读」也钉住。
     for (const [key] of wx.getStorageSync.mock.calls) {
-      expect(
-        String(key),
-        `柜机页从 storage 读了 \`${String(key)}\` —— 柜机上下文只能来自页面参数（ADR-0001）`,
-      ).toMatch(/^auth\./)
+      expect(String(key)).toMatch(/^auth\./)
     }
   })
 
-  it('⚠️⚠️ 本页源码里**一个 storage API 都没有** —— 上面那条读法是对的，但仍要机械地钉住', async () => {
-    // 上一条是**运行时**断言：它证明「这一次进入没有写 storage」。
-    // 这一条是**源码**断言：它证明「这个文件里根本没有写 storage 的代码路径」——
-    // 包括那些本次没走到的分支（比如「记住上次柜机」那个错误实现的读分支）。
-    //
-    // ⚠️ 两条都要，因为它们挡的是两种不同的退化：
-    //   • 上一条挡「在某条分支上写了」；
-    //   • 这一条挡「写了一个本次没走到的分支」—— 而柜机页恰恰有四条分支
-    //     （四种非正常进入 + 正常态 + 重新扫码），运行时断言只能覆盖走过的那些。
+  it('⚠️ 本页源码里一个 storage API 都没有', async () => {
     const source = readFileSync(
       join(repoRoot, 'miniprogram', 'pages', 'locker', 'locker.ts'),
       'utf8',
     )
-    // 剥注释后再判 —— 本文件的注释里大量讨论 storage，那是必要的契约说明。
     const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
     for (const api of ['getStorageSync', 'setStorageSync', 'removeStorageSync', 'getStorage']) {
-      expect(
-        code,
-        `locker.ts 里出现了 \`${api}\` —— 柜机上下文只能来自页面参数（ADR-0001）`,
-      ).not.toContain(api)
+      expect(code, `locker.ts 里出现了 ${api}`).not.toContain(api)
     }
   })
-})
 
-describe('#26 柜机页 · 渲染标题', () => {
-  it('⚠️ 导航栏标题来自文案层 —— 不在 wxml 里写字面量', async () => {
-    const { page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
-    expect(page.data.title).toBe(PAGE_TITLES['pages/locker/locker'])
-  })
-})
-
-describe('#26 跳转路径只有一个家', () => {
-  it('⚠️⚠️ 柜机页里**不出现任何页面路径字面量** —— 一律从 `utils/routes` 引', async () => {
-    // ⚠️ 这条是 review 抓出来的缺陷的守卫：本票第一版在柜机页里写死过
-    // `const RESERVATION_CREATE_PATH = 'pages/reservation-create/...'` ——
-    // 而**同一个 commit** 刚建了 `utils/routes.ts`，那个文件的注释正在为
-    // 完全相同的理由解释路径为什么不能是页面里的字面量。
-    //
-    // 症状与 `#23` 修的死按钮同源：`wx.*To` 拿到不存在的路径时**静默失败**
-    // （不跳转、不报错），用户看到的就是「点了没反应」。
-    //
-    // ⚠️⚠️ **判据必须收窄到「跳转目标的常量定义」，不能是「这个串出现在任何地方」。**
-    // 第一版用了宽判据，它当场抓到了 `PAGE_TITLES['pages/locker/locker']` ——
-    // 而那里出现这个串是**完全正当**的：那是用页面自己的路径当键**查标题**，
-    // 与「往这个页面跳」是两件事（`test/startup/conventions.test.ts` 里有一条
-    // 同源的守卫，它的注释记着同一个教训）。
-    // 守卫一旦逼人绕开一个正确的写法，下一个人就会直接删掉它。
-    //
-    // ⇒ 只认**模块顶层的 `const X = 'pages/...'`**：那正是「路径被抄了一份」的形状。
-    //   跳转调用点若内联字面量，同样会被 `url:` 那一支抓到。
+  it('⚠️ 页面里不出现任何页面路径字面量 —— 一律从 utils/routes / copy 引', async () => {
     const source = readFileSync(
       join(repoRoot, 'miniprogram', 'pages', 'locker', 'locker.ts'),
       'utf8',
     )
     const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
     const inlined: string[] = []
-    // ① 顶层常量定义：`const ANY_PATH = 'pages/x/y'`
     for (const m of code.matchAll(/^\s*const\s+\w*PATH\w*\s*=\s*['"`](pages\/[^'"`]+)['"`]/gm)) {
-      inlined.push(`const ... = '${m[1]}'`)
+      inlined.push(m[1] ?? '')
     }
-    // ② 跳转 url 里内联的字面量：`url: '/pages/x/y...'`
     for (const m of code.matchAll(/url\s*:\s*['"`]\/?(pages\/[^'"`?]+)/g)) {
-      inlined.push(`url: '${m[1]}'`)
+      inlined.push(m[1] ?? '')
     }
-
-    expect(
-      inlined,
-      `柜机页里出现了写死的页面路径 —— 一律从 utils/routes 引（写错就是跳转的静默失败）：\n` +
-        inlined.map((p) => `  • ${p}`).join('\n'),
-    ).toEqual([])
+    expect(inlined).toEqual([])
   })
 
-  it('⚠️ 两个路径常量都真的注册在 `app.json` 里 —— 否则跳转静默失败', async () => {
-    // `wx.*To` 对**未注册**的路径同样静默失败。这条断言把常量与那份原生配置
-    // 扣在一起 —— `app.json` 是 JSON，引不到 TS，所以只能靠测试比对。
+  it('⚠️ 导航栏标题来自文案层', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
+    expect(page.data.title).toBe(PAGE_TITLES['pages/locker/locker'])
+  })
+
+  it('⚠️ 重试按钮复用全局 RETRY_LABEL —— 同一个动作只有一个名字', async () => {
+    const { page } = await enter({ code: 'WD-01' }, [{ body: lockerBody() }])
+    expect(page.data.retryLabel).toBe(RETRY_LABEL)
+  })
+
+  it('⚠️ 两个跳转常量都注册在 app.json 里', async () => {
     const appJson = JSON.parse(
       readFileSync(join(repoRoot, 'miniprogram', 'app.json'), 'utf8'),
     ) as { pages: string[] }
-
-    expect(appJson.pages, 'WAITING_PATH 没有注册在 app.json 里').toContain(WAITING_PATH)
-    expect(appJson.pages, 'RESERVATION_CREATE_PATH 没有注册在 app.json 里').toContain(
-      RESERVATION_CREATE_PATH,
-    )
+    expect(appJson.pages).toContain(WAITING_PATH)
+    expect(appJson.pages).toContain(RESERVATION_CREATE_PATH)
   })
 })
