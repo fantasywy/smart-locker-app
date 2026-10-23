@@ -100,6 +100,31 @@ export interface WxNavigateToOptions {
   complete?: () => void
 }
 
+/** `wx.navigateBack` 的 options —— 导航栏 `back()` 的缺省行为。 */
+export interface WxNavigateBackOptions {
+  delta?: number
+  success?: (res: { errMsg: string }) => void
+  fail?: (res: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `wx.getMenuButtonBoundingClientRect()` 的返回 —— 导航栏胶囊避让的几何来源。 */
+export interface WxMenuButtonRect {
+  left: number
+  right: number
+  top: number
+  bottom: number
+  width: number
+  height: number
+}
+
+/** `wx.getSystemInfoSync()` —— 只列导航栏用到的字段。 */
+export interface WxSystemInfo {
+  windowWidth: number
+  statusBarHeight: number
+  platform: string
+}
+
 /** `wx.scanCode` 的 options —— 通道 B。 */
 export interface WxScanCodeOptions {
   onlyFromCamera?: boolean
@@ -151,7 +176,10 @@ export interface WxStub {
   switchTab: Mock<(options: WxSwitchTabOptions) => void>
   navigateTo: Mock<(options: WxNavigateToOptions) => void>
   redirectTo: Mock<(options: WxNavigateToOptions) => void>
+  navigateBack: Mock<(options?: WxNavigateBackOptions) => void>
   scanCode: Mock<(options: WxScanCodeOptions) => void>
+  getSystemInfoSync: Mock<() => WxSystemInfo>
+  getMenuButtonBoundingClientRect: Mock<() => WxMenuButtonRect>
   showModal: Mock<(options: WxShowModalOptions) => void>
   showToast: Mock<(options: WxShowToastOptions) => void>
 }
@@ -257,7 +285,13 @@ export function installWxStub(): InstalledWxStub {
     //   • `scanCode` —— 入口失效页的「重新扫码」是用户唯一的出路；静默成功等于死按钮。
     navigateTo: unstubbed<[WxNavigateToOptions]>('navigateTo'),
     redirectTo: unstubbed<[WxNavigateToOptions]>('redirectTo'),
+    // 导航栏的「返回」是缺省行为：未编排即抛错，避免把「没实现」伪装成「调了但无栈可退」。
+    navigateBack: unstubbed<[WxNavigateBackOptions | undefined]>('navigateBack'),
     scanCode: unstubbed<[WxScanCodeOptions]>('scanCode'),
+    // 导航栏 attached 的胶囊几何来源 —— 与其它 API 一样「未编排即失败」，
+    // 免得几何算成 0 还静默通过（标题会压到胶囊底下）。
+    getSystemInfoSync: unstubbed<[]>('getSystemInfoSync'),
+    getMenuButtonBoundingClientRect: unstubbed<[]>('getMenuButtonBoundingClientRect'),
     // ⚠️ 这两个是**故意**未编排即失败的，与上面几个的方向相反：
     // 它们的正确用量是**零次**（柜机不可用与余位 0 是**正常响应**，
     // 而通用错误弹窗正是最像「功能正常」的退化）。未编排即抛错让

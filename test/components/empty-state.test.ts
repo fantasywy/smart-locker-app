@@ -1,13 +1,19 @@
-// **空态**的两条断言：文案逐字 + 组件不自己跳转。
+// **空态**的契约与内部实现边界 —— #59 按 spec §11 换 Vant 承载。
 //
-// ⚠️ 本票的裁决是「**做成参数化组件**」（三处差异全是数据，结构只有一条），
-// 理由逐条写在 `empty-state.ts` 的文件头。下面第一条用例就是那个裁决的判据：
-// 三个空态的**结构槽位相同**，只有取值不同。
+// 对外契约**不变**（标题 / 说明 / 行动文案 + 无载荷事件），所以这里继续守三件事：
+//   1. 三个空态的槽位相同、文案逐字（数据层）；
+//   2. 组件不持有文案、不自己跳转、`title` 必填（行为层）；
+//   3. 内部改用 `van-empty` + `van-button`，`image=""` 关掉远端默认图，
+//      描述色仍是 `$color-text-sub`（视觉层）。
+//
+// ⚠️ 不再断言 `.empty-state__action` 的 `height: 88rpx` 之类的自绘按钮细节 ——
+// 按钮已经交给 `van-button`，再断言那些等于在测一个不存在的实现。改为断言
+// 「用了 Vant + 主题 token」这条新的外部事实。
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { EMPTY_STATES } from '../../miniprogram/startup/copy'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -21,11 +27,27 @@ function stripped(file: string): string {
     .replace(/(^|[^:])\/\/.*$/gm, '$1')
 }
 
-describe('#23 空态：三处共用一条结构（本票的裁决）', () => {
+interface ComponentDefinition {
+  properties: Record<string, { type?: unknown; value?: unknown }>
+  data?: Record<string, unknown>
+  methods: Record<string, (...args: unknown[]) => unknown>
+}
+
+async function loadComponentDefinition(): Promise<ComponentDefinition> {
+  let captured: Record<string, unknown> | null = null
+  const host = globalThis as unknown as Record<string, unknown>
+  host.Component = (definition: Record<string, unknown>) => {
+    captured = definition
+  }
+  vi.resetModules()
+  await import('../../miniprogram/components/empty-state/empty-state')
+  delete host.Component
+  if (captured === null) throw new Error('empty-state.ts 没有调用 Component()')
+  return captured as unknown as ComponentDefinition
+}
+
+describe('#23 空态：三处共用一条结构（契约不变）', () => {
   it('⚠️ 三个空态的**槽位相同** —— 只有取值不同，没有一处需要别的排布', () => {
-    // 这就是「做成参数化组件」的全部理由（也是「不能做成三份」的判据）：
-    // 三个对象的键**逐字相同**。若哪天空态需要第四个元素（比如一个图标、一行小字链接），
-    // 这条会红 —— 那时才该重新审视「一个组件够不够」，而不是现在预防性地留口子。
     const keys = Object.values(EMPTY_STATES).map((state) => Object.keys(state).sort())
     expect(keys[0]).toEqual(['actionLabel', 'hint', 'title'])
     expect(keys[1]).toEqual(keys[0])
@@ -33,8 +55,6 @@ describe('#23 空态：三处共用一条结构（本票的裁决）', () => {
   })
 
   it('⚠️ 三个空态的文案逐字一致', () => {
-    // 那三行是逐字引用的定稿（订单与预约两处曾标「提案」但已成定稿，
-    // 信用分明细同样如此 —— 三句都改词须走既定的文案变更流程）。
     expect(EMPTY_STATES.orders.title).toBe('还没有订单')
     expect(EMPTY_STATES.orders.hint).toBe('扫码存件，把东西放进柜子')
     expect(EMPTY_STATES.orders.actionLabel).toBe('扫码存件')
@@ -47,36 +67,35 @@ describe('#23 空态：三处共用一条结构（本票的裁决）', () => {
   })
 
   it('⚠️ 信用分明细的空态**只有标题** —— 别为了凑齐两行编一句话', () => {
-    // 那一行确实只有标题（信用分明细**确无动作可做**，文案层也只保留了标题）。
-    // 空 `hint` / 空 `actionLabel` 是**有意的缺省**，不是漏填。
     expect(EMPTY_STATES.scoreLogs.hint).toBe('')
     expect(EMPTY_STATES.scoreLogs.actionLabel).toBe('')
   })
 
   it('⚠️ 两个主行动是**同一个动作**（订单与预约都走扫码）', () => {
-    // 全局文案规则：同一个动作在全局只能有一个名字。
-    // ⚠️ 预约空态**不是**「新建预约」—— 创建入口只在柜机页
-    // （`lockerId` 的唯一来源是扫码），所以空态的出口只能是扫码。
     expect(EMPTY_STATES.reservations.actionLabel).toBe(EMPTY_STATES.orders.actionLabel)
     expect(EMPTY_STATES.reservations.actionLabel).not.toContain('新建')
     expect(EMPTY_STATES.reservations.actionLabel).not.toContain('预约')
   })
 })
 
-describe('#23 空态组件：不持有文案、不自己跳转', () => {
-  it('⚠️ 组件里没有任何文案字面量 —— 用户可见的每个字归文案层', () => {
-    // 三个空态的文案全部由调用方从 `startup/copy.ts` 传进来。
-    // 判据：wxml 里不得出现连续的中文（`{{ }}` 插值不算字面量）。
-    const wxml = stripped(join(emptyStateDir, 'empty-state.wxml'))
-    const chinese = wxml.match(/[\u4e00-\u9fa5]+/g) ?? []
-    expect(chinese, `wxml 里出现了写死的中文：${chinese.join('、')}`).toEqual([])
+describe('#59 空态组件：对外契约不变', () => {
+  it('⚠️ 属性恰好是 title / hint / actionLabel，且 title 必填（没有默认值）', async () => {
+    const { properties } = await loadComponentDefinition()
+    expect(Object.keys(properties).sort()).toEqual(['actionLabel', 'hint', 'title'])
+    expect(properties.title?.value, 'title 不该有默认值').toBeUndefined()
+    expect(properties.hint?.value).toBe('')
+    expect(properties.actionLabel?.value).toBe('')
   })
 
-  it('⚠️ 组件**不自己跳转** —— 主行动只 triggerEvent，路径归页面', () => {
-    // 与 `navigation-bar.home()` 的选择**刚好相反**，理由也刚好相反（见 empty-state.ts 裁决 2）：
-    // `home()` 的目标唯一（订单 tab），组件可以自己完成；
-    // 而空态的动作要跳**别的页面**，且柜机页还认一个 `code` 参数 ——
-    // 组件不知道当前页面栈，替调用方决定就是替它编一个它没说的东西。
+  it('⚠️ 主行动只发 `action` 事件，**不带载荷** —— 跳转归页面', async () => {
+    const { methods } = await loadComponentDefinition()
+    const instance = { triggerEvent: vi.fn() }
+    methods.onAction?.call(instance)
+    expect(instance.triggerEvent).toHaveBeenCalledTimes(1)
+    expect(instance.triggerEvent).toHaveBeenCalledWith('action')
+  })
+
+  it('⚠️ 组件**不自己跳转**，也不碰 wx', () => {
     const ts = stripped(join(emptyStateDir, 'empty-state.ts'))
     for (const banned of ['wx.scanCode', 'wx.navigateTo', 'wx.switchTab', 'wx.redirectTo']) {
       expect(ts, `空态组件里出现了 ${banned} —— 跳转归页面`).not.toContain(banned)
@@ -84,75 +103,62 @@ describe('#23 空态组件：不持有文案、不自己跳转', () => {
     expect(ts).toContain('triggerEvent')
   })
 
-  it('⚠️ `title` 是**必填**属性 —— 没有默认值（缺省会让「忘了传」静默渲染）', () => {
-    // 三个空态的标题互不相同 ⇒ 任何默认值在其中两处都是错的。
-    // 没有 `value` 默认值 = 忘了传时属性是 undefined，屏上一片空白 —— 立刻可见。
-    const ts = stripped(join(emptyStateDir, 'empty-state.ts'))
-    const titleBlock = /title:\s*\{[^}]*\}/.exec(ts)?.[0] ?? ''
-    expect(titleBlock, '没找到 title 属性声明').not.toBe('')
-    expect(titleBlock, 'title 不该有默认值').not.toContain('value')
+  it('⚠️ 组件里没有任何文案字面量 —— 用户可见的每个字归文案层', () => {
+    const wxml = stripped(join(emptyStateDir, 'empty-state.wxml'))
+    const chinese = wxml.match(/[\u4e00-\u9fa5]+/g) ?? []
+    expect(chinese, `wxml 里出现了写死的中文：${chinese.join('、')}`).toEqual([])
   })
 })
 
-describe('#23 空态的视觉约束（review 补的守卫）', () => {
-  it('⚠️ 不写裸 hex', () => {
+describe('#59 空态内部改由 Vant 承载（视觉约束）', () => {
+  it('⚠️ `van-empty` + `van-button`，且 `image=""` 关闭远端默认图', () => {
+    const wxml = stripped(join(emptyStateDir, 'empty-state.wxml'))
+    expect(wxml).toContain('<van-empty')
+    expect(wxml).toContain('image=""')
+    expect(wxml).toContain('<van-button')
+    expect(wxml).toContain('bind:click="onAction"')
+    // 文案仍然只来自调用方。
+    expect(wxml).toContain('{{ title }}')
+    expect(wxml).toContain('{{ hint }}')
+    expect(wxml).toContain('{{ actionLabel }}')
+  })
+
+  it('⚠️ 组件 json 声明 Vant 组件（页面级 / 组件级，不全局注册）', () => {
+    const json = JSON.parse(readFileSync(join(emptyStateDir, 'empty-state.json'), 'utf8')) as {
+      component: boolean
+      styleIsolation?: string
+      usingComponents?: Record<string, string>
+    }
+    expect(json.component).toBe(true)
+    expect(json.styleIsolation).toBe('apply-shared')
+    expect(json.usingComponents?.['van-empty']).toBe('@vant/weapp/empty/index')
+    expect(json.usingComponents?.['van-button']).toBe('@vant/weapp/button/index')
+  })
+
+  it('⚠️ 描述文字仍用 `$color-text-sub`，标题用 `$color-text-main`', () => {
+    const scss = stripped(join(emptyStateDir, 'empty-state.scss'))
+    expect(scss).toContain('$color-text-sub')
+    expect(scss).toContain('$color-text-main')
+  })
+
+  it('⚠️ 不写裸 hex；不新增 transition / animation / keyframes', () => {
     const scss = stripped(join(emptyStateDir, 'empty-state.scss'))
     const hexes = scss.match(/#[0-9a-f]{3,8}\b/gi) ?? []
     expect(hexes, `出现了裸 hex：${hexes.join(', ')} —— 一律引 styles/ 的 token`).toEqual([])
+    expect(scss).not.toMatch(/\btransition(?:-[\w-]+)?\s*:/)
+    expect(scss).not.toMatch(/\banimation(?:-[\w-]+)?\s*:/)
+    expect(scss).not.toMatch(/@(?:-\w+-)?keyframes/)
   })
 
-  it('⚠️⚠️ **布局几何用 `rpx`，不写裸 `px`**', () => {
-    // ⛔ 这条是本票 review 抓出来的**真违规**，而它此前**没有任何守卫**：
-    // `scripts/verify-visual-tokens.mjs` 的断言里一条都不查 px/rpx，
-    // 于是「布局几何用 rpx」这条硬裁决在代码里是**裸奔**的 ——
-    // 第一版写了 `padding: 96px` 与 `line-height: 2.5`（≈35px，比 44px 的可点目标下限还小），
-    // 全绿通过。
-    //
-    // ⇒ 判据：`.empty-state` 的几何声明（padding / margin / height / width / line-height）
-    //    不得直接写 `px`。⚠️ 字号走 `v.$font-size-*`（那些 token 本身是 px，
-    //    属于「字号用 px」那一半），所以这条只查几何属性，不查 font-size。
+  it('⚠️ 布局几何用 rpx（组件自身的 padding / margin / 尺寸不写裸 px）', () => {
     const scss = stripped(join(emptyStateDir, 'empty-state.scss'))
     const offenders: string[] = []
     for (const line of scss.split('\n')) {
-      // 只挑几何属性；`font-size` 不在其中（字号本来就该是 px 系的 token）。
       if (!/^\s*(padding|margin|height|width|line-height|top|left|right|bottom)[\w-]*\s*:/.test(line)) {
         continue
       }
-      const px = line.match(/\b\d+(\.\d+)?px\b/g) ?? []
-      if (px.length > 0) offenders.push(`${line.trim()}  → ${px.join(', ')}`)
+      if (/\b\d+(\.\d+)?px\b/.test(line)) offenders.push(line.trim())
     }
-    expect(
-      offenders,
-      `以下布局几何写了 px —— 布局几何要求用 rpx（字号与 1px 细节才用 px）：\n` +
-        offenders.map((f) => `  • ${f}`).join('\n'),
-    ).toEqual([])
-  })
-
-  it('⚠️ 主行动：正常态用 `$color-primary-active`，按下态用 `$color-primary-pressed`', () => {
-    // 白字只允许压 #008655（4.62）与 #00744a（5.84），因此：
-    //   • 正常态填充 = `$color-primary-active`（`$color-primary` 原值只有 2.66，只能做装饰）；
-    //   • 按下态填充 = `$color-primary-pressed`（更深一档，用户能看出按到了）。
-    // 两者分开，且与 `failure-exit__retry` / 柜机页主行动保持同一组语义。
-    const scss = stripped(join(emptyStateDir, 'empty-state.scss'))
-    const actionBlock = /\.empty-state__action\s*\{([\s\S]*?)\n\}/.exec(scss)?.[1] ?? ''
-    expect(actionBlock, '没找到 __action 的规则体').not.toBe('')
-    expect(actionBlock).toContain('$color-primary-active')
-    expect(actionBlock, '正常态不得用按下态填充').not.toContain('$color-primary-pressed')
-
-    const activeBlock = /\.empty-state__action_active\s*\{([^}]*)\}/.exec(scss)?.[1] ?? ''
-    expect(activeBlock, '没找到 __action_active 的规则体').not.toBe('')
-    expect(activeBlock).toContain('$color-primary-pressed')
-    expect(activeBlock, '按下态用了 -active（那是正常态填充 / ink，不是按下态）').not.toContain(
-      '$color-primary-active',
-    )
-  })
-
-  it('⚠️ 主行动的可点目标 ≥ 44px（可点目标下限更严）', () => {
-    // 88rpx @375pt ≈ 44px，与 `failure-exit__retry` 的 `height: 44px` 对齐 ——
-    // 两个都是页面级主按钮，尺寸不一致会让两屏看起来像两个人做的。
-    const scss = stripped(join(emptyStateDir, 'empty-state.scss'))
-    const actionBlock = /\.empty-state__action\s*\{([\s\S]*?)\n\}/.exec(scss)?.[1] ?? ''
-    expect(actionBlock, '没找到 __action 的规则体').not.toBe('')
-    expect(actionBlock).toMatch(/height:\s*88rpx/)
+    expect(offenders, `以下布局几何写了 px：\n${offenders.join('\n')}`).toEqual([])
   })
 })

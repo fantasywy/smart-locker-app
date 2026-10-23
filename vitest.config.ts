@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
 // 测试载体配置。
@@ -6,6 +7,14 @@ import { defineConfig } from 'vitest/config'
 // 不需要浏览器环境、不需要 DOM、不需要跨端编译链。`miniprogram/` 下的 TS 直接跑，
 // 用的是与小程序构建**同一套** tsconfig（module: CommonJS）—— 见 tsconfig.test.json。
 export default defineConfig({
+  // Vant 的包根没有 `toast/toast` 之类的子路径（真实文件在 `lib/` 下）。
+  // 小程序侧由「构建 npm」按 `miniprogram: lib` 解析；测试侧用同一条映射，
+  // 让 `vi.mock('@vant/weapp/toast/toast')` 能拦截到同一个模块 id。
+  resolve: {
+    alias: {
+      '@vant/weapp': fileURLToPath(new URL('./node_modules/@vant/weapp/lib', import.meta.url)),
+    },
+  },
   test: {
     // 全局桩（wx.*）靠 globalThis 注入，不需要 jsdom；node 环境最贴近小程序「无 DOM」的事实。
     environment: 'node',

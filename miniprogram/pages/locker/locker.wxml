@@ -19,18 +19,19 @@
 -->
 
 <!--
-  ⚠️ **`homeButton` 是硬要求，不是可选项**（#23 补上，本页直接受益）。
+  ⚠️ **`ordersButton` 是硬要求，不是可选项**（#59 把导航栏收敛成四个入参：
+     title / back / homeButton / ordersButton）。
      柜机页经通道 A 冷启动时是**栈深 1 的非 tab 页**：系统返回 = 直接退回微信、
-     底部 tabBar 不显示 ⇒ 顶部这个出口是屏幕上**唯一**通往订单列表的可见路径。
-     组件自己就会 `wx.switchTab`（#23 的裁决 1：缺省行为必须可用），
-     **本页不接 `bind:home`** —— 接了也只是把同一件事写成两份。
+     底部 tabBar 不显示 ⇒ 顶部这个「我的订单」出口是屏幕上**唯一**通往订单列表的可见路径。
+     组件自己就会 `wx.switchTab(ORDER_LIST_PATH)`（缺省行为必须可用），
+     **本页不接 `bind:orders`** —— 接了也只是把同一件事写成两份。
+     ⚠️ 栈深 1 时左出口应换成「首页」（`homeButton`），栈深 > 1 才是返回箭头；
+     这段栈深判断归 #62 的柜机页改造，本票只保证组件能力就位。
 -->
 <navigation-bar
   title="{{ title }}"
   back="{{true}}"
-  homeButton="{{true}}"
-  color="black"
-  background="#FFF"
+  ordersButton="{{true}}"
 ></navigation-bar>
 
 <view class="page">

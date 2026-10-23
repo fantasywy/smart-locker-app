@@ -22,6 +22,8 @@
 // ⚠️ 本模块**只有常量，没有行为**（克制取向：不编不存在的需求）。
 // 页面自己的逻辑不长在这里。
 
+import type { PagePath } from '../startup/copy'
+
 /**
  * 等待态的页面路径 —— `app.json` 已注册（`#22` 一次配齐 10 个页面）。
  *
@@ -45,3 +47,16 @@ export const WAITING_PATH = 'pages/waiting/waiting'
  * 那时本模块的注释正在为完全相同的理由解释 `WAITING_PATH` 为什么不能是字面量。
  */
 export const RESERVATION_CREATE_PATH = 'pages/reservation-create/reservation-create'
+
+/**
+ * **首页**的页面路径 —— 导航栏栈深 1 时左侧「首页」出口的目标。
+ *
+ * ⚠️ 与 `ORDER_LIST_PATH` 分开命名：`#66` 之前两者恰好都指向 `pages/index/index`
+ * （首页暂时承载订单列表）；`#66` 之后订单列表迁到独立 tab，两者会分开。
+ * 现在就把语义分开，`home()` 与 `orders()` 才不会在迁移时被一起改错 ——
+ * `wx.switchTab` 的目标写错是**静默失败**，正是本模块存在的理由。
+ *
+ * ⚠️ 必须保持为 `app.json` 的 `tabBar.list[].pagePath` 之一；守卫见
+ * `test/components/navigation-bar.test.ts`。
+ */
+export const HOME_PATH: PagePath = 'pages/index/index'

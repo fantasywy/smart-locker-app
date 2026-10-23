@@ -21,6 +21,8 @@ import {
   PAGE_TITLES,
   RETRY_LABEL,
   ORDER_LIST_PATH,
+  NAVIGATION_COPY,
+  CONFIRM_COPY,
   STATIC_EXITS,
 } from '../../miniprogram/startup/copy'
 
@@ -30,7 +32,7 @@ const startupDir = join(miniprogramDir, 'startup')
 const componentsDir = join(miniprogramDir, 'components')
 const pagesDir = join(miniprogramDir, 'pages')
 
-/** 递归收集某目录下指定后缀的全部文件（跳过 node_modules）。 */
+/** 递归收集某目录下指定后缀的全部文件（跳过 node_modules 与构建产物 miniprogram_npm）。 */
 function collect(dir: string, extensions: readonly string[]): string[] {
   const found: string[] = []
   let entries: string[]
@@ -42,7 +44,8 @@ function collect(dir: string, extensions: readonly string[]): string[] {
   for (const entry of entries) {
     const full = join(dir, entry)
     if (statSync(full).isDirectory()) {
-      if (entry === 'node_modules') continue
+      // `miniprogram_npm/` 是开发者工具「构建 npm」的产物（gitignored）；守卫只看源码。
+      if (entry === 'node_modules' || entry === 'miniprogram_npm') continue
       found.push(...collect(full, extensions))
     } else if (extensions.some((ext) => entry.endsWith(ext))) {
       found.push(full)
@@ -93,6 +96,11 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   DATA_AREA_PLACEHOLDER_HINT,
   // ⚠️ `PAGE_TITLES` 的值 —— `#22` 新增的导出（见上方说明：新增导出必须回来补一次）。
   ...Object.values(PAGE_TITLES),
+  // ⚠️ `NAVIGATION_COPY` / `CONFIRM_COPY` —— `#59` 新增的导出。
+  // 导航栏三个出口的名字与确认弹窗的两个按钮词同样是用户可见的字；
+  // 漏加一次，组件里写字面量就会一路绿灯。
+  ...Object.values(NAVIGATION_COPY),
+  ...Object.values(CONFIRM_COPY),
   // ⚠️ `EMPTY_STATES` 的每一句 —— `#23` 新增的导出。
   // 空态的三组文案都是用户可见的字，必须能在定稿文案里查到；
   // 把它们纳入这份清单，任何一句以字面量出现在 `empty-state` 组件或页面里都会被抓住。
@@ -388,10 +396,16 @@ describe('#20 闸门链路的工程约束', () => {
       /globalData/,
     )
 
+    // ⚠️ #59 起 `dependencies` 恰好是**构建期白名单**：微信开发者工具「构建 npm」
+    // 只读取 `dependencies`（`devDependencies` 会被忽略），Vant 必须写在这里，
+    // 否则 `packNpmManually` 产不出 `miniprogram_npm/`（DevTools 实测）。
+    // 收窄成白名单而不是删除断言 —— 新增运行时依赖仍要显式改这一条。
     const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
     }
-    expect(pkg.dependencies ?? {}, '一期不引任何运行时依赖').toEqual({})
+    expect(pkg.dependencies ?? {}, '运行时依赖只允许构建期白名单').toEqual({
+      '@vant/weapp': '1.11.7',
+    })
   })
 
   it('⚠️ `startup/` 不依赖 `pages/` 或 `components/` —— 依赖方向单向', () => {

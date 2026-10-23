@@ -13,7 +13,6 @@
   "keywords": [],
   "author": "",
   "license": "",
-  "dependencies": {},
   "devDependencies": {
     "@resvg/resvg-wasm": "2.6.2",
     "@types/node": "^26.6.2",
@@ -21,5 +20,8 @@
     "miniprogram-api-typings": "^2.8.3-1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "@vant/weapp": "1.11.7"
   }
 }

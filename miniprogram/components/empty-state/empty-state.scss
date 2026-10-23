@@ -1,12 +1,13 @@
 // 空态 —— 三个列表页共用。色值全部走色调层 token，不写裸 hex。
 //
-// 取值：`miniprogram/styles/_variables.scss`。
+// ⚠️ **单位分工**：**布局几何用 `rpx`**，**字号与 1px 级细节用 `px`**。
+//    所以尺寸一律 `rpx`，字号一律走 `v.$font-size-*`。
 //
-// ⚠️ **单位分工**：**布局几何用 `rpx`**（`750rpx` = 屏宽，不同屏宽下版式一致），
-//    **字号与 1px 级细节用 `px`**。所以尺寸一律 `rpx`，字号一律走 `v.$font-size-*`
-//    （那些 token 本身是 px，同属这条约定）。
-//    ⚠️ 这条在本仓库是**真会咬人**的：`scripts/verify-visual-tokens.mjs` 的既有断言里
-//    **没有一条**查 px/rpx，所以走查与评审是唯一的网（#23 review 抓到过一次）。
+// ⚠️ 内部已经换成 `van-empty` + `van-button`：
+//   • 外层留白与描述色是 Vant 写死 / 无变量的部分，由组件 class 与 app.scss 的
+//     `.van-empty__description` 覆盖；
+//   • 主按钮的填充 / 圆角 / 字号来自 app.scss 的 Vant 主题变量（Button 组），
+//     这里只补**本组件特有**的间距与可点高度 —— 不在组件内重复映射主题。
 //
 // ⚠️ 语气上它是**中性**的：「还没有订单」不是错误，不该染任何语义色。
 //    唯一的强调是主行动按钮，用主色底 + 白字（配色规则里唯一允许的「语义色 + 白字」组合）。
@@ -14,17 +15,22 @@
 @use '../../styles/variables' as v;
 
 .empty-state {
+  // ⚠️ 组件根节点显式设一次主文字色 —— 不得依赖继承（_variables.scss 硬规则 1）。
+  color: v.$color-text-main;
+}
+
+// Vant Empty 默认 `padding: 32px 0` —— 在列表区域里偏空，按本仓库的版式收紧。
+.empty-state__empty {
+  padding: 96rpx 0;
+}
+
+.empty-state__description {
   display: flex;
   flex-direction: column;
   align-items: center;
-  // ⚠️ 靠上不居中：空态下方往往还有内容会来（上拉加载的提示），
-  //    一个垂直居中的空态会在内容到位时整块跳一下。
-  padding: 192rpx v.$spacing-md 32rpx;
 }
 
 .empty-state__title {
-  // ⚠️ 页面根节点必须显式设 $color-text-main（_variables.scss 的硬规则 1），
-  //    但组件是**另一个节点树**，不能假设继承 —— 所以这里也显式设一次。
   color: v.$color-text-main;
   font-size: v.$font-size-title;
   line-height: 1.4;
@@ -33,7 +39,7 @@
 .empty-state__hint {
   margin-top: v.$spacing-sm;
   // 说明句是**辅助信息**（告诉用户怎么开始），走 sub 而不是 weak ——
-  // weak 只给占位符与禁用态，不承载信息（_variables.scss 的中性文字三档说明）。
+  // weak 只给占位符与禁用态，不承载信息。
   color: v.$color-text-sub;
   font-size: v.$font-size-body;
   line-height: 1.5;
@@ -41,39 +47,9 @@
 }
 
 .empty-state__action {
-  // ⚠️ 小程序的 <button> 自带一层默认背景与边框，必须显式清掉才谈得上「主色底」。
-  //
-  // ⚠️ 为什么是 `<button>` 而不是别的组件里那种 `<view>`：`failure-exit` 的静态出口用
-  //    `<view>` + `bindtap`（那是**次要**出口），而空态的主行动是这一屏**唯一**的动作 ——
-  //    `<button>` 带来原生的可点目标语义与无障碍角色，这在「一个空屏上只做一件事」的
-  //    场合值得那两行 reset 的代价。（`open-type="contact"` 也走 `<button>`。）
-  &::after {
-    border: none;
-  }
-
-  // ⚠️ 88rpx（≈44px @375pt）而不是跟着字号走：「组件密度」那条约定明写
-  //    「小程序是手指操作的移动端，可点目标与字号下限都更严」。
-  //    与 `failure-exit__retry` 的 `height: 44px` 对齐 —— 两个都是页面级的主按钮，
-  //    尺寸不一致会让两屏看起来像两个人做的。
-  //    ⚠️ 那两处数值写法不同（44px / 88rpx）不是分叉：单位约定允许用 `rpx` 表达
-  //    同一几何，而本组件是新建的，按**默认**走 `rpx`。
+  // 可点目标 ≥ 44px（88rpx @375pt），与页面级主按钮同一把尺子。
   margin-top: v.$spacing-lg;
   height: 88rpx;
-  line-height: 88rpx;
-  padding: 0 v.$spacing-xl;
-  // 主按钮填充用 `$color-primary-active`（#008655）：白字 4.62 ≥ AA。
-  // `$color-primary` 原值压白只有 2.66，只能做装饰，不得承载白字。
-  background: v.$color-primary-active;
-  color: v.$color-bg-card;
   font-size: v.$font-size-body;
   border-radius: v.$radius-control;
-}
-
-// 按下反馈 —— 小程序没有 :hover，用 hover-class 挂这个类（与 weui 骨架的 weui-active 同法）。
-//
-// ⚠️ 按下态用 `$color-primary-pressed`（#00744a，白字 5.84）：它是**按下**的专用填充，
-//    与正常态的 `$color-primary-active`（#008655，白字 4.62）分开。两个都过 AA，
-//    但按下态必须更深一档，否则用户看不出「这一下已经按到了」。
-.empty-state__action_active {
-  background: v.$color-primary-pressed;
 }

@@ -1,42 +1,42 @@
-// **自绘导航栏**的 `home()` —— issue #23 的头号交付物：修一个**已核实的死按钮**。
+// **自绘导航栏**（内部 `van-nav-bar`）的契约 —— #59 按 spec §11 收敛。
 //
-// ## 缺陷原样（本票开工时核实）
+// 本文件守三件事：
+//   1. **入参白名单**：只剩 `title` / `back` / `homeButton` / `ordersButton`，
+//      颜色与背景入参删除，其余旧 weui 透传一律不留；
+//   2. **三个出口各做一件事**：`back()` 只返回、`home()` 只回首页、`orders()` 只回订单列表；
+//      缺省行为必须可用（页面不接事件也能跳），事件只是可选通知口；
+//   3. **目标取常量**：`HOME_PATH` / `ORDER_LIST_PATH`，组件里没有页面路径字面量。
 //
-// `navigation-bar.wxml:26` 绑了 `bindtap="home"`，而 `.ts` 的 `methods` 里
-// **只有 `_showChange` 与 `back`** —— `home` 根本没实现。`homeButton` 属性一旦使用，
-// 渲染出来就是个**点了没反应的死按钮**。
-//
-// ⚠️ **`wx.*` 桩在这里不是「顺带用一下」，它是本缺陷唯一的可测形态。**
-// 死按钮的症状是「点了什么都不发生」—— 那件事**没有任何返回值可断言**。
-// 本仓库的桩在这条上帮了大忙：`switchTab` 是「未编排即**抛错**」的（见 test/helpers/wx.ts），
-// 所以「点了没反应」与「点了真的调了 switchTab」在测试里是**可区分**的两件事 ——
-// 前者会让用例红，而一个静默返回 undefined 的桩会让两者都绿。
+// ⚠️ 这里仍然用 `wx.*` 桩而不是渲染。`switchTab` / `navigateBack` 都是「未编排即抛错」，
+// 所以「点了没反应」与「点了真的调了平台 API」在测试里是可区分的 —— 那正是 #23 修死按钮时
+// 建立的判据，改造后继续沿用。
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { installWxStub, reply } from '../helpers/wx'
 import { ORDER_LIST_PATH } from '../../miniprogram/startup/copy'
+import { HOME_PATH } from '../../miniprogram/utils/routes'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
 const navBarDir = join(repoRoot, 'miniprogram', 'components', 'navigation-bar')
+const pagesDir = join(repoRoot, 'miniprogram', 'pages')
 
-/**
- * 读组件定义 —— 小程序的 `Component({...})` 是一个**全局注册调用**，不是模块导出。
- *
- * 所以测试用一个最小的 `Component` 桩把它接住：把传进来的那个对象**原样存下来**，
- * 然后直接调它的 `methods.home()`。这是本仓库对「页面/组件的定义对象」的既有测法
- * （`test/startup/page.test.ts` 同法）。
- *
- * ⚠️ 用 `vi.resetModules()` + 动态 import 而不是顶层 import：`Component` 必须在
- * 模块被求值**之前**就挂在全局上。顶层 import 会在 `beforeEach` 之前跑完。
- */
-async function loadComponentDefinition(): Promise<{
-  methods: Record<string, (...args: unknown[]) => unknown>
+interface ComponentDefinition {
   properties: Record<string, unknown>
   data: Record<string, unknown>
-}> {
+  methods: Record<string, (...args: unknown[]) => unknown>
+  lifetimes?: Record<string, (...args: unknown[]) => unknown>
+}
+
+/**
+ * 读组件定义 —— 小程序的 `Component({...})` 是全局注册调用，不是模块导出。
+ *
+ * ⚠️ 用 `vi.resetModules()` + 动态 import：`Component` 必须在模块求值**之前**
+ * 就挂在全局上，顶层 import 会在 `beforeEach` 之前跑完。
+ */
+async function loadComponentDefinition(): Promise<ComponentDefinition> {
   let captured: Record<string, unknown> | null = null
   const host = globalThis as unknown as Record<string, unknown>
   host.Component = (definition: Record<string, unknown>) => {
@@ -48,153 +48,244 @@ async function loadComponentDefinition(): Promise<{
 
   delete host.Component
   if (captured === null) throw new Error('navigation-bar.ts 没有调用 Component()')
-  // TS 的控制流分析看不出 `captured` 在闭包里被赋值了 —— 这里显式收窄。
-  const definition = captured as unknown as {
-    methods: Record<string, (...args: unknown[]) => unknown>
-    properties: Record<string, unknown>
-    data: Record<string, unknown>
-  }
-  return definition
+  return captured as unknown as ComponentDefinition
 }
 
-/** 造一个最小组件实例 —— `home()` 只用到 `triggerEvent`。 */
-function makeInstance(): {
-  triggerEvent: ReturnType<typeof vi.fn>
-  data: Record<string, unknown>
-} {
-  return { triggerEvent: vi.fn(), data: { delta: 1 } }
+/** 造一个最小组件实例 —— 三个出口只用到 `triggerEvent`（attached 不用驱动）。 */
+function makeInstance(): { triggerEvent: ReturnType<typeof vi.fn> } {
+  return { triggerEvent: vi.fn() }
 }
 
-describe('#23 navigation-bar · home() 不再是死按钮', () => {
-  it('⚠️⚠️ `home` 方法**真的存在** —— 这正是本票要修的那个缺陷', async () => {
-    // 缺陷原样：`wxml:26` 绑了 `bindtap="home"`，而 `methods` 里没有它。
-    // 这条断言直接对着那个事实 —— 它在本票开工时是**红的**。
-    const { methods } = await loadComponentDefinition()
-    expect(Object.keys(methods)).toContain('home')
-    expect(typeof methods.home).toBe('function')
+/** 剥掉注释后的源码 —— 结构断言读它。 */
+function stripped(file: string): string {
+  return readFileSync(file, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+}
+
+describe('#59 navigation-bar · 入参收敛为语义白名单', () => {
+  it('⚠️ 属性恰好是 title / back / homeButton / ordersButton —— 颜色与背景入参删除', async () => {
+    const { properties } = await loadComponentDefinition()
+    expect(Object.keys(properties).sort()).toEqual(['back', 'homeButton', 'ordersButton', 'title'])
+    for (const removed of ['color', 'background', 'extClass', 'loading', 'show', 'animated', 'delta']) {
+      expect(properties, `旧 weui 透传 ${removed} 应删除`).not.toHaveProperty(removed)
+    }
   })
 
-  it('⚠️ 点击后**真的 `wx.switchTab` 到订单 tab**', async () => {
-    // 柜机页**顶部固定一个「我的订单」出口**（`wx.switchTab` 到订单 tab）。
-    const wxStub = installWxStub()
-    wxStub.switchTab.mockImplementation(reply({ errMsg: 'switchTab:ok' }))
-
-    const { methods } = await loadComponentDefinition()
-    methods.home.call(makeInstance())
-
-    expect(wxStub.switchTab).toHaveBeenCalledTimes(1)
-    // ⚠️ 路径带前导 `/`（小程序的绝对路径写法），且指向 tabBar 的第一项。
-    expect(wxStub.switchTab.mock.calls[0]?.[0]?.url).toBe(`/${ORDER_LIST_PATH}`)
-    expect(wxStub.switchTab.mock.calls[0]?.[0]?.url).toBe('/pages/index/index')
+  it('⚠️ 模板只把 title 交给 van-nav-bar，没有颜色 / 背景绑定', () => {
+    const wxml = stripped(join(navBarDir, 'navigation-bar.wxml'))
+    expect(wxml).toContain('<van-nav-bar')
+    expect(wxml).toContain('title="{{ title }}"')
+    for (const legacy of ['{{ color }}', '{{ background }}', '{{ extClass }}', '{{ loading }}', '{{ show }}']) {
+      expect(wxml, `模板仍在透传 ${legacy}`).not.toContain(legacy)
+    }
   })
 
-  it('⚠️ 必须是 `switchTab`，**不是** `navigateTo` / `redirectTo`', async () => {
-    // 订单列表是 tabBar 页，而 `navigateTo` 对 tabBar 页会**静默失败** ——
-    // 照样不跳转、不报错。那就等于没修这个死按钮，只是把「没实现」换成了「调错了 API」。
-    //
-    // 判据取**源码**而不是行为：一个调错 API 的实现照样能通过上面那条「调了 switchTab」
-    // 的反面 —— 这里断言的是「源码里根本没有别的跳转 API」。
-    const source = readFileSync(join(navBarDir, 'navigation-bar.ts'), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/(^|[^:])\/\/.*$/gm, '$1')
-    // ⚠️ 方法体里有一层 `wx.switchTab({ ... })` 的嵌套花括号，所以匹配到**下一个
-    // 顶层方法**为止（`\n    }` 是方法体收尾那一行的缩进），而不是第一个 `}`。
-    const homeBody = /home\(\)\s*\{[\s\S]*?\n {4}\}/.exec(source)?.[0] ?? ''
-    expect(homeBody, '没找到 home() 的实现体').not.toBe('')
-    expect(homeBody).toContain('wx.switchTab')
-    expect(homeBody).not.toContain('wx.navigateTo')
-    expect(homeBody).not.toContain('wx.redirectTo')
-    expect(homeBody).not.toContain('wx.reLaunch')
+  it('⚠️ 页面里的 <navigation-bar> 只使用白名单属性 —— 防止旧用法漏改', () => {
+    const allowed = new Set(['title', 'back', 'homeButton', 'ordersButton'])
+    const offenders: string[] = []
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name)
+        if (entry.isDirectory()) walk(full)
+        else if (entry.name.endsWith('.wxml')) {
+          const source = stripped(full)
+          for (const match of source.matchAll(/<navigation-bar\b([\s\S]*?)\/?>/g)) {
+            const attrText = match[1] ?? ''
+            for (const attr of attrText.matchAll(/([:\w-]+)\s*=/g)) {
+              const name = attr[1] ?? ''
+              if (!allowed.has(name)) offenders.push(`${full} → ${name}`)
+            }
+          }
+        }
+      }
+    }
+    walk(pagesDir)
+    expect(offenders, `页面导航栏出现了白名单之外的属性：\n${offenders.join('\n')}`).toEqual([])
   })
+})
 
-  it('⚠️ 目标路径来自 `ORDER_LIST_PATH`，不是本文件里的字面量', async () => {
-    // `wx.switchTab` 的 url 必须是 `app.json` 的 `tabBar.list[].pagePath` 之一 ——
-    // 差一个字符就是**静默失败**，与要修的症状一模一样、只是更难查。
-    // 而那个路径在 `app.json`（JSON，引不到 TS）与调用点各有一份 ⇒ 字面量散落 = 漂移空间。
-    const source = readFileSync(join(navBarDir, 'navigation-bar.ts'), 'utf8')
-    // 模板串拼出来的是常量，不是写死的路径。
-    expect(source).toContain('ORDER_LIST_PATH')
-    expect(source).toMatch(/url:\s*`\/\$\{ORDER_LIST_PATH\}`/)
-    // ⚠️ 不得出现写死的页面路径字面量。
-    expect(source).not.toMatch(/['"`]\/pages\//)
-  })
-
-  it('⚠️ `home()` 也 `triggerEvent`，让页面能接住（与 back() 形态一致）', async () => {
-    // 票面：「用 `triggerEvent` 还是直接 `wx.switchTab`，由实现者定，但**必须让页面能接住**
-    // （现有 `back` 用的是 `triggerEvent`，保持一致即可）。」
-    //
-    // 本票的裁决是**两者都做**（见 navigation-bar.ts 裁决 1）：`switchTab` 是缺省行为，
-    // 事件是可选的通知口。⚠️ 反过来做（只 triggerEvent、跳转交给页面）的后果是
-    // **又一次死按钮** —— 10 个页面里任何一个漏接 `bind:home` 就又点不动了，
-    // 而那正是本次要修的缺陷本身。
+describe('#59 navigation-bar · 三个出口各做一件事', () => {
+  it('⚠️ home() 只回首页：switchTab 到 HOME_PATH 常量', async () => {
     const wxStub = installWxStub()
     wxStub.switchTab.mockImplementation(reply({ errMsg: 'switchTab:ok' }))
 
     const { methods } = await loadComponentDefinition()
     const instance = makeInstance()
-    methods.home.call(instance)
+    methods.home?.call(instance)
 
+    expect(wxStub.switchTab).toHaveBeenCalledTimes(1)
+    expect((wxStub.switchTab.mock.calls[0]?.[0] as { url: string }).url).toBe(`/${HOME_PATH}`)
     expect(instance.triggerEvent).toHaveBeenCalledWith('home', {}, {})
   })
 
-  it('⚠️ `home` 在 wxml 上的绑定仍在（改实现时别把模板那一半弄丢）', () => {
-    // 缺陷的另一半在模板里：`bindtap="home"`。若有人「修」的方式是把模板那行删掉，
-    // 按钮就彻底不渲染了 —— 上面那些断言全都测不到那件事。
-    const wxml = readFileSync(join(navBarDir, 'navigation-bar.wxml'), 'utf8')
-      .replace(/<!--[\s\S]*?-->/g, '')
+  it('⚠️ orders() 只回订单列表：switchTab 到 ORDER_LIST_PATH 常量', async () => {
+    const wxStub = installWxStub()
+    wxStub.switchTab.mockImplementation(reply({ errMsg: 'switchTab:ok' }))
+
+    const { methods } = await loadComponentDefinition()
+    const instance = makeInstance()
+    methods.orders?.call(instance)
+
+    expect(wxStub.switchTab).toHaveBeenCalledTimes(1)
+    expect((wxStub.switchTab.mock.calls[0]?.[0] as { url: string }).url).toBe(`/${ORDER_LIST_PATH}`)
+    expect(instance.triggerEvent).toHaveBeenCalledWith('orders', {}, {})
+  })
+
+  it('⚠️ back() 只返回：navigateBack + back 事件（事件是可选的，不是跳转的前提）', async () => {
+    const wxStub = installWxStub()
+    wxStub.navigateBack.mockImplementation((options) => {
+      reply({ errMsg: 'navigateBack:ok' })(options ?? {})
+    })
+
+    const { methods } = await loadComponentDefinition()
+    const instance = makeInstance()
+    methods.back?.call(instance)
+
+    expect(wxStub.navigateBack).toHaveBeenCalledTimes(1)
+    expect(instance.triggerEvent).toHaveBeenCalledWith('back', {}, {})
+  })
+
+  it('⚠️ 每个方法只调自己那个跳转 API —— 不互相串线，也不写路径字面量', () => {
+    const source = stripped(join(navBarDir, 'navigation-bar.ts'))
+    const bodyOf = (name: string): string => {
+      const match = new RegExp(`${name}\\(\\)\\s*\\{[\\s\\S]*?\\n {4}\\}`).exec(source)
+      return match?.[0] ?? ''
+    }
+    const homeBody = bodyOf('home')
+    const ordersBody = bodyOf('orders')
+    const backBody = bodyOf('back')
+    expect(homeBody, '没找到 home() 实现体').not.toBe('')
+    expect(ordersBody, '没找到 orders() 实现体').not.toBe('')
+    expect(backBody, '没找到 back() 实现体').not.toBe('')
+
+    expect(homeBody).toContain('wx.switchTab')
+    expect(homeBody).not.toMatch(/wx\.(navigateTo|redirectTo|reLaunch|navigateBack)/)
+    expect(ordersBody).toContain('wx.switchTab')
+    expect(ordersBody).not.toMatch(/wx\.(navigateTo|redirectTo|reLaunch|navigateBack)/)
+    expect(backBody).toContain('wx.navigateBack')
+    expect(backBody).not.toMatch(/wx\.(switchTab|navigateTo|redirectTo|reLaunch)/)
+
+    // 目标来自常量：组件里不得出现 `/pages/...` 字面量。
+    expect(source).not.toMatch(/['"`]\/?pages\//)
+    expect(source).toContain('HOME_PATH')
+    expect(source).toContain('ORDER_LIST_PATH')
+    expect(source).toMatch(/url:\s*`\/\$\{HOME_PATH\}`/)
+    expect(source).toMatch(/url:\s*`\/\$\{ORDER_LIST_PATH\}`/)
+  })
+
+  it('⚠️ 事件名与模板绑定一一对应（改实现时别把模板那一半弄丢）', () => {
+    const wxml = stripped(join(navBarDir, 'navigation-bar.wxml'))
+    expect(wxml).toContain('bindtap="back"')
     expect(wxml).toContain('bindtap="home"')
-    // 导出图标那个 wrapper 也还在（按钮本身要能被看见）。
-    expect(wxml).toContain('weui-navigation-bar__btn_home_wrapper')
+    expect(wxml).toContain('bindtap="orders"')
+    for (const cls of ['app-navbar__back', 'app-navbar__home', 'app-navbar__orders']) {
+      expect(wxml, `缺少 ${cls} 的渲染入口`).toContain(cls)
+    }
   })
 })
 
-describe('#23 navigation-bar · home 按钮**看得见**（真机走查抓出来的第二个缺陷）', () => {
-  it('⚠️⚠️ `__btn_home` / `__btn_home_wrapper` **在 scss 里有样式** —— 否则按钮塌成 0×0', () => {
-    // ⛔ 这是本票在**微信开发者工具模拟器上实测**才发现的第二个缺陷，而它**没有任何
-    // 测试能提前抓到**（本文件上面那 5 条全绿时它依然存在）：
-    //
-    //   `wxml` 里 home 按钮的 class 是 `weui-navigation-bar__btn_home_wrapper` /
-    //   `__btn_home`，而 `navigation-bar.scss` **从来没有定义过这两个 class**。
-    //   于是 `homeButton` 打开后：元素渲染出来了（DOM 查得到、`aria-label="首页"` 在）、
-    //   `bindtap` 也修好了 —— **但用户在屏上什么都看不见**，因为一个没有任何尺寸
-    //   声明的 `view` 塌成 0×0。**点得到、看不见**，与死按钮是同一种用户后果。
-    //
-    // ⇒ 教训：`methods.home` 存在 + `wx.switchTab` 被调 = **只证明了「点了会跳」**，
-    //   完全没证明「用户找得到这个按钮」。这件事只有**真机/模拟器**能验
-    //   （这类「未实测」问题此前已有登记，#23 的票面也正是这么要求的）。
-    //   这条断言就是把那次走查的结论固化下来，防止后来的重构把它删掉。
-    const scss = readFileSync(join(navBarDir, 'navigation-bar.scss'), 'utf8').replace(
-      /\/\*[\s\S]*?\*\//g,
-      '',
-    )
-    expect(scss, '缺少 __btn_home_wrapper 的样式 —— 点击热区塌成 0×0').toMatch(
-      /\.weui-navigation-bar__btn_home_wrapper\s*\{/,
-    )
-    expect(scss, '缺少 __btn_home 的样式 —— 图标画不出来').toMatch(
-      /\.weui-navigation-bar__btn_home\s*\{/,
-    )
+describe('#59 navigation-bar · Vant 实现与样式约束', () => {
+  it('⚠️ 内部改用 van-nav-bar（页面级声明，不全局注册）', () => {
+    const json = JSON.parse(readFileSync(join(navBarDir, 'navigation-bar.json'), 'utf8')) as {
+      component: boolean
+      styleIsolation?: string
+      usingComponents?: Record<string, string>
+    }
+    expect(json.component).toBe(true)
+    expect(json.styleIsolation).toBe('apply-shared')
+    expect(json.usingComponents?.['van-nav-bar']).toBe('@vant/weapp/nav-bar/index')
   })
 
-  it('⚠️ home 图标**有实际尺寸**（不是只有颜色声明）', () => {
-    // 「有样式」还不够 —— 一个只有 `background-color` 而没有 `width` / `height` 的
-    // mask 元素仍然什么都看不见。尺寸是「看得见」的全部。
-    const scss = readFileSync(join(navBarDir, 'navigation-bar.scss'), 'utf8')
-    const homeBlock = /\.weui-navigation-bar__btn_home\s*\{([^}]*)\}/.exec(scss)?.[1] ?? ''
-    expect(homeBlock, '没找到 __btn_home 的规则体').not.toBe('')
-    expect(homeBlock, 'home 图标没有宽度 —— 会塌成 0').toMatch(/width:\s*\d+px/)
-    expect(homeBlock, 'home 图标没有高度 —— 会塌成 0').toMatch(/height:\s*\d+px/)
-    // 图标本身用 mask + 内联 SVG 画（与 goback 同一手法），**不引图片资源**。
-    expect(homeBlock).toMatch(/mask:\s*url\("data:image\/svg\+xml/);
+  it('⚠️ 样式用 BEM app-navbar__*，不再出现 weui 残留', () => {
+    const scss = stripped(join(navBarDir, 'navigation-bar.scss'))
+    expect(scss).toContain('.app-navbar')
+    expect(scss).toMatch(/\.app-navbar__back\b/)
+    expect(scss).toContain('.app-navbar__orders')
+    expect(scss, 'weui 骨架残留').not.toContain('weui-navigation-bar')
   })
 
-  it('⚠️ home 图标**不引任何图片文件**（「无本地图片资源」仍是事实）', () => {
-    // 「本期没有任何本地图片或图标资源」是一条已核实的事实，不分包的裁决正建立在它之上。
-    // 补一个图标时最容易的做法就是塞一张 png —— 那句话会**静默变假**。
-    // 本文件与 `skeleton.test.ts` 的「miniprogram/ 下无图片文件」互为佐证。
-    const scss = readFileSync(join(navBarDir, 'navigation-bar.scss'), 'utf8')
-    const homeBlock = /\.weui-navigation-bar__btn_home\s*\{([^}]*)\}/.exec(scss)?.[1] ?? ''
-    expect(homeBlock, 'home 图标引了图片文件 —— 应走 mask + 内联 SVG').not.toMatch(
-      /url\(["']?[^"')]*\.(png|jpg|jpeg|gif|svg|webp)["']?\)/,
-    )
+  it('⚠️ 不写裸 hex；不新增 transition / animation / keyframes', () => {
+    const scss = stripped(join(navBarDir, 'navigation-bar.scss'))
+    const hexes = scss.match(/#[0-9a-f]{3,8}\b/gi) ?? []
+    expect(hexes, `出现了裸 hex：${hexes.join(', ')}`).toEqual([])
+    expect(scss).not.toMatch(/\btransition(?:-[\w-]+)?\s*:/)
+    expect(scss).not.toMatch(/\banimation(?:-[\w-]+)?\s*:/)
+    expect(scss).not.toMatch(/@(?:-\w+-)?keyframes/)
+  })
+
+  it('⚠️ 导航栏用 token 写死颜色 —— 不再接受页面传色', () => {
+    const scss = stripped(join(navBarDir, 'navigation-bar.scss'))
+    expect(scss).toContain('$color-bg-card')
+    expect(scss).toContain('$color-text-main')
+    expect(scss).toContain('$color-bg-page')
+  })
+})
+
+describe('#59 navigation-bar · 胶囊避让几何', () => {
+  function makeAttachableInstance(definition: ComponentDefinition): {
+    data: Record<string, unknown>
+    setData: (patch: Record<string, unknown>) => void
+    triggerEvent: ReturnType<typeof vi.fn>
+  } {
+    const instance = {
+      data: { ...(definition.data as Record<string, unknown>) },
+      setData(patch: Record<string, unknown>) {
+        Object.assign(instance.data, patch)
+      },
+      triggerEvent: vi.fn(),
+    }
+    return instance
+  }
+
+  it('⚠️ attached 用胶囊实测位置预留右侧宽度（px，与 Vant 同一坐标系）', async () => {
+    const wxStub = installWxStub()
+    wxStub.getSystemInfoSync.mockReturnValue({ windowWidth: 375, statusBarHeight: 20, platform: 'ios' })
+    wxStub.getMenuButtonBoundingClientRect.mockReturnValue({
+      left: 278,
+      right: 365,
+      top: 24,
+      bottom: 56,
+      width: 87,
+      height: 32,
+    })
+
+    const definition = await loadComponentDefinition()
+    const instance = makeAttachableInstance(definition)
+    definition.lifetimes?.attached?.call(instance)
+
+    // 375 - 278 = 97：右侧从胶囊左缘到屏右的总宽度都要让开。
+    expect(instance.data.capsuleSafeWidth).toBe(97)
+  })
+
+  it('⚠️ 量不到胶囊时回退 0 —— 几何失败不该让整页白屏', async () => {
+    const wxStub = installWxStub()
+    wxStub.getMenuButtonBoundingClientRect.mockImplementation(() => {
+      throw new Error('getMenuButtonBoundingClientRect is not supported')
+    })
+
+    const definition = await loadComponentDefinition()
+    const instance = makeAttachableInstance(definition)
+    definition.lifetimes?.attached?.call(instance)
+
+    expect(instance.data.capsuleSafeWidth).toBe(0)
+  })
+})
+
+describe('#59 两个跳转目标都是真实 tabBar 页', () => {
+  const appJson = JSON.parse(
+    readFileSync(join(repoRoot, 'miniprogram', 'app.json'), 'utf8'),
+  ) as { pages: string[]; tabBar: { list: { pagePath: string }[] } }
+
+  it('⚠️ HOME_PATH 与 ORDER_LIST_PATH 都在 tabBar 与 pages 注册表里', () => {
+    const tabPaths = appJson.tabBar.list.map((item) => item.pagePath)
+    for (const [label, path] of [
+      ['HOME_PATH', HOME_PATH],
+      ['ORDER_LIST_PATH', ORDER_LIST_PATH],
+    ] as const) {
+      expect(tabPaths, `${label} 不是 tabBar 项`).toContain(path)
+      expect(appJson.pages, `${label} 不在 pages 注册表里`).toContain(path)
+    }
   })
 })

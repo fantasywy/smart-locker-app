@@ -1,4 +1,8 @@
 {
   "component": true,
-  "styleIsolation": "apply-shared"
+  "styleIsolation": "apply-shared",
+  "usingComponents": {
+    "van-empty": "@vant/weapp/empty/index",
+    "van-button": "@vant/weapp/button/index"
+  }
 }

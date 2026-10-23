@@ -138,6 +138,35 @@ export const EMPTY_STATES = {
   },
 } as const satisfies Record<string, { title: string; hint: string; actionLabel: string }>
 
+/**
+ * **导航栏**的固定出口文案 —— `navigation-bar` 组件内部使用。
+ *
+ * ⚠️ 这三句与页面标题不同：它们是**动作 / 出口**的名字，不是页面名。
+ * `home` 是栈深 1 时的「首页」出口；`orders` 是「我的订单」出口；`back` 只给
+ * 读屏软件（视觉上是返回箭头，没有文字）。三个词都归文案层 —— 组件里不写字面量。
+ *
+ * ⚠️ `orders` 与 `LOCKER_PAGE_COPY.myOrders` 是**同一句逐字文案**（同一个动作，
+ * 全局只有一个名字）。这里单列一份是因为 `navigation-bar` 是**全站**组件，
+ * 不该反向依赖柜机页的文案表；两处取值相等由本文件自己保证。
+ */
+export const NAVIGATION_COPY = {
+  home: '首页',
+  orders: '我的订单',
+  back: '返回',
+} as const
+
+/**
+ * **确认弹窗的默认按钮** —— 反馈适配层（`utils/feedback.ts`）的兜底文案。
+ *
+ * ⚠️ 页面有更具体的动作词时（「确认存件」「取消订单」「开始使用」），必须由页面
+ * 从 `copy.ts` 传入；这里只兜底最中性的两个词，避免 Vant 默认值成为第二文案源。
+ * 确认弹窗的标题 / 说明句永远由调用方传入（不同动作的后果不同，不能有默认值）。
+ */
+export const CONFIRM_COPY = {
+  confirm: '确认',
+  cancel: '取消',
+} as const
+
 /** 空态文案的形状 —— 键见 `EMPTY_STATES`。 */
 export type EmptyStateCopy = (typeof EMPTY_STATES)[keyof typeof EMPTY_STATES]
 

@@ -39,7 +39,53 @@ const appJson = JSON.parse(readFileSync(join(miniprogramDir, 'app.json'), 'utf8'
   subPackages?: unknown[]
   subpackages?: unknown[]
   window_navigationStyle?: string
+  style?: string
 }
+
+describe('#59 Vant 接入的前置配置（构建 npm 与主题）', () => {
+  const projectConfig = JSON.parse(
+    readFileSync(join(repoRoot, 'project.config.json'), 'utf8'),
+  ) as {
+    setting?: {
+      packNpmManually?: boolean
+      packNpmRelationList?: { packageJsonPath?: string; miniprogramNpmDistDir?: string }[]
+    }
+  }
+  const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
+    dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
+  }
+
+  it('⚠️ 构建 npm 手动指定依赖打包关系：根 package.json → miniprogram/', () => {
+    // 根 `package.json` 在 `miniprogramRoot` **之外**，不开手动映射时开发者工具
+    // 默认「构建 npm」找不到依赖 —— 而且它**不报错**，只在运行时表现为
+    // `van-*` 组件找不到。spec §12 / #40 研究把这条列为接入的第一步。
+    expect(projectConfig.setting?.packNpmManually).toBe(true)
+    expect(projectConfig.setting?.packNpmRelationList).toEqual([
+      {
+        packageJsonPath: './package.json',
+        miniprogramNpmDistDir: './miniprogram/',
+      },
+    ])
+  })
+
+  it('⚠️ @vant/weapp 在 dependencies 里 —— DevTools「构建 npm」只读这个字段', () => {
+    // ⚠️ 与直觉相反：Vant 虽然是**构建期**拷进 `miniprogram_npm/` 的，
+    // 但微信开发者工具的 `packNpmManually` 只读取 `package.json.dependencies`，
+    // 放在 `devDependencies` 时构建直接返回「No miniprogram_npm package was found」
+    // （已用 DevTools 实测）。⇒ 它必须在 `dependencies`，且是**唯一**的运行时依赖；
+    // 这条与两条既有依赖守卫（request / startup conventions）同步。
+    expect(pkg.dependencies).toEqual({ '@vant/weapp': '1.11.7' })
+    expect(pkg.devDependencies?.['@vant/weapp']).toBeUndefined()
+  })
+
+  it('⚠️ app.json 不再声明 `style: "v2"` —— Vant 要求新版基础组件样式关闭', () => {
+    // Vant 快速上手明确要求移除 `style: "v2"`：新版基础组件样式会强行加样式，
+    // 难以覆盖，可能造成 Vant 组件样式混乱。⚠️ 移除后原生 `<button>` 的默认外观会变，
+    // 视觉回归是**人工/开发者工具**项（本仓库没有截图基线）。
+    expect(appJson.style).toBeUndefined()
+  })
+})
 
 describe('#22 BASE_URL 指向可联调后端', () => {
   it('⚠️ BASE_URL 是**具体地址**，不是占位符 —— 占位符等于任何页面都连不上', async () => {
@@ -283,7 +329,8 @@ describe('#22 删除 quickstart 死代码 pages/logs（无设计出处、无端�
     const offenders: string[] = []
     const walk = (dir: string): void => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        if (entry.name === 'node_modules') continue
+        // `miniprogram_npm/` 是开发者工具构建出来的第三方产物，不是仓库源码。
+        if (entry.name === 'node_modules' || entry.name === 'miniprogram_npm') continue
         const full = join(dir, entry.name)
         if (entry.isDirectory()) {
           walk(full)

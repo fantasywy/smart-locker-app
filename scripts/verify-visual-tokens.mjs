@@ -458,37 +458,147 @@ checkTrue(
   motion.violations.length === 0,
   motion.violations.map((x) => `  • ${x}`).join('\n'),
 )
+// #59 把导航栏换成 `van-nav-bar` 后删掉了 weui 的 `loading` 入参与该 spinner：
+// 源码里不再有任何自绘 animation / keyframes。Vant 的 `van-loading` 在
+// `miniprogram_npm`（构建产物，不进源码扫描），属白名单第 ② 条。
 checkTrue(
-  '导航栏的功能性 loading 白名单仍存在（.weui-loading + @keyframes loading）',
-  motion.whitelisted.animation === 1 && motion.whitelisted.keyframes === 1,
+  '源码内没有自绘 animation / @keyframes（白名单不再被使用）',
+  motion.whitelisted.animation === 0 && motion.whitelisted.keyframes === 0,
   `实际 animation ${motion.whitelisted.animation} 处、@keyframes ${motion.whitelisted.keyframes} 处`,
 )
 
-// ---------- 第 13 条：app.scss 的 Vant 变量若已接线，必须引用 token ----------
-// Vant 接线归 #59；本票只建立 token 层。这里用「存在才断言」的跨文件守卫，
-// 避免 #59 落地时又把色值抄成字面量；不存在则跳过，不把 #59 的工作提前判红。
-const VANT_CROSS_FILE_REFS = {
-  '--button-primary-background-color': 'color-primary-active',
-  '--button-primary-border-color': 'color-primary-active',
-  '--button-border-radius': 'radius-control',
-  '--popup-round-border-radius': 'radius-sheet',
-  '--overlay-background-color': 'color-overlay',
-  '--cell-horizontal-padding': 'spacing-lg',
-  '--field-error-message-color': 'color-danger-ink',
-  '--loading-spinner-color': 'color-primary-active',
+// ---------- 第 13 条：app.scss 的 Vant 主题映射（#59 起强制） ----------
+// spec §12：12 组组件的变量按表映射；值必须来自 `_variables.scss`（用 `#{}` 插值），
+// 不允许在 app.scss 里抄第二份色值。这里逐项断言 **变量存在且引用正确 token**。
+const VANT_THEME_VARIABLES = {
+  // Button
+  '--button-primary-background-color': '$color-primary-active',
+  '--button-primary-border-color': '$color-primary-active',
+  '--button-primary-color': '$color-bg-card',
+  '--button-border-radius': '$radius-control',
+  '--button-default-height': '48px',
+  '--button-large-height': '48px',
+  '--button-default-font-size': '$font-size-title',
+  '--button-normal-font-size': '$font-size-body',
+  '--button-line-height': '24px',
+  '--button-plain-background-color': '$color-bg-card',
+  // Cell
+  '--cell-background-color': '$color-bg-card',
+  '--cell-text-color': '$color-text-main',
+  '--cell-font-size': '$font-size-body',
+  '--cell-line-height': '22px',
+  '--cell-vertical-padding': '14px',
+  '--cell-horizontal-padding': '$spacing-lg',
+  '--cell-label-color': '$color-text-sub',
+  '--cell-label-font-size': '$font-size-aux',
+  '--cell-value-color': '$color-text-sub',
+  '--cell-right-icon-color': '$color-text-weak',
+  '--cell-active-color': '$color-bg-page',
+  // CellGroup
+  '--cell-group-inset-border-radius': '$radius-card',
+  '--cell-group-title-color': '$color-text-sub',
+  '--cell-group-title-font-size': '$font-size-aux',
+  // Field
+  '--field-label-color': '$color-text-sub',
+  '--field-input-text-color': '$color-text-main',
+  '--field-placeholder-text-color': '$color-text-weak',
+  '--field-input-error-text-color': '$color-danger-ink',
+  '--field-error-message-color': '$color-danger-ink',
+  '--field-error-message-text-font-size': '$font-size-aux',
+  // Popup
+  '--popup-background-color': '$color-bg-card',
+  '--popup-round-border-radius': '$radius-sheet',
+  // Overlay
+  '--overlay-background-color': '$color-overlay',
+  // Dialog
+  '--dialog-border-radius': '$radius-sheet',
+  '--dialog-background-color': '$color-bg-card',
+  '--dialog-header-font-weight': '$font-weight-semibold',
+  // Toast（底色是 spec §12 指定的半透明深色，无对应 token）
+  '--toast-background-color': 'rgba(0, 0, 0, 0.72)',
+  '--toast-border-radius': '$radius-control',
+  '--toast-text-color': '$color-bg-card',
+  '--toast-font-size': '$font-size-body',
+  // NavBar
+  '--nav-bar-background-color': '$color-bg-card',
+  '--nav-bar-title-text-color': '$color-text-main',
+  '--nav-bar-icon-color': '$color-text-main',
+  '--nav-bar-text-color': '$color-text-main',
+  '--nav-bar-title-font-size': '$font-size-title',
+  // Search
+  '--search-background-color': '$color-bg-page',
+  '--search-input-height': '36px',
+  '--search-label-color': '$color-text-main',
+  '--search-left-icon-color': '$color-text-weak',
+  '--search-action-text-color': '$color-primary-active',
+  // SubmitBar
+  '--submit-bar-background-color': '$color-bg-card',
+  '--submit-bar-text-color': '$color-text-main',
+  '--submit-bar-text-font-size': '$font-size-body',
+  '--submit-bar-height': '64px',
+  '--submit-bar-padding': ['$spacing-sm', '$spacing-lg'],
+  '--submit-bar-button-height': '48px',
+  '--submit-bar-button-width': '160px',
+  // Loading
+  '--loading-spinner-color': '$color-primary-active',
+  '--loading-text-color': '$color-text-sub',
 }
-if (existsSync(appScssPath)) {
-  const appScss = readFileSync(appScssPath, 'utf8')
-  for (const [prop, tokenName] of Object.entries(VANT_CROSS_FILE_REFS)) {
-    const line = appScss
-      .split('\n')
-      .map((l) => l.trim())
-      .find((l) => l.startsWith(`${prop}:`))
-    if (line === undefined) continue
+
+checkTrue('app.scss 存在（Vant 主题的唯一落点）', existsSync(appScssPath))
+const appScss = existsSync(appScssPath) ? readFileSync(appScssPath, 'utf8') : ''
+checkTrue(
+  'app.scss 用 @use 引入 token（不抄第二份色值）',
+  /@use\s+['\"]\.\/styles\/variables['\"]\s+as\s+v;/.test(appScss),
+)
+const appScssNoComments = appScss
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|[^:])\/\/[^\n]*/gm, '$1')
+checkTrue(
+  'app.scss 不出现裸 hex',
+  !/#[0-9a-f]{3,8}\b/i.test(appScssNoComments),
+  (appScssNoComments.match(/#[0-9a-f]{3,8}\b/gi) ?? []).join(', '),
+)
+
+// 所有变量必须在 `page { ... }` 里（Vant 全局主题的官方落点）。
+const pageBlockMatch = /(^|\n)page\s*\{([\s\S]*?)\n\}/.exec(appScss)
+const pageBlock = pageBlockMatch?.[2] ?? ''
+checkTrue('app.scss 存在 page { ... } 主题块', pageBlock.length > 0)
+
+for (const [prop, expected] of Object.entries(VANT_THEME_VARIABLES)) {
+  const line = pageBlock
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.startsWith(`${prop}:`))
+  checkTrue(`page 块声明 ${prop}`, line !== undefined, `未找到 ${prop}`)
+  if (line !== undefined) {
+    const expectedParts = Array.isArray(expected) ? expected : [expected]
     checkTrue(
-      `${prop} 引用 $${tokenName}（不是字面量）`,
-      line.includes(`$${tokenName}`),
+      `${prop} 的值来自 ${expectedParts.join(' + ')}`,
+      expectedParts.every((part) => line.includes(part)),
       `实际：${line}`,
+    )
+  }
+}
+
+// 四处 Vant 写死、无变量可用的类覆盖（spec §12）。
+const classOverrides = [
+  ['.van-empty__description', 'color', '$color-text-sub'],
+  ['.van-cell::after', 'border-bottom-color', '$color-border'],
+  ['.van-search__content', 'border-radius', '$radius-control'],
+  ['.app-popup-shadow', 'box-shadow', '$shadow-sheet'],
+  ['.app-submit-bar-shadow', 'box-shadow', '$shadow-bar'],
+]
+for (const [selector, property, tokenName] of classOverrides) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const block = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(appScss)?.[1] ?? ''
+  checkTrue(`存在类覆盖 ${selector}`, block.length > 0, `未找到 ${selector}`)
+  if (block.length > 0) {
+    // SCSS 里写作 `v.$token`；去掉 `v.` 后按裸 token 名匹配，避免把引用写死成一种形式。
+    const blockWithoutNamespace = block.replace(/v\./g, '')
+    checkTrue(
+      `${selector} 的 ${property} 引用 ${tokenName}`,
+      new RegExp(`${property}\\s*:\\s*${tokenName.replace(/\$/g, '\\$')}`).test(blockWithoutNamespace),
+      `实际：${block.trim()}`,
     )
   }
 }
