@@ -25,6 +25,7 @@ import {
   NAVIGATION_COPY,
   CONFIRM_COPY,
   LOCKER_PAGE_COPY,
+  WAITING_PAGE_COPY,
   STATIC_EXITS,
 } from '../../miniprogram/startup/copy'
 
@@ -134,6 +135,10 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   // 扫码主按钮与两条扫码反馈都是用户可见的字；漏加一次，首页 wxml 或页面 data
   // 里写字面量就会一路绿灯（而首页恰好是唯一主行动的那一屏）。
   ...Object.values(HOME_PAGE_COPY),
+  // ⚠️ `WAITING_PAGE_COPY` 的每一句 —— `#63` 新增的导出。主陈述 / 停滞说明 /
+  // 手动核对 / 取消与重新开门弹窗 / 九种终局 / 金额四词全部是用户可见的字；
+  // 漏掉它们，等待页 wxml 或页面 data 里写字面量就会一路绿灯。
+  ...flattenCopy(WAITING_PAGE_COPY),
 ].filter((literal) => literal !== '')
 
 describe('#20 失败出口是唯一的一份', () => {
@@ -499,6 +504,66 @@ describe('#23 `wx.switchTab` 的目标确实是 tabBar 的一项', () => {
       offenders,
       `以下位置把订单列表的页面路径写死进了跳转 url —— 它只有 copy.ts 的 ORDER_LIST_PATH ` +
         `一个家，写错一个字符就是 wx.switchTab 的静默失败：\n` +
+        offenders.map((f) => `  • ${f}`).join('\n'),
+    ).toEqual([])
+  })
+})
+
+describe('#57 全局禁用词与等待页判断字段（spec §14.4 / §15）', () => {
+  it('⚠️ 全站源码不出现「门已开 / 开门成功 / 取件成功 / 已付清 / 应付 / 预估价 / 锁定价」', () => {
+    // 前四个是**无法证明或说错**的话：C 端看不到门的状态，支付成功也不等于订单完成；
+    // 后三个是**金额词的边界**：参考金额永远带「参考」，实付是已定格累计，补缴差额不由客户端算。
+    // 判据是**剥掉注释后的全部源码**（含 copy.ts 自己）—— 注释里讨论这些词是必要的，
+    // 但只要它们以字符串形式出现在任何可达界面 / 文案层，就是违规。
+    //
+    // ⚠️ 「门已开」必须用 `(?!启)` 收窄：`3002` 的契约逐字
+    // 「柜门已开启，请放入物品后关门，或联系客服」天然包含「门已开」三个字，
+    // 而那一句是**必须存在**的。禁用词挡的是把「门已开」当结论说出来，不是挡
+    // 「柜门已开启」这个服务端事实的引用。
+    const banned: readonly { word: string; pattern: RegExp }[] = [
+      { word: '门已开', pattern: /门已开(?!启)/ },
+      { word: '开门成功', pattern: /开门成功/ },
+      { word: '取件成功', pattern: /取件成功/ },
+      { word: '已付清', pattern: /已付清/ },
+      { word: '应付', pattern: /应付/ },
+      { word: '预估价', pattern: /预估价/ },
+      { word: '锁定价', pattern: /锁定价/ },
+    ]
+    const offenders: string[] = []
+    for (const file of allSources()) {
+      const code = stripComments(readFileSync(file, 'utf8'))
+      for (const { word, pattern } of banned) {
+        if (pattern.test(code)) offenders.push(`${rel(file)} → 「${word}」`)
+      }
+    }
+
+    expect(
+      offenders,
+      `以下位置出现了全局禁用词 —— 它们在任何可达界面都不得出现：\n` +
+        offenders.map((f) => `  • ${f}`).join('\n'),
+    ).toEqual([])
+  })
+
+  it('⚠️ `paid` / `openCommandIssued` 零引用（DTO 除外）—— 页面不得拿它们判态', () => {
+    // 支付成功 ≠ 订单完成：结算由关门事件驱动。等待页只能从
+    // `status` / `startAt` / `endAt` / `payAmount` 派生状态；`paid` 与
+    // `openCommandIssued` 即使返回，也不证明门开没开、更不证明订单已结束。
+    // ⇒ 这两个字段只允许存在于 `types/` 的 DTO 声明里（契约形状），任何页面 /
+    //    组件 / api 代码引用它们都是把「支付回执」当成了「订单终局」。
+    const offenders: string[] = []
+    const allowedPrefix = join(miniprogramDir, 'types') + '/'
+    for (const file of allSources()) {
+      if (file.startsWith(allowedPrefix)) continue
+      const code = stripComments(readFileSync(file, 'utf8'))
+      for (const field of ['paid', 'openCommandIssued']) {
+        const pattern = new RegExp(`\\b${field}\\b`)
+        if (pattern.test(code)) offenders.push(`${rel(file)} → ${field}`)
+      }
+    }
+
+    expect(
+      offenders,
+      `以下位置引用了支付回执字段 —— 等待页判态只用 status/startAt/endAt/payAmount：\n` +
         offenders.map((f) => `  • ${f}`).join('\n'),
     ).toEqual([])
   })

@@ -1,6 +1,8 @@
-// `13.7` 创建存件订单的**手写 DTO** —— 只做形状，没有行为。
+// **订单端点**（`13.7` 建单 / `13.9` 详情 / `13.10` 取消 / `13.11` 支付）的手写 DTO ——
+// 只做形状，没有行为。
 //
-// 契约：API设计文档.md §13.7 `POST /api/app/v1/orders` (:1105-1124)
+// 契约：API设计文档.md §13.7 (:1105-1124) / §13.9 (:1178-1197) /
+//       §13.10 (:1200-1204) / §13.11 (:1206-1235)
 //
 // ⚠️ 本模块遵守**类型层与请求层分离**的硬规则（「`types/` 与 `api/` 一一对应 ——
 // 一个端点模块配一个 DTO」）。对应的端点函数在同名的
@@ -103,4 +105,159 @@ export interface CreateOrderResponse {
    *    它**没有任何合法的展示位置**（「绝不倒计时、绝不显示分钟数」）。
    */
   openTimeoutMinutes: number
+}
+
+/**
+ * 订单状态 —— **后端数字码 1–7**（与 `/v3/api-docs` 一致）。
+ *
+ * 契约：API设计文档.md §7.1（管理端订单列表）/ §13.9（订单详情回显）
+ *
+ * | 码 | 含义 |
+ * |---|---|
+ * | 1 | `PENDING_PAYMENT` 待支付 |
+ * | 2 | `IN_PROGRESS` 进行中（未存入 / 已存入未取件） |
+ * | 3 | `COMPLETED` 已完成 |
+ * | 4 | `TIMEOUT` 已超时（`endAt` 为空时仍未取件；补缴取件关门后 `endAt` 有值） |
+ * | 5 | `FORCE_ENDED` 已强制结束 |
+ * | 6 | `REFUNDED` 已退款 |
+ * | 7 | `CANCELLED` 已取消 |
+ *
+ * ⚠️ **等待页只能从 `status` / `startAt` / `endAt` / `payAmount` 派生页面态。**
+ * `paid` / `openCommandIssued` 是支付端点的回执字段，**不参与等待页判断**：
+ * 前者证明不了门开没开，后者只说明指令生成过。两个字段在本仓库的页面上零引用。
+ */
+export type OrderStatus = 1 | 2 | 3 | 4 | 5 | 6 | 7
+
+/**
+ * `13.9` 订单详情响应 `data` —— 四个块由后端装配，客户端只读。
+ *
+ * 契约：API设计文档.md §13.9 (:1178-1197)
+ *
+ * ```json
+ * {
+ *   "order": { ... },
+ *   "locker": { ... },
+ *   "timeline": [ ... ],
+ *   "payments": [ ... ]
+ * }
+ * ```
+ *
+ * ⚠️ 等待页只消费 `order` 块；`locker` / `timeline` / `payments` 仍在 DTO 里如实保留 ——
+ * 形状归类型层，页面用不用是另一件事（订单详情页会消费其余三块）。
+ */
+export interface OrderDetailResponse {
+  order: OrderDetailOrder
+  locker: OrderDetailLocker
+  /** 时间轴 —— 由后端统一装配；等待页不展示。 */
+  timeline: OrderTimelineEvent[]
+  /** 支付流水 —— 未支付时为 `[]`；等待页不展示。 */
+  payments: OrderPayment[]
+}
+
+/**
+ * `13.9` 的 `order` 块。
+ *
+ * 契约：API设计文档.md §13.9 (:1184)
+ *
+ * ⚠️ 费用三项与 `payAmount` 在未支付时为 `null`；`payAmount` 是**累计实收**
+ * （分），不是某一次支付额。等待页只在终局把 `payAmount` 渲染成「实付 / 已付」。
+ */
+export interface OrderDetailOrder {
+  /** 订单 ID（`number` 是对 Java `Long` 的有意收窄）。 */
+  id: number
+  /** 订单号 —— 等待页不展示（spec §14.5）。 */
+  orderNo: string
+  status: OrderStatus
+  /** 基础费（分）；未支付为 null。 */
+  baseFee: number | null
+  /** 超时费（分）；未支付为 null。 */
+  overtimeFee: number | null
+  /** 优惠（分）；未支付为 null。 */
+  discount: number | null
+  /** 累计实收（分）；未支付为 null。 */
+  payAmount: number | null
+  /** 存入时刻 —— **关门落定**后才有值；为空表示还没存入。 */
+  startAt: string | null
+  /** 结束时刻 —— 取件关门 / 强制结束 / 退款后才有值。 */
+  endAt: string | null
+  /** 当前时长预估（分）；等待页**不渲染**（非终局不出现金额）。 */
+  estimatedAmount: number | null
+  /** 6 位取件码 —— 只在已存入未取件时返回。 */
+  pickupCode: string | null
+}
+
+/** `13.9` 的 `locker` 块 —— 柜机与格口定位信息；等待页不展示。 */
+export interface OrderDetailLocker {
+  id: number
+  lockerNo: string
+  siteName: string
+  /** 具体格口号 —— 只作行内定位辅助，不给它中文名（spec §14.6）。 */
+  cellNo: string
+  cellType: CellType
+}
+
+/**
+ * `13.9` 的时间轴事件。
+ *
+ * 契约：§13.9 后端实现要点（事件值域）：
+ * `CREATED` 恒有；`OPENED` 有 `startAt` 时；终局事件按状态取一个
+ * （`FINISHED` / `CANCELLED` / `FORCE_ENDED` / `REFUNDED`）。
+ *
+ * ⚠️ `title` 是服务端下发的展示文案；等待页不使用它（页面不展示时间轴）。
+ */
+export interface OrderTimelineEvent {
+  event: 'CREATED' | 'OPENED' | 'FINISHED' | 'CANCELLED' | 'FORCE_ENDED' | 'REFUNDED'
+  title: string
+  at: string
+}
+
+/**
+ * `13.9` 的 `payments` 行 —— 订单支付单列表。
+ *
+ * 契约：API设计文档.md §13.9 (:1191)
+ *
+ * ⚠️ `amount` 单位是**分**；等待页不使用本块，支付记录归订单详情页。
+ */
+export interface OrderPayment {
+  payNo: string
+  amount: number
+  /** 支付渠道数字码（一期模拟渠道为 `1`(MOCK_WECHAT)）。 */
+  channel: number
+  /** 支付单状态数字码（`2`(SUCCESS) 为成功）。 */
+  status: number
+  paidAt: string
+}
+
+/**
+ * `13.10` 取消未开门订单 —— 成功响应 `data` 为 `null`。
+ *
+ * 契约：API设计文档.md §13.10 (:1200-1204)
+ */
+export type CancelOrderResponse = null
+
+/**
+ * `13.11` 支付（模拟）响应 `data`。
+ *
+ * 契约：API设计文档.md §13.11 (:1206-1235)
+ *
+ * ```json
+ * { "payNo": "...", "payAmount": 1800, "channel": 1,
+ *   "paidAt": "...", "orderStatus": 2, "paid": true, "openCommandIssued": true }
+ * ```
+ *
+ * ⚠️ `paid` / `openCommandIssued` **只存在于 DTO**：等待页不得用它们判断状态，
+ * 也不得把「已支付」写成终局（支付成功 ≠ 订单完成，结算由关门事件驱动）。
+ */
+export interface PayOrderResponse {
+  payNo: string
+  /** 本次支付额（分）。 */
+  payAmount: number
+  channel: number
+  paidAt: string
+  /** 支付后的**当前实际状态**（`2`(IN_PROGRESS)`|4`(TIMEOUT)`）。 */
+  orderStatus: OrderStatus
+  /** 是否已支付待取件 —— 派生语义，**等待页零引用**。 */
+  paid: boolean
+  /** 是否已生成开门指令 —— **等待页零引用**。 */
+  openCommandIssued: boolean
 }

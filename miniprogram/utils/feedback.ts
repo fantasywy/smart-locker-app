@@ -47,6 +47,15 @@ export interface ConfirmOptions {
   context?: FeedbackContext
 }
 
+/** 告知弹窗参数 —— 只有一个「知道了」出口，不需要用户做决定。 */
+export interface AlertOptions {
+  title?: string
+  message: string
+  /** 关闭按钮的动作词；不传用 `CONFIRM_COPY.confirm`。 */
+  confirmText?: string
+  context?: FeedbackContext
+}
+
 /**
  * 轻提示 —— 只有一句话，**没有图标类型参数**。
  *
@@ -93,4 +102,21 @@ export async function confirm(options: ConfirmOptions): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/**
+ * 告知弹窗 —— 只陈述一句事实，**没有取消按钮**。
+ *
+ * 用于「动作被服务端拒绝，但用户不需要再做选择」的场合（例：取消订单时服务端
+ * 回 `3002`，页面必须把契约逐字告诉用户）。与 `confirm()` 的分界是**有没有二值选择**：
+ * 有选择用 `confirm`，只是告知用 `alert`。两者都走同一个 Vant Dialog 宿主，
+ * 页面仍然不 import 任何 Vant 反馈模块。
+ */
+export async function alert(options: AlertOptions): Promise<void> {
+  await Dialog.alert({
+    ...(options.title === undefined ? {} : { title: options.title }),
+    message: options.message,
+    confirmButtonText: options.confirmText ?? CONFIRM_COPY.confirm,
+    ...(options.context === undefined ? {} : { context: options.context }),
+  })
 }
