@@ -36,22 +36,9 @@
 import { createStartupGate } from '../../startup/gate'
 import type { StartupGate, StartupState } from '../../startup/gate'
 import { HOME_PAGE_COPY } from '../../startup/copy'
-import type { StaticExitId } from '../../startup/copy'
 import { showToast } from '../../utils/feedback'
 import { resolveLockerCode } from '../../utils/locker-code'
-import { BILLING_INFO_PATH, FAQ_PATH, LOCKER_PATH } from '../../utils/routes'
-
-/**
- * 失败出口里「本地内容页」两类静态出口的落点 —— 行为 id → 路由常量。
- *
- * ⚠️ **映射的键是 `id`，不是文案**：`STATIC_EXITS` 把「行为」与「措辞」解耦，
- * 页面若按 `label` 选目标，改词就会让跳转静默失效。`contact` 不在这张表里 ——
- * 它由 failure-exit 的 `open-type="contact"` 原生承载，页面不做任何降级。
- */
-const STATIC_EXIT_PATHS: Partial<Record<StaticExitId, string>> = {
-  billing: BILLING_INFO_PATH,
-  faq: FAQ_PATH,
-}
+import { LOCKER_PATH, STATIC_EXIT_PATHS } from '../../utils/routes'
 
 /**
  * 闸门实例 —— **模块级的单例**，不是 `data` 里的一员。

@@ -121,23 +121,23 @@ const nulled: LoginResponse = {
   accessToken: 'access',
   refreshToken: 'refresh',
   expiresIn: 7200,
-  user: { id: 88, nickname: null, avatar: null, phone: null, score: 100, status: 'NORMAL' },
+  user: { id: 88, nickname: null, avatar: null, phone: null, score: 100, status: 1 },
 }
 const filled: LoginResponse = {
   accessToken: 'access',
   refreshToken: 'refresh',
   expiresIn: 7200,
-  user: { id: 88, nickname: '小明', avatar: 'https://example.com/a.png', phone: '139', score: 95, status: 'BLACKLISTED' },
+  user: { id: 88, nickname: '小明', avatar: 'https://example.com/a.png', phone: '139', score: 95, status: 2 },
 }
 
 // ── 13.2 响应：只有 accessToken / expiresIn ──
 const refreshed: RefreshResponse = { accessToken: 'access-2', expiresIn: 7200 }
 
-// ── user.status 的枚举与后端逐字一致：只有 NORMAL / BLACKLISTED ──
-const normal: UserStatus = 'NORMAL'
-const blacklisted: UserStatus = 'BLACKLISTED'
+// ── user.status 是数字码（spec §57 §14.9）：1 正常 / 2 受限 ──
+const normal: UserStatus = 1
+const restricted: UserStatus = 2
 
-void [minimal, full, nulled, filled, refreshed, normal, blacklisted]
+void [minimal, full, nulled, filled, refreshed, normal, restricted]
 `)
     expect(diagnostics).toBe('')
   })
@@ -171,9 +171,9 @@ void withAvatar
     const diagnostics = compileProbe(`
 import type { LoginUser } from '${dtoPath.replace(/\.ts$/, '')}'
 // @ts-expect-error 可空字段仍须显式给出（契约 §13.1 :1070 里它们是 null，不是缺失）
-const omitted: LoginUser = { id: 88, score: 100, status: 'NORMAL' }
+const omitted: LoginUser = { id: 88, score: 100, status: 1 }
 // @ts-expect-error 可空是 | null，undefined 不在契约形状里
-const undef: LoginUser = { id: 88, nickname: undefined, avatar: null, phone: null, score: 100, status: 'NORMAL' }
+const undef: LoginUser = { id: 88, nickname: undefined, avatar: null, phone: null, score: 100, status: 1 }
 void [omitted, undef]
 `)
     expect(diagnostics).toBe('')
@@ -191,12 +191,14 @@ void invented
     expect(diagnostics).toBe('')
   })
 
-  it('user.status 只认 NORMAL / BLACKLISTED —— 别的字符串必须编译不过', () => {
+  it('user.status 只认数字码 1 / 2 —— 别的数字与旧字符串枚举都必须编译不过', () => {
     const diagnostics = compileProbe(`
 import type { UserStatus } from '${dtoPath.replace(/\.ts$/, '')}'
-// @ts-expect-error 枚举与后端逐字一致（§13.1 :1075）；类型层不做任何别的取值
-const invented: UserStatus = 'BANNED'
-void invented
+// @ts-expect-error 契约传数字码（spec #57 §14.9）；3 不是合法状态
+const inventedNumber: UserStatus = 3
+// @ts-expect-error 旧版的字符串枚举已由 #69 迁走，写回来必须编译不过
+const inventedString: UserStatus = 'NORMAL'
+void [inventedNumber, inventedString]
 `)
     expect(diagnostics).toBe('')
   })
@@ -304,7 +306,7 @@ describe('#17 类型层：只写契约有的东西（规则落在源码上）', 
     expect(stripComments(dtoSource)).not.toMatch(/['"`][^'"`]*[\u4e00-\u9fa5][^'"`]*['"`]/)
   })
 
-  it('user.status 的 DTO 注释写明了「登录成功时也可能为 BLACKLISTED、不得事前阻断」', () => {
+  it('user.status 的 DTO 注释写明了「登录成功时也可能为 2（受限）、不得事前阻断」', () => {
     // issue #17 要求这条陷阱**写进 DTO 注释**，而不是只活在票面里：后来者读到 `status` 时
     // 必须在同一屏看到「登录成功也可能是它」与「不得据此阻断」。
     // 断言读的是**该字段自己的 JSDoc**，不是整个文件 —— 否则这条会在别处出现同样措辞时空过。
@@ -313,7 +315,8 @@ describe('#17 类型层：只写契约有的东西（规则落在源码上）', 
     const docStart = dtoSource.lastIndexOf('/**', fieldStart)
     const doc = dtoSource.slice(docStart, fieldStart)
 
-    expect(doc, '未写明登录成功时也可能返回它').toContain('BLACKLISTED')
+    expect(doc, '未写明登录成功时也可能返回受限状态').toContain('2')
+    expect(doc, '未写明受限状态的数字码语义').toMatch(/受限/)
     expect(doc, '未写明「登录成功」与 status 正交').toMatch(/登录成功/)
     expect(doc, '未写明客户端不得据此事前阻断').toMatch(/不得据此做任何事前阻断/)
     expect(doc, '未写明禁阻断的既定裁决').toMatch(/拦截权只能属于服务端/)

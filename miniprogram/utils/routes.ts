@@ -22,7 +22,7 @@
 // ⚠️ 本模块**只有常量，没有行为**（克制取向：不编不存在的需求）。
 // 页面自己的逻辑不长在这里。
 
-import type { PagePath } from '../startup/copy'
+import type { PagePath, StaticExitId } from '../startup/copy'
 
 /**
  * 等待态的页面路径 —— `app.json` 已注册（`#22` 一次配齐 10 个页面）。
@@ -92,3 +92,33 @@ export const BILLING_INFO_PATH: PagePath = 'pages/billing-info/billing-info'
  * 用途与 `BILLING_INFO_PATH` 相同：登录链失败时也要能打开。
  */
 export const FAQ_PATH: PagePath = 'pages/faq/faq'
+
+/**
+ * **信用分明细页**的路径 —— 「我的」页信用分卡「明细 ›」的目标（issue #69）。
+ *
+ * ⚠️ 用 `navigateTo`（不是 `switchTab`）：它不是 tab 页；从「我的」出发，返回键应回「我的」。
+ * 与其它路径同理，写成常量而不是在页面里写 `pages/...` 字面量 —— 路径写错是静默失败。
+ */
+export const SCORE_LOGS_PATH: PagePath = 'pages/score-logs/score-logs'
+
+/**
+ * **我的预约页**的路径 —— 「我的」页「我的服务 → 我的预约」的目标（issue #69）。
+ *
+ * ⚠️ 用 `navigateTo`：它不是 tab 页；从「我的」出发，返回键应回「我的」。
+ * 创建预约的唯一入口仍在柜机页，本页只是列表出口，不提供「新建预约」。
+ */
+export const RESERVATION_LIST_PATH: PagePath = 'pages/reservation-list/reservation-list'
+
+/**
+ * 静态出口的**行为 id → 路由**映射 —— 首页失败出口与「我的」页共用同一张表。
+ *
+ * ⚠️ 键是 `STATIC_EXITS` 的 `id`，**不是 label**：`STATIC_EXITS` 把「行为」与「措辞」解耦；
+ * 按文案选目标会在改词那天让入口静默失效。`contact` 不在这张表里 —— 它由
+ * `open-type="contact"` 原生承载，页面不做任何降级。
+ *
+ * ⚠️ 两页共用本表（而不是各自写一份两行 map）：同一组出口的目标必须只有一个家。
+ */
+export const STATIC_EXIT_PATHS: Partial<Record<StaticExitId, PagePath>> = {
+  billing: BILLING_INFO_PATH,
+  faq: FAQ_PATH,
+}

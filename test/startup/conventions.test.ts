@@ -26,6 +26,7 @@ import {
   CONFIRM_COPY,
   LOCKER_PAGE_COPY,
   LOAD_FAILED_DETAIL,
+  PROFILE_COPY,
   STATIC_EXITS,
 } from '../../miniprogram/startup/copy'
 
@@ -138,6 +139,10 @@ const USER_VISIBLE_COPY_LITERALS: readonly string[] = [
   // 扫码主按钮与两条扫码反馈都是用户可见的字；漏加一次，首页 wxml 或页面 data
   // 里写字面量就会一路绿灯（而首页恰好是唯一主行动的那一屏）。
   ...Object.values(HOME_PAGE_COPY),
+  // ⚠️ `PROFILE_COPY` 的每一句 —— `#69` 新增的导出。身份回退名、受限卡四行、
+  // 信用分 / 两组入口、昵称校验与保存失败全部是用户可见的字；
+  // 漏加一次，「我的」页 wxml 里写字面量就会一路绿灯（而受限卡的四行是逐字定稿）。
+  ...flattenCopy(PROFILE_COPY),
 ].filter((literal) => literal !== '')
 
 describe('#20 失败出口是唯一的一份', () => {
