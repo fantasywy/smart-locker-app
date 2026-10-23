@@ -1,19 +1,142 @@
 <!--
-  order-detail 页 —— **空壳**（issue #22 铺的骨架，页面本身归各自的功能票）。
+  订单详情页 —— 六块自上而下（spec §7）。
 
-  ⚠️ 为什么先落空壳：`app.json` 的 `pages` 是**全局唯一**的注册表，
-     每张页面票各改一次它，必然并发冲突。
-     一次性把 10 个页面注册齐，页面票就只动自己那个目录。
+  ⚠️ **本文件没有一句用户可见字面量**：状态标签 / 金额四词 / 事件码文案 /
+  失败出口全部来自 `startup/copy.ts`，页面 `data` 只做转手。
+  `test/startup/conventions.test.ts` 的反推清单会扫描这里。
 
-  ⚠️ 标题来自 `startup/copy.ts` 的 `PAGE_TITLES`，**不在本文件里写字面量** ——
-     标题是用户可见的字，归文案层；
-     `test/startup/conventions.test.ts` 有一条守卫会判违规（它在本票第一版抓过一次）。
+  ⚠️ **不展示订单号 / 支付单号 / 渠道 / 手机号**：这些字段压根没有进 `data`，
+  模板里也就没有任何能画它们的位置。
 
-  ⚠️ 这个文件里**没有任何业务内容**，也**不假装**有：
-     不写「敬请期待」、不写占位数据、不写开发者台词。
-     它渲染的只有自绘导航栏（全端统一自绘）与一个空的页面容器。
-     承载它的页面票请**整体替换**本文件，而不是往上叠。
+  ⚠️ **六块的顺序是契约**（状态摘要 → 取件码 → 柜机信息 → 费用 → 时间轴 →
+  支付记录），测试按 DOM 顺序钉住；不要在中间插一块「提示」把顺序打乱。
+
+  ⚠️ 底栏只在**有真实 CTA** 时出现（本票只有「待存入 → 继续等待关门」）。
+  已存入 / 已超时的「取件开门」由 #65 的 `pickup-sheet` 接进来 ——
+  在这里预埋一个点不动的按钮，就是 #23 修过的死按钮。
 -->
 <navigation-bar title="{{ title }}" back="{{true}}"></navigation-bar>
 
-<view class="page"></view>
+<view class="page">
+  <!-- 首屏：详情形状的骨架（状态块 / 取件码块 / 两行信息 / 时间轴）。 -->
+  <skeleton wx:if="{{ phase === 'loading' }}" variant="detail" />
+
+  <!-- 订单不存在 / 非本人 / 已删除：统一一句话 + 回订单列表，不区分成因。 -->
+  <view wx:elif="{{ phase === 'missing' }}" class="detail__missing">
+    <view class="detail__missing-title">{{ missingTitle }}</view>
+    <button
+      class="detail__missing-action"
+      hover-class="detail__missing-action_active"
+      bindtap="onBackToOrders"
+    >{{ backToOrdersLabel }}</button>
+  </view>
+
+  <!-- 其他失败：页内重试块，不甩成全局失败出口。 -->
+  <view wx:elif="{{ phase === 'loadFailed' }}" class="detail__retry">
+    <view class="detail__retry-detail">{{ loadFailedDetail }}</view>
+    <button
+      class="detail__retry-action"
+      hover-class="detail__retry-action_active"
+      bindtap="onRetry"
+    >{{ retryLabel }}</button>
+  </view>
+
+  <block wx:else>
+    <!-- ① 状态摘要：标签 + 关键时间。不写解释性句子。 -->
+    <view class="detail__status">
+      <view class="detail__status-chip is-{{ statusTone }}">{{ statusLabel }}</view>
+      <view wx:if="{{ statusTime }}" class="detail__status-time">{{ statusTime }}</view>
+    </view>
+
+    <!-- ② 取件码：有值时常驻、不折叠。 -->
+    <view wx:if="{{ showPickupCode }}" class="detail__pickup">
+      <view class="detail__pickup-label">{{ pickupCodeLabel }}</view>
+      <view class="detail__pickup-code">{{ pickupCode }}</view>
+    </view>
+
+    <!-- ③ 柜机信息：站点名 / 柜机码 / 档位 + cellNo。 -->
+    <view class="detail__locker">
+      <view class="detail__site">{{ siteName }}</view>
+      <view class="detail__locker-row">
+        <text class="detail__locker-label">{{ lockerNoLabel }}</text>
+        <text class="detail__locker-value">{{ lockerNo }}</text>
+      </view>
+      <view wx:if="{{ showCell }}" class="detail__locker-row">
+        <text class="detail__locker-label">{{ cellLabel }}</text>
+        <text class="detail__locker-value">{{ cellText }}</text>
+      </view>
+    </view>
+
+    <!-- ④ 费用：未支付只有参考金额 + 说明；已支付才画明细。 -->
+    <view wx:if="{{ showFee }}" class="detail__fee">
+      <block wx:if="{{ showFeeDetail }}">
+        <view
+          wx:for="{{ feeRows }}"
+          wx:key="label"
+          class="detail__fee-row"
+        >
+          <text class="detail__fee-label">{{ item.label }}</text>
+          <text class="detail__fee-value">{{ item.amount }}</text>
+        </view>
+        <view wx:if="{{ showPaid }}" class="detail__fee-row detail__fee-row--total">
+          <text class="detail__fee-label">{{ paidLabel }}</text>
+          <text class="detail__fee-value">{{ paidAmount }}</text>
+        </view>
+      </block>
+      <block wx:else>
+        <view wx:if="{{ showReference }}" class="detail__fee-row">
+          <text class="detail__fee-label">{{ referenceLabel }}</text>
+          <text class="detail__fee-value">{{ referenceAmount }}</text>
+        </view>
+        <view wx:if="{{ referenceNote }}" class="detail__fee-note">{{ referenceNote }}</view>
+      </block>
+    </view>
+
+    <!-- ⑤ 时间轴：只消费事件码；后端 title 不上屏。空时间轴整块不渲染。 -->
+    <view wx:if="{{ showTimeline }}" class="detail__timeline">
+      <view wx:for="{{ timelineRows }}" wx:key="label" class="detail__timeline-row">
+        <view class="detail__timeline-label">{{ item.label }}</view>
+        <view class="detail__timeline-time">{{ item.time }}</view>
+      </view>
+    </view>
+
+    <!-- ⑥ 支付记录：只有「本次支付」+ 时间。无记录时整块不出现。 -->
+    <view wx:if="{{ showPayments }}" class="detail__payments">
+      <view wx:for="{{ paymentRows }}" wx:key="time" class="detail__payment-row">
+        <view class="detail__payment-main">
+          <text class="detail__payment-label">{{ item.label }}</text>
+          <text class="detail__payment-amount">{{ item.amount }}</text>
+        </view>
+        <view class="detail__payment-time">{{ item.time }}</view>
+      </view>
+    </view>
+
+    <!-- 历史单：无行动条，只有一个次级文字出口，走与首页相同的扫码链路。 -->
+    <button
+      wx:if="{{ showScanEntry }}"
+      class="detail__scan"
+      hover-class="detail__scan_active"
+      bindtap="onScanEntry"
+    >{{ scanEntryLabel }}</button>
+  </block>
+
+  <!-- 反馈宿主：页面决定宿主在哪，页面本身不 import Vant 的 Toast / Dialog。 -->
+  <van-toast id="van-toast" />
+  <van-dialog id="van-dialog" />
+</view>
+
+<!-- 进行中的固定行动条：只有真实 CTA 才出现（#65 的取件按钮接进这里）。 -->
+<view wx:if="{{ phase === 'ready' && showActionBar }}" class="detail__bar">
+  <button
+    class="detail__bar-primary"
+    hover-class="detail__bar-primary_active"
+    bindtap="onPrimaryAction"
+  >{{ primaryActionLabel }}</button>
+  <button
+    wx:if="{{ showCancel }}"
+    class="detail__bar-cancel"
+    hover-class="detail__bar-cancel_active"
+    disabled="{{ cancelDisabled }}"
+    bindtap="onCancel"
+  >{{ cancelActionLabel }}</button>
+</view>
