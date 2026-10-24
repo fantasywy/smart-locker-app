@@ -9,8 +9,8 @@
 // `request()`：401 由请求层内部的恢复链消费，页面拿到的只有「恢复也失败」那一类。
 // 13.4 的失败**不弹窗**，只在块内显示一行「加载失败，请重试」（spec §9）。
 //
-// ⚠️ **本票不接 `POST /files`**：头像上传端点未就绪，且票面明确「不发起上传、
-// 不出现加载中、不引入任何编译期开关」。这里只有读资料与改昵称两条请求。
+// ⚠️ 头像上传（`13.17`）不在这里：它属于 `api/files.ts`。本模块只负责 `13.4` / `13.5`；
+// 页面按 #75 的流程先调 `uploadAvatar()` 拿 `url`，再把变化字段交给 `updateProfile()`。
 
 import type { ProfileResponse, UpdateProfileRequest } from '../types/profile'
 import type { RequestResult } from '../request/types'
@@ -40,7 +40,7 @@ export function getProfile(): Promise<RequestResult<ProfileResponse>> {
 /**
  * `13.5` 更新个人资料 —— **只提交发生变化的字段**（部分更新）。
  *
- * @param body 只含变化字段的请求体（本票只可能含 `nickname`）
+ * @param body 只含变化字段的请求体（`nickname` 和 / 或 `avatar`）
  * @returns 成功时契约响应 `data: null`；失败时统一异常对象
  *
  * ⚠️ 成功响应 **没有用户数据**（`data: null`）⇒ 调用方**必须重拉 13.4**，

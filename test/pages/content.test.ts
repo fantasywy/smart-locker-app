@@ -7,12 +7,13 @@
 // ⚠️ 两个页面共用一个文件：它们的行为契约是同一条（同一端点、同一套 block、
 // 同一套失败重试），差别只有 key 与 `PAGE_TITLES` 的标题。
 
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { installWxStub, jsonResponse, networkFailure } from '../helpers/wx'
 import { respondInOrder, sentRequests } from '../helpers/http'
+import { collectSourceFiles } from '../helpers/source-scan'
 import type { InstalledWxStub } from '../helpers/wx'
 import type { ContentKey } from '../../miniprogram/types/content'
 import { LOAD_FAILED_DETAIL, PAGE_TITLES, RETRY_LABEL } from '../../miniprogram/startup/copy'
@@ -34,21 +35,6 @@ function stripComments(source: string): string {
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/(^|[^:])\/\/.*$/gm, '$1')
-}
-
-/** 递归收集 miniprogram 下指定后缀的源码（跳过构建产物）。 */
-function collectSources(dir: string, extensions: readonly string[]): string[] {
-  const found: string[] = []
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry)
-    if (statSync(full).isDirectory()) {
-      if (entry === 'node_modules' || entry === 'miniprogram_npm') continue
-      found.push(...collectSources(full, extensions))
-    } else if (extensions.some((extension) => entry.endsWith(extension))) {
-      found.push(full)
-    }
-  }
-  return found
 }
 
 /** 一份契约形状的内容响应体 —— 覆盖三种 block。 */
@@ -373,7 +359,7 @@ describe('#68 内容页 · 硬约束（源码守卫）', () => {
       '怎么存件？',
       '扫码后选择格口并关门。',
     ]
-    const sources = collectSources(join(repoRoot, 'miniprogram'), ['.ts', '.wxml', '.scss', '.json'])
+    const sources = collectSourceFiles(join(repoRoot, 'miniprogram'), ['.ts', '.wxml', '.scss', '.json'])
     for (const file of sources) {
       const code = stripComments(readFileSync(file, 'utf8'))
       for (const literal of contentLiterals) {

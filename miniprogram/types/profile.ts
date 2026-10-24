@@ -12,9 +12,9 @@
 // 不删契约字段」），而「不展示手机号」是界面层的硬约束 —— 两者不是同一件事。
 // 「类型上有 phone」不等于「页面可以画 phone」。
 //
-// ⚠️ `avatar` 在本票**只读**：类型保留契约值域（`null` / `/api/app/v1/files/{id}` /
-// 历史 `https://…`），但「我的」页的身份区只展示本地默认图 —— 上传端点未就绪，
-// 也不引入任何编译期开关（见 #69 的落票勘误）。因此页面**不会**把 `avatar` 搬到 `data`。
+// ⚠️ `avatar` 的值域是 `null` / `/api/app/v1/files/{id}` / 历史 `https://…`。
+// 我的页按 #75 只把「本站文件地址」交给 `avatar-cache` 解析成本地路径；历史外链与
+// null 一律走本地默认图、零请求。页面不保存原始 `url` 上屏，也不引入任何上传开关。
 //
 // ⚠️ 本模块遵守类型层的既定规则：不发明字段、不改字段名、可空显式标 `| null`、
 // 枚举值与后端逐字一致（`UserStatus` 复用 `types/auth.ts` 的数字码），
@@ -70,8 +70,8 @@ export interface ProfileResponse {
    * 头像地址。**可空**。
    *
    * 值域：`null`（未设置）/ `/api/app/v1/files/{id}`（本站文件）/ `https://…`（历史外链）。
-   * ⚠️ 本票**不展示它**：本站文件地址是二进制端点（需 Bearer），不是可直接给
-   * `<image src>` 的稳定 URL；而上传端点未就绪，不引入运行时探测或编译期开关。
+   * ⚠️ 它**不能直接给 `<image src>`**：本站地址是二进制端点（需 Bearer）。页面只把
+   * 合法地址交给 `avatar-cache` 下载 / 命中本地路径后再上屏。
    */
   avatar: string | null
 
@@ -98,8 +98,8 @@ export interface ProfileResponse {
  *   • `avatar` 缺省 / `null` → 不改；`""` → 清空；其它必须是本人上传的
  *     `/api/app/v1/files/{id}`。
  *
- * ⚠️ **本票只提交 `nickname`**：头像上传接线由 #75 接管。保留 `avatar?` 是为了让类型
- * 如实反映契约；「类型上有」不等于「本票要传」—— 页面只提交发生变化的字段。
+ * ⚠️ 页面**只提交发生变化的字段**：头像变了发 `avatar`，昵称变了发 `nickname`，
+ * 两者都变才同时出现。头像上传成功但 `PUT` 失败时，重试只重发本请求（0 次上传）。
  */
 export interface UpdateProfileRequest {
   nickname?: string
