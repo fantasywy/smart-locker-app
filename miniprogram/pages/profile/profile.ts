@@ -20,24 +20,42 @@
 // - **不展示手机号**：`13.4` 响应里有 `phone`，但页面**不把它搬进 `data`**。
 // - **不做退出登录 / 账号注销 / 发票 / 优惠券**：这些能力没有换账号语义或端点未就绪，
 //   做出来就是假入口（spec §14.8「不造假入口」）。
-// - **头像只读、只用本地默认图**：不发起任何网络请求、不出现加载中、不出现上传入口，
-//   也**不引入任何编译期开关 / 常量**（#69 落票勘误：本票不新造上传开关；
-//   上传接线由 #75 接管）。身份区画的是 `icon` 组件的本地默认头像。
 // - **不展示受限的 `auto`（自动 / 人工）归因**：那是内部信息，用户只看到
 //   标题 / 正文 / 原因 / 起始时间 / 客服出口。
+//
+// ## 头像展示与编辑（#75）
+//
+// - **展示**：`resolveAvatar()` 只认本站文件地址；缓存命中同步换成本地路径，
+//   未命中后台下载后替换，失败静默回本地默认图。地址失配（null / 历史外链）零请求。
+// - **编辑**：半屏 `van-popup` 的头像位是 `button open-type="chooseAvatar"`；选图后
+//   `prepareAvatar()` → `uploadAvatar()`。上传中头像位 spinner、「保存」禁用；失败保留
+//   pending（再点保存即重传，不重选）；成功用 pending 本地文件预览并保留 `url`。
+// - **保存**：只提交变化字段（`nickname` 和 / 或 `avatar`）。已上传但 `PUT` 失败时保留
+//   `url`，下次只重发 `PUT`；成功则把 pending 直接 rename 进缓存（不下载）并重拉 `13.4`。
+// - **关闭**：上传中先 `UploadTask.abort()` 再删 pending；已上传未保存只丢弃 `url`
+//   （服务端孤儿按 §5 保留）。`avatarGeneration` 守卫挡住所有迟到回调。
+// - **零开关**：不引入任何上传开关常量；文案只从 `copy.ts` 取。
 //
 // ## 昵称编辑
 //
 // 半屏 `van-popup`：`input type="nickname"` 预填当前值，trim 后 1–64；
-// **只提交发生变化的字段**（本票只有 `nickname`），成功关闭弹层并**重拉 `13.4`**
-// （不做乐观更新），失败留在弹层内一行「保存失败，请重试」；取消直接关闭、丢弃草稿。
+// **只提交发生变化的字段**，成功关闭弹层并**重拉 `13.4`**（不做乐观更新），
+// 失败留在弹层内一行「保存失败，请重试」；取消直接关闭、丢弃草稿。
 //
 // ⚠️ 用的是 `Component()` 而不是 `Page()` —— 与全端其余页面同一形态，
 // 页面生命周期钩子写在 `methods` 里。
 
+import { uploadAvatar } from '../../api/files'
 import { getProfile, updateProfile } from '../../api/profile'
 import { CONTACT_EXIT_ID, PAGE_TITLES, PROFILE_COPY, STATIC_EXITS } from '../../startup/copy'
 import type { StaticExitId } from '../../startup/copy'
+import {
+  cleanupAvatarCache,
+  parseAvatarFileId,
+  promotePendingAvatar,
+  resolveAvatar,
+} from '../../utils/avatar-cache'
+import { discardPendingAvatar, prepareAvatar } from '../../utils/avatar-image'
 import { formatRestrictionSince } from '../../utils/datetime'
 import { RESERVATION_LIST_PATH, SCORE_LOGS_PATH, STATIC_EXIT_PATHS } from '../../utils/routes'
 import type { ProfileResponse } from '../../types/profile'
@@ -88,6 +106,19 @@ const PROFILE_STATIC_EXITS = STATIC_EXITS.map((exit) => ({
  */
 interface ProfilePageInstance {
   profileRequestId?: number
+  /**
+   * 选图 / 上传的**代号** —— 每次打开弹层、重新选图、关闭弹层都 +1。
+   *
+   * 上传是异步的，关闭弹层后回调仍会回来；只让「当前代号」的回调写界面，
+   * 迟到的成功 / 失败都不能把已关闭的弹层重新点亮，也不能复活已丢弃的草稿。
+   */
+  avatarGeneration?: number
+  /** 当前在飞的 `wx.uploadFile` task —— 关闭弹层时 abort。 */
+  avatarUploadTask?: WechatMiniprogram.UploadTask | null
+  /** 已选图并落盘的 pending 路径；未选图为 null。 */
+  pendingAvatarPath?: string | null
+  /** 上传成功后拿到的 `url`；未上传 / 已丢弃为 null。 */
+  uploadedAvatarUrl?: string | null
 }
 
 /**
@@ -116,6 +147,21 @@ Component({
 
     /** 身份区显示名 —— 服务端昵称为空时回退「微信用户」。 */
     nickname: '',
+
+    /**
+     * 身份区头像的**本地路径**；空串 = 本地默认图。
+     *
+     * 首帧只可能是「缓存命中」或空串（默认图）；未命中时后台下载，成功后由
+     * `resolveAvatar()` 的回调换成缓存路径。地址失配（null / 历史外链）永远空串。
+     */
+    avatarPath: '',
+
+    /**
+     * 服务端的头像地址原值 —— 只用于比较「头像有没有变化」，不上屏。
+     *
+     * ⚠️ 不能拿 `avatarPath` 比较：它是本地缓存路径 / 空串，与 server 的 url 不同域。
+     */
+    savedAvatarUrl: null as string | null,
 
     /**
      * 服务端的昵称原值（已 trim）—— **只用于比较「有没有变化」**，不上屏。
@@ -158,14 +204,21 @@ Component({
     /** 客服那一件的行为 id —— 模板据此决定渲染原生 `open-type="contact"` 按钮。 */
     contactExitId: CONTACT_EXIT_ID,
 
-    // ── 昵称编辑弹层 ──────────────────────────────────────────────────────
+    // ── 资料编辑弹层 ──────────────────────────────────────────────────────
     popupVisible: false,
     /** 草稿 —— 预填当前值；取消时丢弃，不写回。 */
     nicknameDraft: '',
-    /** 弹层内的校验 / 保存失败提示；空串 = 不渲染。 */
+    /** 弹层内的昵称校验 / 保存失败提示；空串 = 不渲染。 */
     nicknameError: '',
     /** 保存进行中 —— 防重复提交；按钮同时 loading / disabled。 */
     saving: false,
+
+    /** 弹层头像预览：已上传成功的 pending 本地文件；未选图时是当前头像。 */
+    avatarPreviewPath: '',
+    /** 头像上传中 —— 头像位 spinner，且「保存」禁用。 */
+    avatarUploading: false,
+    /** 头像相关失败提示（上传失败 / 过大 / 限流）；空串 = 不渲染。 */
+    avatarError: '',
   },
 
   methods: {
@@ -207,6 +260,9 @@ Component({
         return
       }
       this.applyProfile(result.data)
+      // 只有拿到可信的当前头像 id 之后才清理 —— 删掉 ≠ 当前 id 的缓存与所有 pending。
+      // 上传成功后 pending 已转正，这里的清理不会误删刚保存的那张。
+      void cleanupAvatarCache(parseAvatarFileId(result.data.avatar))
     },
 
     /**
@@ -216,6 +272,7 @@ Component({
      * 少搬一个字段，就少一条「后来者顺手把它画上屏」的路。
      */
     applyProfile(profile: ProfileResponse): void {
+      const page = this as unknown as ProfilePageInstance
       const nickname = (profile.nickname ?? '').trim()
       const restricted = profile.status === RESTRICTED_STATUS
       // ⚠️ 契约里正常用户是 `null`；这里把 `undefined` 也收敛成 `null`，
@@ -223,11 +280,20 @@ Component({
       const record = restricted ? (profile.blacklistRecord ?? null) : null
       const reason = (record?.reason ?? '').trim()
       const since = record === null ? '' : formatRestrictionSince(record.createdAt)
+      const requestId = page.profileRequestId
+      // 同步拿缓存路径；未命中时它立即返回 null 并后台下载，成功后回调换图。
+      const cachedAvatar = resolveAvatar(profile.avatar, (localPath) => {
+        // 迟到的下载不得盖掉一次更新的 13.4。
+        if (page.profileRequestId !== requestId) return
+        this.setData({ avatarPath: localPath })
+      })
 
       this.setData({
         phase: 'ready',
         nickname: nickname === '' ? PROFILE_COPY.nicknameFallback : nickname,
         savedNickname: nickname,
+        avatarPath: cachedAvatar ?? '',
+        savedAvatarUrl: profile.avatar,
         score: profile.score,
         restricted,
         restrictionReason:
@@ -245,11 +311,59 @@ Component({
      */
     onEditProfile(): void {
       if (this.data.phase !== 'ready') return
+      const page = this as unknown as ProfilePageInstance
+      // 新一次编辑：作废上一轮所有在飞 / 迟到回调，并清空上一轮的草稿引用。
+      page.avatarGeneration = (page.avatarGeneration ?? 0) + 1
+      page.avatarUploadTask = null
+      page.pendingAvatarPath = null
+      page.uploadedAvatarUrl = null
       this.setData({
         popupVisible: true,
         nicknameDraft: this.data.savedNickname,
         nicknameError: '',
+        avatarPreviewPath: this.data.avatarPath,
+        avatarUploading: false,
+        avatarError: '',
       })
+    },
+
+    /**
+     * 选了一张头像 —— 先压缩落 pending，再立即上传。
+     *
+     * ⚠️ `bindchooseavatar` **可能合法地不触发**（2.24.4 起用户取消 / 内容安全未过）：
+     * 事件里没有 `avatarUrl` 时必须**静默返回** —— 不卡 loading、不发请求、弹层不变。
+     *
+     * 失败分支：`too-large` 用「图片过大」并零上传；其它失败用「图片上传失败」。
+     * 两者都保留原头像；pending 只在 `prepareAvatar()` 成功后才有。
+     */
+    async onChooseAvatar(event: WechatMiniprogram.CustomEvent<{ avatarUrl?: string }>): Promise<void> {
+      const tempPath = event.detail?.avatarUrl
+      if (tempPath === undefined || tempPath === '') return
+      if (this.data.avatarUploading) return
+
+      const page = this as unknown as ProfilePageInstance
+      page.avatarGeneration = (page.avatarGeneration ?? 0) + 1
+      const generation = page.avatarGeneration
+      page.pendingAvatarPath = null
+      page.uploadedAvatarUrl = null
+      // 选图期间先保持原预览；上传成功后才换成 pending 预览。
+      this.setData({ avatarUploading: true, avatarError: '', avatarPreviewPath: this.data.avatarPath })
+
+      const prepared = await prepareAvatar(tempPath)
+      if (generation !== page.avatarGeneration) return
+      if (!prepared.ok) {
+        this.setData({
+          avatarUploading: false,
+          avatarError:
+            prepared.reason === 'too-large'
+              ? PROFILE_COPY.avatarTooLarge
+              : PROFILE_COPY.avatarUploadFailed,
+        })
+        return
+      }
+
+      page.pendingAvatarPath = prepared.filePath
+      await this.uploadDraftAvatar(generation)
     },
 
     /** 昵称输入 —— 草稿实时更新；用户开始改就不再显示上一次的错误。 */
@@ -261,14 +375,61 @@ Component({
     },
 
     /**
-     * 保存昵称 —— **只提交发生变化的字段**。
+     * 上传当前 pending —— 选图后立即调一次；保存时若还没上传成功再调一次（重试不重选）。
      *
-     * 成功：关闭弹层 + 重拉 `13.4`（服务端回显才是事实，不做乐观更新）。
-     * 失败：**留在弹层内**一行「保存失败，请重试」，草稿不丢。
-     * 没有变化：直接关闭，不发一次空更新。
+     * @returns 成功时的服务端 `url`；失败 / 这一代已作废时 `null`
+     *
+     * ⚠️ 失败**不删 pending**：用户再点「保存」就是一次重传，不需要重新选图。
+     * ⚠️ `8008` 与普通失败都停在弹层内，但文案不同；**绝不自动重试**。
+     */
+    async uploadDraftAvatar(generation: number): Promise<string | null> {
+      const page = this as unknown as ProfilePageInstance
+      const pendingPath = page.pendingAvatarPath
+      if (pendingPath === null || pendingPath === undefined) return null
+
+      this.setData({ avatarUploading: true, avatarError: '' })
+      const result = await uploadAvatar(pendingPath, {
+        onTask: (task) => {
+          // 弹层已关闭 / 已重新选图 —— 这一发不再属于当前草稿，立刻 abort。
+          if (generation !== page.avatarGeneration) {
+            task.abort()
+            return
+          }
+          page.avatarUploadTask = task
+        },
+      })
+
+      // 迟到的回调：不得写任何界面状态（弹层可能已经关了）。
+      if (generation !== page.avatarGeneration) return null
+      page.avatarUploadTask = null
+
+      if (!result.ok) {
+        const rateLimited = result.error.kind === 'business' && result.error.code === 8008
+        this.setData({
+          avatarUploading: false,
+          avatarError: rateLimited ? PROFILE_COPY.avatarRateLimited : PROFILE_COPY.avatarUploadFailed,
+        })
+        return null
+      }
+
+      page.uploadedAvatarUrl = result.data.url
+      this.setData({ avatarUploading: false, avatarPreviewPath: pendingPath, avatarError: '' })
+      return result.data.url
+    },
+
+    /**
+     * 保存资料 —— **只提交发生变化的字段**（`nickname` 和 / 或 `avatar`）。
+     *
+     * 头像有两条额外规则（#75）：
+     *   • 选过图但还没上传成功（失败 / `8008`）⇒ 先重传，成功后才 `PUT`；重传不重选；
+     *   • 上传成功但 `PUT` 失败 ⇒ 保留已上传 `url` 与 pending，下一次只重发 `PUT`
+     *     （0 次 `uploadFile`），弹层不关。
+     *
+     * 成功：promote pending 进缓存（不下载）→ 关闭弹层 → 重拉 `13.4`。
+     * 没有变化：直接关闭，不发空更新。
      */
     async onSaveProfile(): Promise<void> {
-      if (this.data.saving) return
+      if (this.data.saving || this.data.avatarUploading) return
 
       const trimmed = this.data.nicknameDraft.trim()
       const error = validateNickname(trimmed)
@@ -277,19 +438,56 @@ Component({
         return
       }
 
-      if (trimmed === this.data.savedNickname) {
+      const page = this as unknown as ProfilePageInstance
+      const generation = page.avatarGeneration ?? 0
+      const nicknameChanged = trimmed !== this.data.savedNickname
+      const pendingPath = page.pendingAvatarPath ?? null
+      const uploadedUrl = page.uploadedAvatarUrl ?? null
+      const savedAvatarUrl = (this.data.savedAvatarUrl as string | null | undefined) ?? null
+      const avatarUploaded = uploadedUrl !== null && uploadedUrl !== savedAvatarUrl
+      const hasPendingAvatar = pendingPath !== null && uploadedUrl === null
+
+      if (!nicknameChanged && !avatarUploaded && !hasPendingAvatar) {
         this.closeEditor()
         return
       }
 
-      this.setData({ saving: true, nicknameError: '' })
-      const result = await updateProfile({ nickname: trimmed })
+      this.setData({ saving: true, nicknameError: '', avatarError: '' })
+
+      // 选过图但没传成功 —— 保存就是「重试上传」的触发点，而不是重新选图。
+      if (hasPendingAvatar) {
+        const retriedUrl = await this.uploadDraftAvatar(generation)
+        if (retriedUrl === null) {
+          // 弹层若已关闭（代次变了），状态早被 closeEditor 收口，别在这里复活它。
+          if (generation === page.avatarGeneration) this.setData({ saving: false })
+          return
+        }
+      }
+
+      const finalUrl = page.uploadedAvatarUrl ?? null
+      const shouldSendAvatar = finalUrl !== null && finalUrl !== savedAvatarUrl
+      const body: { nickname?: string; avatar?: string } = {}
+      if (nicknameChanged) body.nickname = trimmed
+      if (shouldSendAvatar && finalUrl !== null) body.avatar = finalUrl
+
+      // 极端退化：上传回来的 url 与服务端原值相同（等于没换）且昵称没变 —— 不发空更新。
+      if (body.nickname === undefined && body.avatar === undefined) {
+        this.closeEditor()
+        return
+      }
+
+      const result = await updateProfile(body)
       if (!result.ok) {
         this.setData({ saving: false, nicknameError: PROFILE_COPY.saveFailed })
         return
       }
 
-      this.setData({ saving: false, popupVisible: false, nicknameDraft: '', nicknameError: '' })
+      if (shouldSendAvatar && finalUrl !== null) {
+        const fileId = parseAvatarFileId(finalUrl)
+        if (fileId !== null) await promotePendingAvatar(fileId)
+      }
+
+      this.closeEditor()
       await this.loadProfile()
     },
 
@@ -298,12 +496,33 @@ Component({
       this.closeEditor()
     },
 
-    /** 关闭弹层的唯一实现 —— 草稿回到服务端原值。 */
+    /**
+     * 关闭弹层的唯一实现 —— 草稿回到服务端原值。
+     *
+     * 头像侧的三条清理（#75）：
+     *   • 上传进行中 → `UploadTask.abort()`，随后删 pending；
+     *   • 已上传未保存 → 只丢弃本地 `url`，**不调服务端删除**（孤儿按后端 §5 保留）；
+     *   • 作废当前代号 → 迟到的上传回调不得再写界面。
+     */
     closeEditor(): void {
+      const page = this as unknown as ProfilePageInstance
+      page.avatarGeneration = (page.avatarGeneration ?? 0) + 1
+      const task = page.avatarUploadTask
+      page.avatarUploadTask = null
+      if (task !== null && task !== undefined) task.abort()
+      page.pendingAvatarPath = null
+      page.uploadedAvatarUrl = null
+      // 无论 pending 引用是否还在都清一遍固定槽位：`prepareAvatar()` 失败（如过大）
+      // 也可能已经落过盘，取消编辑同样不该把它留到下次启动。
+      void discardPendingAvatar()
       this.setData({
         popupVisible: false,
         nicknameDraft: this.data.savedNickname,
         nicknameError: '',
+        avatarPreviewPath: '',
+        avatarUploading: false,
+        avatarError: '',
+        saving: false,
       })
     },
 

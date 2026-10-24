@@ -24,6 +24,14 @@ export interface UploadOptions {
   filePath: string
   /** multipart part 名 —— 后端契约唯一 part 叫 `file`。 */
   name: string
+  /**
+   * 可选：把本次 `wx.uploadFile` 返回的 task 交给调用方。
+   *
+   * ⚠️ 401 恢复会**重放**，因此一次 `upload()` 可能回调多次：每次都是当次
+   * `wx.uploadFile` 的返回对象。调用方若只想 abort「当前那一次」，保存最后一次即可；
+   * 已结束的 task 再 abort 是无害的。
+   */
+  onTask?: (task: WechatMiniprogram.UploadTask) => void
 }
 
 /** `download()` 的入参 —— 直写目标文件。 */
@@ -83,7 +91,7 @@ interface DownloadPayload {
 /** `wx.uploadFile` 的一次调用 —— 包成 Promise，把原始事实交给归一化。 */
 function dispatchUpload<T>(path: string, options: UploadOptions): Promise<RequestResult<T>> {
   return new Promise<RequestResult<T>>((resolve) => {
-    wx.uploadFile({
+    const task = wx.uploadFile({
       url: `${BASE_URL}${path}`,
       filePath: options.filePath,
       name: options.name,
@@ -107,6 +115,8 @@ function dispatchUpload<T>(path: string, options: UploadOptions): Promise<Reques
         resolve(classifyFailure(err.errMsg))
       },
     })
+    // 在 `wx.uploadFile()` 返回后立刻交出 task —— 页面要在响应回来之前就能 abort。
+    options.onTask?.(task)
   })
 }
 

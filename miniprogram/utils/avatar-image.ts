@@ -14,7 +14,7 @@
 // 第四轮策略**（没有 cropImage；二期）。
 //
 // ⚠️ 本模块**没有任何用户可见文案**：结果里的 `reason` 是机器可读的判别键，
-// 「图片过大，请换一张」由页面从文案层取。这样「文案只有一个家」不因压缩失败而破例。
+// 具体提示语由页面从文案层取。这样「文案只有一个家」不因压缩失败而破例。
 
 /** 后端 `avatar-max-bytes` 的同一个数 —— 客户端写死。 */
 export const AVATAR_MAX_BYTES = 2_097_152
@@ -37,6 +37,26 @@ const AVATAR_SLOT = 'avatar'
  */
 export function avatarPendingPath(): string {
   return `${wx.env.USER_DATA_PATH}/upload/${AVATAR_SLOT}`
+}
+
+/**
+ * 删除 pending 文件 —— **只动 `upload/{槽位}`，不碰头像缓存**。
+ *
+ * 关闭编辑弹层时调用：上传中关闭要先 abort 再删文件；已上传未保存时删掉同一份
+ * pending（服务端已收到的孤儿按后端 §5 保留，客户端不调删除端点）。
+ *
+ * 静默 resolve：文件不存在 / 删不掉都只是「清理没做成」，不该把关闭弹层变成失败态。
+ * 与 `cleanupAvatarCache()` 的分工是刻意的 —— 后者会清理整个缓存目录，只能在拿到
+ * 当前头像 id 之后调用（我的页 `onShow`），不能拿来做「取消编辑」。
+ */
+export function discardPendingAvatar(): Promise<void> {
+  return new Promise((resolve) => {
+    wx.getFileSystemManager().unlink({
+      filePath: avatarPendingPath(),
+      success: () => resolve(),
+      fail: () => resolve(),
+    })
+  })
 }
 
 /** 流水线结果 —— 成功给出 pending 路径；失败只给机器可读原因。 */
