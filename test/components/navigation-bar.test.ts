@@ -255,8 +255,22 @@ describe('#59 navigation-bar · 胶囊避让几何', () => {
     const instance = makeAttachableInstance(definition)
     definition.lifetimes?.attached?.call(instance)
 
-    // 375 - 278 = 97：右侧从胶囊左缘到屏右的总宽度都要让开。
-    expect(instance.data.capsuleSafeWidth).toBe(97)
+    // 375 - 278 - 16 = 81：右槽自身已经让出 16px，别再多留一格。
+    expect(instance.data.capsuleSafeWidth).toBe(81)
+  })
+
+  it('⚠️ 胶囊留白只在有右槽时收窄容器 —— 其余页面标题才在屏幕中线', () => {
+    const wxml = stripped(join(navBarDir, 'navigation-bar.wxml'))
+    const inner = /<view[^>]*class="app-navbar__inner"([^>]*)>/.exec(wxml)?.[1] ?? ''
+    const right = /<view slot="right" class="app-navbar__right"([^>]*)>/.exec(wxml)?.[1] ?? ''
+
+    // van-nav-bar 的标题在内容宽度里 margin:0 auto；容器一旦 padding-right，
+    // 标题就整体左移半个胶囊宽（375 屏实测 ~48px）。只有柜机页右侧有「我的订单」，
+    // 那一页必须收窄让位；其余页面保持全宽，标题才居中。
+    expect(inner).toContain('ordersButton ?')
+    expect(inner).toContain('padding-right')
+    expect(inner).toContain('capsuleSafeWidth')
+    expect(right).not.toContain('padding-right')
   })
 
   it('⚠️ 量不到胶囊时回退 0 —— 几何失败不该让整页白屏', async () => {
