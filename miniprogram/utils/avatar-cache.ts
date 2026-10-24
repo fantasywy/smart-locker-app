@@ -21,6 +21,7 @@
 import { FILES_PATH } from '../request/config'
 import { downloadAvatar } from '../api/files'
 import { avatarPendingPath } from './avatar-image'
+import { ensureDir, unlinkQuiet } from './avatar-fs'
 
 /**
  * 头像地址的**唯一判据**。
@@ -117,15 +118,32 @@ export async function promotePendingAvatar(fileId: string): Promise<boolean> {
   return renameFile(avatarPendingPath(), finalPath)
 }
 
+/** `cleanupAvatarCache()` 的选项。 */
+export interface CleanupAvatarCacheOptions {
+  /**
+   * 保留 `upload/` 里的 pending —— 弹层正开着、草稿可能还在时传 `true`。
+   *
+   * ⚠️ 这不是「永不清理 pending」：关闭弹层仍由 `closeEditor()` / `discardPendingAvatar()`
+   * 负责删除。`onShow` 若把失败 / `8008` 的 pending 删掉，用户再点保存就会去上传一个
+   * 不存在的路径，而「重试不重选」承诺的正是这个文件还在。
+   */
+  keepPending?: boolean
+}
+
 /**
  * 清理缓存 —— 由调用方传入**当前头像 id**（我的页 `onShow` 拿到 profile 之后）。
  *
- * 规则：删 ≠ 当前 id 的最终文件、删所有 `.part`、清空 `upload/`。
+ * 规则：删 ≠ 当前 id 的最终文件、删所有 `.part`；默认再清空 `upload/`。
  * `currentFileId === null` 表示当前没有可用头像 ⇒ 删光全部最终文件。
  *
  * ⚠️ 不要放进 `app.onLaunch`：那时还没有 profile，扫一次等于先删掉将要用到的缓存。
+ * ⚠️ 必须在 `resolveAvatar()`（applyProfile）**之前**跑：否则刚起飞的下载 `.part`
+ *    会被这里当成过期文件删掉，下载成功也 rename 不回来。
  */
-export async function cleanupAvatarCache(currentId: string | null): Promise<void> {
+export async function cleanupAvatarCache(
+  currentId: string | null,
+  options: CleanupAvatarCacheOptions = {},
+): Promise<void> {
   const entries = await readdirFiles(avatarDir())
   if (entries !== null) {
     for (const name of entries) {
@@ -135,7 +153,10 @@ export async function cleanupAvatarCache(currentId: string | null): Promise<void
     }
   }
 
-  // pending 一律清空 —— 上传成功已转正、失败 / 放弃的都不该留到下次启动。
+  // pending 默认清空 —— 上传成功已转正、失败 / 放弃的都不该留到下次启动。
+  // 但弹层开着时它是活草稿：删掉就等于撕毁「重试不重选」的承诺，交给 closeEditor 收盘。
+  if (options.keepPending === true) return
+
   const pendingFiles = await readdirFiles(uploadDir())
   if (pendingFiles !== null) {
     for (const name of pendingFiles) {
@@ -214,17 +235,6 @@ function renameFile(oldPath: string, newPath: string): Promise<boolean> {
   })
 }
 
-/** 删一个文件 —— 不存在 / 删不掉都静默（清理是尽力而为，不该把页面拖进失败态）。 */
-function unlinkQuiet(filePath: string): Promise<void> {
-  return new Promise((resolve) => {
-    wx.getFileSystemManager().unlink({
-      filePath,
-      success: () => resolve(),
-      fail: () => resolve(),
-    })
-  })
-}
-
 /** 读目录 —— 目录不存在返回 `null`（首次启动的正常状态）。 */
 function readdirFiles(dirPath: string): Promise<string[] | null> {
   return new Promise((resolve) => {
@@ -232,25 +242,6 @@ function readdirFiles(dirPath: string): Promise<string[] | null> {
       dirPath,
       success: (res) => resolve(res.files),
       fail: () => resolve(null),
-    })
-  })
-}
-
-/** 确保目录存在 —— 先 `access`，不存在再 `mkdir(recursive)`。 */
-function ensureDir(dirPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const fs = wx.getFileSystemManager()
-    fs.access({
-      path: dirPath,
-      success: () => resolve(true),
-      fail: () => {
-        fs.mkdir({
-          dirPath,
-          recursive: true,
-          success: () => resolve(true),
-          fail: () => resolve(false),
-        })
-      },
     })
   })
 }

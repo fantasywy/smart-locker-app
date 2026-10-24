@@ -16,6 +16,8 @@
 // ⚠️ 本模块**没有任何用户可见文案**：结果里的 `reason` 是机器可读的判别键，
 // 具体提示语由页面从文案层取。这样「文案只有一个家」不因压缩失败而破例。
 
+import { ensureDir, unlinkQuiet } from './avatar-fs'
+
 /** 后端 `avatar-max-bytes` 的同一个数 —— 客户端写死。 */
 export const AVATAR_MAX_BYTES = 2_097_152
 
@@ -50,13 +52,7 @@ export function avatarPendingPath(): string {
  * 当前头像 id 之后调用（我的页 `onShow`），不能拿来做「取消编辑」。
  */
 export function discardPendingAvatar(): Promise<void> {
-  return new Promise((resolve) => {
-    wx.getFileSystemManager().unlink({
-      filePath: avatarPendingPath(),
-      success: () => resolve(),
-      fail: () => resolve(),
-    })
-  })
+  return unlinkQuiet(avatarPendingPath())
 }
 
 /** 流水线结果 —— 成功给出 pending 路径；失败只给机器可读原因。 */
@@ -184,29 +180,6 @@ function copyFile(srcPath: string, destPath: string): Promise<boolean> {
       destPath,
       success: () => resolve(true),
       fail: () => resolve(false),
-    })
-  })
-}
-
-/**
- * 确保目录存在 —— 先 `access`，不存在再 `mkdir(recursive)`。
- *
- * ⚠️ 不直接 `mkdir` 然后吞掉「已存在」错误：那会把权限错误也一起吞掉。
- */
-function ensureDir(dirPath: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const fs = wx.getFileSystemManager()
-    fs.access({
-      path: dirPath,
-      success: () => resolve(true),
-      fail: () => {
-        fs.mkdir({
-          dirPath,
-          recursive: true,
-          success: () => resolve(true),
-          fail: () => resolve(false),
-        })
-      },
     })
   })
 }
