@@ -10,9 +10,14 @@
 <view class="app-navbar">
   <!--
     胶囊避让：`padding-right` 来自 `getMenuButtonBoundingClientRect()` 的实测宽度。
-    内层容器承载 `van-nav-bar`；右侧留白让标题与「我的订单」都不会压到微信胶囊。
+    ⚠️ 只有**右侧有出口**（柜机页的「我的订单」）时才收窄容器：
+       有右槽时标题必须让开它，只能略偏左；没有右槽时容器保持全宽，
+       `van-nav-bar` 的 `margin: 0 auto` 才能把标题放在屏幕中线上。
   -->
-  <view class="app-navbar__inner" style="padding-right: {{ capsuleSafeWidth }}px;">
+  <view
+    class="app-navbar__inner"
+    style="{{ ordersButton ? 'padding-right: ' + capsuleSafeWidth + 'px;' : '' }}"
+  >
     <van-nav-bar title="{{ title }}" border="{{ false }}" custom-class="app-navbar__bar">
       <!-- 左侧：栈深 > 1 时返回，栈深 1 时「首页」；两者互斥，不并排。 -->
       <view slot="left" class="app-navbar__left">

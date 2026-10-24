@@ -259,6 +259,8 @@ page {
 }
 
 .profile__sheet-title {
+  // 与 `nearby__sheet-title` / `locker-sheet__title` 同一口径：半屏弹层的标题居中。
+  text-align: center;
   color: v.$color-text-main;
   font-size: v.$font-size-heading;
   font-weight: v.$font-weight-semibold;

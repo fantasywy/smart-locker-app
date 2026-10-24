@@ -261,6 +261,7 @@ Component<
   ReservationCreateData,
   Record<string, never>,
   ReservationCreateMethods,
+  [],
   Record<string, never>,
   true
 >({

@@ -214,6 +214,7 @@ Component<
   ScoreLogsData,
   Record<string, never>,
   ScoreLogsMethods,
+  [],
   Record<string, never>,
   true
 >({

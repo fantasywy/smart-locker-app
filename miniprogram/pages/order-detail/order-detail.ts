@@ -584,7 +584,7 @@ interface OrderDetailPageMethods {
   onPickupRefresh(event: { detail?: { missing?: boolean } }): void
 }
 
-Component<OrderDetailPageData, Record<string, never>, OrderDetailPageMethods, Record<string, never>, true>({
+Component<OrderDetailPageData, Record<string, never>, OrderDetailPageMethods, [], Record<string, never>, true>({
   data: {
     title: PAGE_TITLES['pages/order-detail/order-detail'],
     phase: 'loading',

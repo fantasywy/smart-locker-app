@@ -18,7 +18,7 @@
     "@resvg/resvg-wasm": "2.6.2",
     "@types/node": "^26.6.2",
     "lucide-static": "1.61.0",
-    "miniprogram-api-typings": "^2.8.3-1",
+    "miniprogram-api-typings": "^5.2.3",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   },

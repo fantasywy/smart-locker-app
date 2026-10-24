@@ -27,9 +27,11 @@
 // 「零 `van-*` prop 透传」是 spec §11 的硬约束。
 //
 // ⚠️ 视觉上仍有胶囊避让：`van-nav-bar` 本身不会避让微信右上角的胶囊按钮，
-// 所以 `attached` 用 `wx.getMenuButtonBoundingClientRect()` 算出需要预留的右侧宽度，
-// 由模板里的内层容器用 `padding-right` 让开。标题因此在剩余宽度里居中（略偏左），
-// 这是为了不压住胶囊而接受的代价。
+// 所以 `attached` 用 `wx.getMenuButtonBoundingClientRect()` 算出需要预留的右侧宽度。
+// 只有**右侧有出口**（`ordersButton`，柜机页的「我的订单」）时才用 `padding-right` 收窄
+// 内层容器 —— 标题是在内容宽度里 `margin: 0 auto` 居中的，收窄后必然左移半个胶囊宽。
+// 没有右槽的页面（我的 / 附近柜机 / 列表页…）容器保持全宽，标题才真正落在屏幕中线。
+// 宽度里要扣掉 `van-nav-bar` 右槽自带的 16px，否则右槽会多留一格、标题被挤（实测 ~24px）。
 
 import { NAVIGATION_COPY, ORDER_LIST_PATH } from '../../startup/copy'
 import { HOME_PATH } from '../../utils/routes'
@@ -82,7 +84,9 @@ Component({
       try {
         const rect = wx.getMenuButtonBoundingClientRect()
         const system = wx.getSystemInfoSync()
-        const width = system.windowWidth - rect.left
+        // ⚠️ 扣掉 van-nav-bar 右槽自带的 16px 内边距：右槽 `right:16px` 已经让出这一格，
+        // 再按 `windowWidth - rect.left` 全额留白会多留 16px，把「我的订单」推进标题框里。
+        const width = system.windowWidth - rect.left - 16
         this.setData({ capsuleSafeWidth: width > 0 ? width : 0 })
       } catch {
         this.setData({ capsuleSafeWidth: 0 })

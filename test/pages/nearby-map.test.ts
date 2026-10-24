@@ -6,7 +6,7 @@
 // 五条边界：
 //   1. marker 只落有坐标站点；颜色 = 可用状态（可存件绿 / 已满琥珀 / 暂不可用灰）。
 //   2. 列表卡与 marker 是同一个选中态：点卡 → marker 高亮并居中；点 marker → 滚到卡。
-//   3. 全屏地图是同一页的次级入口；返回保持中心与选中站点；浮层是 cover-view。
+//   3. 全屏地图是同一页的次级入口；返回保持中心与选中站点；浮层是普通 view。
 //   4. 地图失败（渲染错误 / 看门狗）→ 64px 提示行，列表照常，可手动重试。
 //   5. 定位失败不影响地图与列表；全程不落 storage、不出站到柜机页。
 
@@ -353,12 +353,16 @@ describe('#73 附近页 · 全屏地图', () => {
     expect(appJson.pages.filter((path) => path.includes('nearby'))).toEqual([NEARBY_PATH])
   })
 
-  it('⚠️ 全屏卡片浮层必须是 cover-view —— 原生 map 会盖住普通 view', () => {
+  it('⚠️ 全屏浮层用普通 view（map 已同层渲染），不得再出现 cover-view', () => {
     const wxml = pageWxml()
-    const fullscreen = /<map[^>]*id="nearby-fullscreen-map"[\s\S]*?<\/map>/.exec(wxml)?.[0]
+    const fullscreen = /<view[^>]*class="nearby__fullscreen"[\s\S]*$/.exec(wxml)?.[0]
     expect(fullscreen, '缺少全屏地图').toBeTruthy()
-    expect(fullscreen).toContain('<cover-view')
-    expect(fullscreen).not.toMatch(/<view\b/)
+    // map 自身不再挂浮层子节点：放进 map 的普通 view 会被地图原生层吃掉点击。
+    expect(fullscreen).toMatch(/<map[\s\S]*?><\/map>/)
+    expect(fullscreen).toContain('class="nearby__fs-exit"')
+    expect(fullscreen).toContain('class="nearby__fs-card"')
+    // 基础库 2.32.3 已对 map 同层渲染；继续用 cover-view 会被开发者工具警告。
+    expect(wxml).not.toContain('cover-view')
     expect(fullscreen).toContain('markers="{{ markers }}"')
     expect(wxml).toContain('bindrendererror="onMapRenderError"')
     expect(wxml).toContain('bindmarkertap="onMarkerTap"')

@@ -1,5 +1,5 @@
 /*! *****************************************************************************
-Copyright (c) 2021 Tencent, Inc. All rights reserved.
+Copyright (c) 2025 Tencent, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -21,38 +21,56 @@ SOFTWARE.
 ***************************************************************************** */
 
 declare namespace WechatMiniprogram.Component {
+    /** 实际使用中该值类型为 `string`。`TypeSignature` 仅用作类型推导，运行时无此类型对应的实际值 */
+    type Identifier<
+        TData extends DataOption = {},
+        TProperty extends PropertyOption = {},
+        TMethod extends MethodOption = {},
+    > = string & TypeSignature<TData, TProperty, TMethod>
+    type FilterUnknownType<T> = {
+        [P in keyof T as string extends P ? never : P]: T[P]
+    }
     type Instance<
         TData extends DataOption,
         TProperty extends PropertyOption,
         TMethod extends Partial<MethodOption>,
+        TBehavior extends BehaviorOption,
         TCustomInstanceProperty extends IAnyObject = {},
         TIsPage extends boolean = false
     > = InstanceProperties &
         InstanceMethods<TData> &
         TMethod &
+        MixinMethods<TBehavior> &
         (TIsPage extends true ? Page.ILifetime : {}) &
-        TCustomInstanceProperty & {
+        Omit<TCustomInstanceProperty, 'properties' | 'methods' | 'data'> & {
             /** 组件数据，**包括内部数据和属性值** */
-            data: TData & PropertyOptionToData<TProperty>
+            data: FilterUnknownType<TData> & MixinData<TBehavior> &
+            MixinProperties<TBehavior> & PropertyOptionToData<FilterUnknownType<TProperty>>
             /** 组件数据，**包括内部数据和属性值**（与 `data` 一致） */
-            properties: TData & PropertyOptionToData<TProperty>
+            properties: FilterUnknownType<TData> & MixinData<TBehavior> &
+            MixinProperties<TBehavior> & PropertyOptionToData<FilterUnknownType<TProperty>>
         }
+
+    type IEmptyArray = []
     type TrivialInstance = Instance<
         IAnyObject,
         IAnyObject,
         IAnyObject,
+        IEmptyArray,
         IAnyObject
     >
-    type TrivialOption = Options<IAnyObject, IAnyObject, IAnyObject, IAnyObject>
+    type TrivialOption = Options<IAnyObject, IAnyObject, IAnyObject, IEmptyArray, IAnyObject>
     type Options<
         TData extends DataOption,
         TProperty extends PropertyOption,
         TMethod extends MethodOption,
+        TBehavior extends BehaviorOption,
         TCustomInstanceProperty extends IAnyObject = {},
         TIsPage extends boolean = false
     > = Partial<Data<TData>> &
         Partial<Property<TProperty>> &
         Partial<Method<TMethod, TIsPage>> &
+        Partial<Behavior<TBehavior>> &
         Partial<OtherOption> &
         Partial<Lifetimes> &
         ThisType<
@@ -60,6 +78,7 @@ declare namespace WechatMiniprogram.Component {
                 TData,
                 TProperty,
                 TMethod,
+                TBehavior,
                 TCustomInstanceProperty,
                 TIsPage
             >
@@ -69,6 +88,7 @@ declare namespace WechatMiniprogram.Component {
             TData extends DataOption,
             TProperty extends PropertyOption,
             TMethod extends MethodOption,
+            TBehavior extends BehaviorOption,
             TCustomInstanceProperty extends IAnyObject = {},
             TIsPage extends boolean = false
         >(
@@ -76,14 +96,48 @@ declare namespace WechatMiniprogram.Component {
                 TData,
                 TProperty,
                 TMethod,
+                TBehavior,
                 TCustomInstanceProperty,
                 TIsPage
             >
-        ): string
+        ): Identifier<TData, TProperty, TMethod>
+        (): GlassEasel.Component.Builder
     }
     type DataOption = Record<string, any>
     type PropertyOption = Record<string, AllProperty>
     type MethodOption = Record<string, Function>
+
+    type BehaviorOption = Behavior.Identifier[]
+    type BehaviorFieldTypes<T> = (T & Record<string, unknown>)['_$behaviorFieldTypes']
+    type ExtractBehaviorType<T> = BehaviorFieldTypes<T> extends Behavior.TypeSignatureFields<any, any, any, any> | undefined
+        ? BehaviorFieldTypes<T>
+        : never
+    type ExtractData<T> = T extends { data: infer D } ? D : never
+    type ExtractProperties<T, TIsBehavior extends boolean = false> = T extends { properties: infer P } ?
+    TIsBehavior extends true ? P : PropertyOptionToData<P extends PropertyOption ? P : {}> : never
+    type ExtractMethods<T> = T extends { methods: infer M } ? M : never
+    type UnionToIntersection<U> = (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never
+    type MixinData<T extends any[]> = UnionToIntersection<ExtractData<ExtractBehaviorType<T[number]>>>
+    type MixinProperties<T extends any[], TIsBehavior extends boolean = false> = UnionToIntersection<ExtractProperties<ExtractBehaviorType<T[number]>, TIsBehavior>>
+    type MixinMethods<T extends any[]> = UnionToIntersection<ExtractMethods<ExtractBehaviorType<T[number]>>>
+
+    /** 用于辅助识别组件类型的虚拟字段（供 glass-easel-analyzer 等外部模块使用） */
+    class TypeSignature<
+        TData extends DataOption,
+        TProperty extends PropertyOption,
+        TMethod extends MethodOption,
+    > {
+        protected readonly _$fieldTypes: {
+            propertyValues: PropertyOptionToData<TProperty>
+            dataWithProperties: TData & PropertyOptionToData<TProperty>
+            methods: TMethod
+        }
+    }
+
+    interface Behavior<B extends BehaviorOption> {
+        /** 类似于mixins和traits的组件间代码复用机制，参见 [behaviors](https://developers.weixin.qq.com/miniprogram/dev/framework/custom-component/behaviors.html) */
+        behaviors?: B
+    }
 
     interface Data<D extends DataOption> {
         /** 组件的内部数据，和 `properties` 一同用于组件的模板渲染 */
@@ -97,6 +151,8 @@ declare namespace WechatMiniprogram.Component {
         /** 组件的方法，包括事件响应函数和任意的自定义方法，关于事件响应函数的使用，参见 [组件间通信与事件](https://developers.weixin.qq.com/miniprogram/dev/framework/custom-component/events.html) */
         methods: M & (TIsPage extends true ? Partial<Page.ILifetime> : {})
     }
+
+    type Satisfy<T, V> = V extends T ? V : T
     type PropertyType =
         | StringConstructor
         | NumberConstructor
@@ -117,11 +173,26 @@ declare namespace WechatMiniprogram.Component {
         : T extends ObjectConstructor
         ? IAnyObject
         : never
-    type FullProperty<T extends PropertyType> = {
+    type SimpleValueType<T extends PropertyType, V> = T extends null
+        ? V
+        : T extends StringConstructor
+        ? Satisfy<string, V>
+        : T extends NumberConstructor
+        ? Satisfy<number, V>
+        : T extends BooleanConstructor
+        ? Satisfy<boolean, V>
+        : T extends ArrayConstructor
+        ? Satisfy<any[], V>
+        : T extends ObjectConstructor
+        ? Satisfy<Record<string, any> | null, V>
+        : T extends FunctionConstructor
+        ? Satisfy<(...args: any[]) => any, V>
+        : never
+    type FullProperty<T extends PropertyType, V extends ValueType<T>> = {
         /** 属性类型 */
         type: T
         /** 属性初始值 */
-        value?: ValueType<T>
+        value?: V
         /** 属性值被更改时的响应函数 */
         observer?:
             | string
@@ -134,12 +205,12 @@ declare namespace WechatMiniprogram.Component {
         optionalTypes?: ShortProperty[]
     }
     type AllFullProperty =
-        | FullProperty<StringConstructor>
-        | FullProperty<NumberConstructor>
-        | FullProperty<BooleanConstructor>
-        | FullProperty<ArrayConstructor>
-        | FullProperty<ObjectConstructor>
-        | FullProperty<null>
+        | FullProperty<StringConstructor, any>
+        | FullProperty<NumberConstructor, any>
+        | FullProperty<BooleanConstructor, any>
+        | FullProperty<ArrayConstructor, any>
+        | FullProperty<ObjectConstructor, any>
+        | FullProperty<null, any>
     type ShortProperty =
         | StringConstructor
         | NumberConstructor
@@ -151,9 +222,25 @@ declare namespace WechatMiniprogram.Component {
     type PropertyToData<T extends AllProperty> = T extends ShortProperty
         ? ValueType<T>
         : FullPropertyToData<Exclude<T, ShortProperty>>
-    type FullPropertyToData<T extends AllFullProperty> = ValueType<T['type']>
+    type FullPropertyToData<T> = T extends FullProperty<infer T, infer V>
+        ? unknown extends V
+            ? ValueType<T>
+            : ((a: T) => void) extends (a: PropertyType) => void
+            ? V
+            : V extends ValueType<T>
+            ? SimpleValueType<T, V>
+            : never
+        : never
     type PropertyOptionToData<P extends PropertyOption> = {
         [name in keyof P]: PropertyToData<P[name]>
+    }
+
+    interface Router {
+        switchTab: Wx['switchTab']
+        reLaunch: Wx['reLaunch']
+        redirectTo: Wx['redirectTo']
+        navigateTo: Wx['navigateTo']
+        navigateBack: Wx['navigateBack']
     }
 
     interface InstanceProperties {
@@ -163,6 +250,14 @@ declare namespace WechatMiniprogram.Component {
         id: string
         /** 节点dataset */
         dataset: Record<string, string>
+        /** 上一次退出前 onSaveExitState 保存的数据 */
+        exitState: any
+        /** 相对于当前自定义组件的 Router 对象 */
+        router: Router
+        /** 相对于当前自定义组件所在页面的 Router 对象 */
+        pageRouter: Router
+        /** 渲染当前组件的渲染后端 */
+        renderer: 'webview' | 'skyline'
     }
 
     interface InstanceMethods<D extends DataOption> {
@@ -189,7 +284,7 @@ declare namespace WechatMiniprogram.Component {
         ): void
 
         /** 检查组件是否具有 `behavior` （检查时会递归检查被直接或间接引入的所有behavior） */
-        hasBehavior(behavior: Behavior.BehaviorIdentifier): void
+        hasBehavior(behavior: Behavior.Identifier): void
         /** 触发事件，参见组件事件 */
         triggerEvent<DetailType = any>(
             name: string,
@@ -202,6 +297,8 @@ declare namespace WechatMiniprogram.Component {
         createIntersectionObserver(
             options: CreateIntersectionObserverOption
         ): IntersectionObserver
+        /** 创建一个 MediaQueryObserver 对象 */
+        createMediaQueryObserver(): MediaQueryObserver
         /** 使用选择器选择组件实例节点，返回匹配到的第一个组件实例对象（会被 `wx://component-export` 影响） */
         selectComponent(selector: string): TrivialInstance
         /** 使用选择器选择组件实例节点，返回匹配到的全部组件实例对象组成的数组 */
@@ -270,7 +367,68 @@ declare namespace WechatMiniprogram.Component {
             options?: ClearAnimationOptions,
             callback?: () => void
         ): void
-        getOpenerEventChannel(): EventChannel
+        /**
+         * 当从另一页面跳转到该页面时，获得与来源页面实例通信当事件通道，详见 [wx.navigateTo]((wx.navigateTo))
+         *
+         * 最低基础库版本：[`2.7.3`](https://developers.weixin.qq.com/miniprogram/dev/framework/compatibility.html)
+         */
+        getOpenerEventChannel(): EventChannel | EmptyEventChannel
+        /**
+         * 绑定由 worklet 驱动的样式到相应的节点，详见 [worklet 动画](https://developers.weixin.qq.com/miniprogram/dev/framework/runtime/skyline/worklet.html)
+         *
+         * 最低基础库版本：[`2.29.0`](https://developers.weixin.qq.com/miniprogram/dev/framework/compatibility.html)
+         */
+        applyAnimatedStyle(
+            selector: string,
+            updater: () => Record<string, string>,
+            userConfig?: { immediate: boolean, flush: 'sync' | 'async' },
+            callback?: (res: { styleId: number }) => void
+        ): void
+        /**
+         * 清除节点上 worklet 驱动样式的绑定关系
+         *
+         * 最低基础库版本：[`2.30.1`](https://developers.weixin.qq.com/miniprogram/dev/framework/compatibility.html)
+         */
+        clearAnimatedStyle(
+            selector: string,
+            styleIds: number[],
+            callback?: () => void
+        ): void
+        /**
+         * 获取更新性能统计信息，详见 [获取更新性能统计信息]((custom-component/update-perf-stat))
+         *
+         *
+         * 最低基础库版本：[`2.12.0`](https://developers.weixin.qq.com/miniprogram/dev/framework/compatibility.html)
+         */
+        setUpdatePerformanceListener<WithDataPath extends boolean = false>(
+            options: SetUpdatePerformanceListenerOption<WithDataPath>,
+            callback?: UpdatePerformanceListener<WithDataPath>
+        ): void
+
+        /**
+         * 在运行时获取页面或组件所在页面 `touch` 相关事件的 passive 配置，详见 [enablePassiveEvent]((configuration/app#enablePassiveEvent))
+         *
+         * 最低基础库版本：[`2.25.1`](https://developers.weixin.qq.com/miniprogram/dev/framework/compatibility.html)
+         */
+        getPassiveEvent(callback: (config: PassiveConfig) => void): void
+        /**
+         * 在运行时切换页面或组件所在页面 `touch` 相关事件的 passive 配置，详见 [enablePassiveEvent]((configuration/app#enablePassiveEvent))
+         *
+         * 最低基础库版本：[`2.25.1`](https://developers.weixin.qq.com/miniprogram/dev/framework/compatibility.html)
+         */
+        setPassiveEvent(config: PassiveConfig): void
+        /**
+         * 设置初始渲染缓存的动态数据
+         *
+         * 最低基础库版本：[`2.11.1`](https://developers.weixin.qq.com/miniprogram/dev/framework/compatibility.html)
+         */
+        setInitialRenderingCache(dynamicData: IAnyObject | null): void
+        /**
+         * 返回当前页面的 appBar 组件实例
+         *
+         * 最低基础库版本：[`3.3.1`](https://developers.weixin.qq.com/miniprogram/dev/framework/compatibility.html)
+         */
+        getAppBar(): TrivialInstance
     }
 
     interface ComponentOptions {
@@ -348,6 +506,11 @@ declare namespace WechatMiniprogram.Component {
          * 所在页面尺寸变化时执行
          */
         resize(size: Page.IResizeOption): void
+        /** 页面生命周期回调—监听页面路由动画完成
+         *
+         * 所在页面路由动画完成时执行
+         */
+        routeDone(): void
     }
 
     type DefinitionFilter = <T extends TrivialOption>(
@@ -450,8 +613,6 @@ declare namespace WechatMiniprogram.Component {
     }
 
     interface OtherOption {
-        /** 类似于mixins和traits的组件间代码复用机制，参见 [behaviors](https://developers.weixin.qq.com/miniprogram/dev/framework/custom-component/behaviors.html) */
-        behaviors: Behavior.BehaviorIdentifier[]
         /**
          * 组件数据字段监听器，用于监听 properties 和 data 的变化，参见 [数据监听器](https://developers.weixin.qq.com/miniprogram/dev/framework/custom-component/observer.html)
          *
@@ -623,6 +784,41 @@ declare namespace WechatMiniprogram.Component {
         /** 起始和结束的滚动范围映射的时间长度，该时间可用于与关键帧动画里的时间 (duration) 相匹配，单位 ms */
         timeRange: number
     }
+
+    interface SetUpdatePerformanceListenerOption<WithDataPath> {
+        /** 是否返回变更的 data 字段信息 */
+        withDataPaths?: WithDataPath
+    }
+    interface UpdatePerformanceListener<WithDataPath> {
+        (res: UpdatePerformance<WithDataPath>): void
+    }
+    interface UpdatePerformance<WithDataPath> {
+        /** 此次更新过程的 ID */
+        updateProcessId: number
+        /** 对于子更新，返回它所属的更新过程 ID */
+        parentUpdateProcessId?: number
+        /** 是否是被合并更新，如果是，则 updateProcessId 表示被合并到的更新过程 ID */
+        isMergedUpdate: boolean
+        /** 此次更新的 data 字段信息，只有 withDataPaths 设为 true 时才会返回 */
+        dataPaths: WithDataPath extends true ? string[] : undefined
+        /** 此次更新进入等待队列时的时间戳 */
+        pendingStartTimestamp: number
+        /** 更新运算开始时的时间戳 */
+        updateStartTimestamp: number
+        /** 更新运算结束时的时间戳 */
+        updateEndTimestamp: number
+    }
+
+    type PassiveConfig =
+        | {
+              /** 是否设置 touchmove 事件为 passive，默认为 `false` */
+              touchmove?: boolean
+              /** 是否设置 touchstart 事件为 passive，默认为 `false` */
+              touchstart?: boolean
+              /** 是否设置 wheel 事件为 passive，默认为 `false` */
+              wheel?: boolean
+          }
+        | boolean
 }
 /** Component构造器可用于定义组件，调用Component构造器时可以指定组件的属性、数据、方法等。
  *

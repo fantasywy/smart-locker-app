@@ -439,7 +439,7 @@ interface OrderListPageMethods {
   onPickupRefresh(event: { detail?: { missing?: boolean } }): void
 }
 
-Component<OrderListPageData, Record<string, never>, OrderListPageMethods, Record<string, never>, true>({
+Component<OrderListPageData, Record<string, never>, OrderListPageMethods, [], Record<string, never>, true>({
   data: {
     title: PAGE_TITLES['pages/order-list/order-list'],
     phase: 'loading',

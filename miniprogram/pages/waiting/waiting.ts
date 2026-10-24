@@ -728,7 +728,7 @@ interface WaitingPageMethods {
   onBackToOrders(): void
 }
 
-Component<WaitingPageData, Record<string, never>, WaitingPageMethods, Record<string, never>, true>({
+Component<WaitingPageData, Record<string, never>, WaitingPageMethods, [], Record<string, never>, true>({
   data: {
     title: PAGE_TITLES['pages/waiting/waiting'],
     phase: 'waiting',
