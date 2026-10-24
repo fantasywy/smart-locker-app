@@ -75,9 +75,6 @@ let inFlightRecovery: Promise<RecoveryOutcome> | null = null
 /** 一次恢复的结果：修好了（重放），还是修不好（丢弃原动作、把失败成因交回调用方）。 */
 type RecoveryOutcome = { ok: true } | { ok: false; error: UnifiedError }
 
-/** 恢复路径的选择器 —— 默认读契约码；传输层传「一律 refresh」。 */
-export type RecoveryTriggerResolver = (error: UnifiedError) => RecoveryTrigger | null
-
 /**
  * 发一条需要鉴权的请求，并**消费掉**它的 401。
  *
@@ -86,9 +83,10 @@ export type RecoveryTriggerResolver = (error: UnifiedError) => RecoveryTrigger |
  *   2. 若它返回 `kind === 'unauthorized'`，入请求层的恢复队列：
  *      全端**恰好一次**恢复，成功后重放，失败则丢弃原动作。
  *
- * @param triggerFor 这个 401 该走哪条恢复路径。缺省读 `2001` / `2005`；
- *                   `transfer.ts` 传恒定 `'refresh'` —— 它的响应里读不出契约码，
- *                   而「先刷（失败转重登）」的净行为与按码分支一致。
+ * @param forceRefresh 是否跳过契约码判断、恒定走「先刷（失败转重登）」。
+ *        `transfer.ts` 的响应里读不出 `2001` / `2005`（下载错误体已落盘、上传 `data`
+ *        是字符串），所以两条文件通道传 `true`；净行为与按码分支一致。
+ *        缺省 `false` = 按 `2001` / `2005` 选择，读不出码时如实交出、不猜。
  *
  * ⚠️ `attempt` 是**闭包**而不是 `(path, options)`：重放必须原样重发。
  * 把 path/options 传进来再拼一次，等于重放时重新构造一次请求 —— 那时 `getAccessToken()`
@@ -97,12 +95,12 @@ export type RecoveryTriggerResolver = (error: UnifiedError) => RecoveryTrigger |
  */
 export async function withLoginRecovery<T>(
   attempt: () => Promise<RequestResult<T>>,
-  triggerFor: RecoveryTriggerResolver = recoveryTriggerFor,
+  forceRefresh = false,
 ): Promise<RequestResult<T>> {
   const first = await attempt()
   if (first.ok || first.error.kind !== 'unauthorized') return first
 
-  const trigger = triggerFor(first.error)
+  const trigger = forceRefresh ? 'refresh' : recoveryTriggerFor(first.error)
   // 读不出 `2001` / `2005` 的 401（网关页面、契约漂移）**不猜分支**：替它选一条路
   // 会白刷一次甚至误清登录态 —— 如实交出比猜安全。它照常落在 `unauthorized` 上。
   if (trigger === null) return first

@@ -1,6 +1,6 @@
 // `13.17` 上传文件响应的**手写 DTO** —— 只有形状，没有行为。
 //
-// 契约：后端的 `AppFileVO`（`POST /api/app/v1/files` 的 `data`）：
+// 契约：`API设计文档.md` §13.17 (:1290-1317) 的 `AppFileVO`（`POST /api/app/v1/files` 的 `data`）。
 //
 // ```json
 // { "id": 42, "url": "/api/app/v1/files/42", "size": 18324,

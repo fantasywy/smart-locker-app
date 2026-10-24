@@ -367,4 +367,18 @@ describe('#74 清理：只留当前 id', () => {
 
     expect(disk.files.size).toBe(0)
   })
+
+  it('keepPending: true → 仍清旧最终文件与 .part，但保留 upload/ 里的 pending', async () => {
+    const { cleanupAvatarCache } = await loadCache()
+    const disk = installDisk(wx, {
+      [`${AVATAR_DIR}/41`]: 'old',
+      [AVATAR_42]: 'current',
+      [`${AVATAR_DIR}/43.part`]: 'partial',
+      [PENDING]: 'pending-bytes',
+    })
+
+    await cleanupAvatarCache('42', { keepPending: true })
+
+    expect([...disk.files.keys()].sort()).toEqual([AVATAR_42, PENDING].sort())
+  })
 })

@@ -13,38 +13,17 @@
 // 失败时打印出违反的是哪一条**。判据一律取**剥离注释后**的源码 —— 注释里提 `wx.request`
 // 是必要的契约说明（本文件的主题就是它），不该被当成违规。
 
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { fileURLToPath } from 'node:url'
+import { collectSourceFiles } from '../helpers/source-scan'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
 const miniprogramDir = join(repoRoot, 'miniprogram')
 const requestDir = join(miniprogramDir, 'request')
 const apiDir = join(miniprogramDir, 'api')
 const pagesDir = join(miniprogramDir, 'pages')
-
-/** 递归收集某目录下的全部 `.ts`（跳过 `.d.ts`、`node_modules` 与构建产物 miniprogram_npm）。 */
-function collectSources(dir: string): string[] {
-  const found: string[] = []
-  let entries: string[]
-  try {
-    entries = readdirSync(dir)
-  } catch {
-    return found
-  }
-  for (const entry of entries) {
-    const full = join(dir, entry)
-    if (statSync(full).isDirectory()) {
-      // `miniprogram_npm/` 是构建产物；源码守卫不扫描它。
-      if (entry === 'node_modules' || entry === 'miniprogram_npm') continue
-      found.push(...collectSources(full))
-    } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts')) {
-      found.push(full)
-    }
-  }
-  return found
-}
 
 /** 剥掉注释后的源码 —— 源码层面的断言都读它。 */
 function stripComments(source: string): string {
@@ -58,7 +37,7 @@ function rel(path: string): string {
 
 /** 收集某个 `wx.*` API 在源码里的真正调用点（注释不算）。 */
 function callSitesOf(pattern: RegExp): string[] {
-  return collectSources(miniprogramDir)
+  return collectSourceFiles(miniprogramDir)
     .filter((file) => pattern.test(stripComments(readFileSync(file, 'utf8'))))
     .map(rel)
 }
@@ -97,7 +76,7 @@ describe('#18 工程约束：`api/` 只做搬运（硬规则 2）', () => {
     // 请求层自己也不弹窗（只做归一化），这条把同一约束继续压到端点搬运层。
     const banned = ['showToast', 'showModal', 'navigateTo', 'redirectTo', 'switchTab', 'reLaunch']
     const offenders: string[] = []
-    for (const file of collectSources(apiDir)) {
+    for (const file of collectSourceFiles(apiDir)) {
       const code = stripComments(readFileSync(file, 'utf8'))
       for (const api of banned) {
         if (new RegExp(`\\bwx\\s*\\.\\s*${api}\\b`).test(code)) offenders.push(`${rel(file)} → wx.${api}`)
@@ -114,7 +93,7 @@ describe('#18 工程约束：`api/` 只做搬运（硬规则 2）', () => {
   it('`api/` 里的中文字面量只出现在注释里（文案属文案层，不进搬运层）', () => {
     // 与 `types/` 同一条纪律：代码里的中文只可能是硬编码文案，
     // 而文案的唯一事实源是文案层。api/ 需要说人话时，把异常交给页面。
-    for (const file of collectSources(apiDir)) {
+    for (const file of collectSourceFiles(apiDir)) {
       const code = stripComments(readFileSync(file, 'utf8'))
       expect(
         code,
@@ -133,7 +112,7 @@ describe('#18 工程约束：不引 store，App.globalData 不放业务数据', 
     // 单一飞行队列属 #19。所以「零出现」才是当前正确状态；将来 #19 真的需要队列状态时，
     // 这条守卫应当被**有意识地**放宽到「只允许 globalData 持有队列状态」，而不是无声忽略。
     const offenders: string[] = []
-    for (const file of [...collectSources(requestDir), ...collectSources(apiDir)]) {
+    for (const file of [...collectSourceFiles(requestDir), ...collectSourceFiles(apiDir)]) {
       const code = stripComments(readFileSync(file, 'utf8'))
       if (/globalData/.test(code)) offenders.push(rel(file))
     }
@@ -172,7 +151,7 @@ describe('#18 工程约束：token 读写集中在一个模块', () => {
     // 用键名做判据，既准确又不会随无关代码的增减而误报。
     const tokenKeys = /auth\.(accessToken|refreshToken)/
     const offenders: string[] = []
-    for (const file of collectSources(miniprogramDir)) {
+    for (const file of collectSourceFiles(miniprogramDir)) {
       if (file === join(requestDir, 'token.ts')) continue
       const code = stripComments(readFileSync(file, 'utf8'))
       if (tokenKeys.test(code)) offenders.push(rel(file))
@@ -207,7 +186,7 @@ describe('#18 工程约束：token 读写集中在一个模块', () => {
     // 会把正确的写法（`import { getLockerByCode } from '../../api/lockers'`）也判红 ——
     // 而守卫一旦逼人绕开正确的分层，下一个人就会直接删掉它。
     const offenders: string[] = []
-    for (const file of collectSources(pagesDir)) {
+    for (const file of collectSourceFiles(pagesDir)) {
       const code = stripComments(readFileSync(file, 'utf8'))
       // 只匹配指到 `request/` 的那条路径 —— `api/` 是页面合法的依赖。
       if (/from\s+['"][^'"]*\/request\//.test(code)) offenders.push(rel(file))
@@ -228,7 +207,7 @@ describe('#18 工程约束：token 读写集中在一个模块', () => {
     // ⚠️ 判据取 `API_PREFIX` 的字面值 `/api/app/v1`：它在 `request/config.ts` 里
     // 有唯一一个家，页面里出现任何一个都说明端点路径被抄了一份。
     const offenders: string[] = []
-    for (const file of collectSources(pagesDir)) {
+    for (const file of collectSourceFiles(pagesDir)) {
       const code = stripComments(readFileSync(file, 'utf8'))
       if (code.includes('/api/app/v1')) offenders.push(rel(file))
     }
@@ -241,11 +220,12 @@ describe('#18 工程约束：token 读写集中在一个模块', () => {
   })
 
   it('⚠️ `pages/` 不出现 `/api/app/v1/files` 字面量', () => {
+    // 这条是上一条 `/api/app/v1` 守卫的子集；保留它是 #74 的单独验收追溯点，不是新约束。
     // #74 的第三条守卫（票面单独列出）：头像上传 / 读取的地址只允许由
     // `api/files.ts` 与 `utils/avatar-cache.ts` 拼。页面里出现这个字面量，说明它
     // 绕过了 api 层 —— 下一步就是自己拼 URL、自己判状态。
     const offenders: string[] = []
-    for (const file of collectSources(pagesDir)) {
+    for (const file of collectSourceFiles(pagesDir)) {
       const code = stripComments(readFileSync(file, 'utf8'))
       if (code.includes('/api/app/v1/files')) offenders.push(rel(file))
     }
@@ -274,7 +254,7 @@ describe('#19 工程约束：依赖方向单向 —— request/ 不得依赖 api
     //
     // 正解见 `request/auth-endpoints.ts` 的头注释：端点形状长在 request/ 里，`api/auth.ts` 重导出。
     const offenders: string[] = []
-    for (const file of collectSources(requestDir)) {
+    for (const file of collectSourceFiles(requestDir)) {
       const code = stripComments(readFileSync(file, 'utf8'))
       if (/from\s+['"][^'"]*\/api\//.test(code)) offenders.push(rel(file))
     }
@@ -291,7 +271,7 @@ describe('#19 工程约束：依赖方向单向 —— request/ 不得依赖 api
     // 而免鉴权豁免名单正是拿这个字符串比对的，
     // 两处字面量之间的漂移**就是鉴权缺口**。`config.ts` 是它唯一的家。
     const offenders: string[] = []
-    for (const file of [...collectSources(requestDir), ...collectSources(apiDir)]) {
+    for (const file of [...collectSourceFiles(requestDir), ...collectSourceFiles(apiDir)]) {
       if (file === join(requestDir, 'config.ts')) continue
       const code = stripComments(readFileSync(file, 'utf8'))
       if (/['"]\/api\/app\/v1\/auth\//.test(code)) offenders.push(rel(file))

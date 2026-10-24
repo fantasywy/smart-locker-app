@@ -79,6 +79,14 @@ const NICKNAME_MAX_LENGTH = 64
 const RESTRICTED_STATUS: UserStatus = 2
 
 /**
+ * 上传限流的业务码 —— 后端 `ErrorCode.RATE_LIMITED(8008)`（HTTP 200 + code）。
+ *
+ * ⚠️ 与 `2` 一样写成具名常量：`8008` 本身看不出「限流」，而它是上传失败里唯一
+ * 需要换一句文案的分支。
+ */
+const AVATAR_RATE_LIMIT_CODE = 8008
+
+/**
  * 静态出口的行为 id → 语义图标。
  *
  * ⚠️ 键是 `STATIC_EXITS` 的 `id`，不是 `label` —— 改词不该让图标错位。
@@ -117,6 +125,14 @@ interface ProfilePageInstance {
   avatarUploadTask?: WechatMiniprogram.UploadTask | null
   /** 已选图并落盘的 pending 路径；未选图为 null。 */
   pendingAvatarPath?: string | null
+  /**
+   * 最近一次开始写 `upload/{槽位}` 的 prepare 代号。
+   *
+   * `prepareAvatar()` 是异步的：关闭弹层删掉 pending 后，它仍可能把压缩产物 copyFile
+   * 回同一槽位。迟到结果到达时，只有这个字段仍等于自己的代号，才说明槽位没有更新的
+   * 活草稿在占用 —— 这时才能再删一次；否则会误删用户刚选的新图。
+   */
+  pendingPrepareGeneration?: number
   /** 上传成功后拿到的 `url`；未上传 / 已丢弃为 null。 */
   uploadedAvatarUrl?: string | null
 }
@@ -229,16 +245,20 @@ Component({
      * 就是「进入时打两次」，直接违反「进入与每次回到前台只调一次」。
      */
     onShow(): void {
-      void this.loadProfile()
+      // 缓存清理只归 `onShow`：保存后的重拉不再顺手做一遍（那是 spec 之外的副作用）。
+      void this.loadProfile({ cleanupCache: true })
     },
 
     /**
      * 读 `13.4` —— 三块共用这一次结果。
      *
+     * @param options.cleanupCache 是否在画界面前清理头像缓存。只有 `onShow` 传 `true`；
+     *        保存成功后的重拉不清理（避免把刚转正 / 刚起飞的下载当成过期文件）。
+     *
      * ⚠️ 失败**不弹窗**：身份区与信用分卡各自显示一行「加载失败，请重试」，
      * 下方静态出口照常可用。受限卡按 `status` 条件出现，失败时自然不出现。
      */
-    async loadProfile(): Promise<void> {
+    async loadProfile(options: { cleanupCache?: boolean } = {}): Promise<void> {
       const page = this as unknown as ProfilePageInstance
       page.profileRequestId = (page.profileRequestId ?? 0) + 1
       const requestId = page.profileRequestId
@@ -259,10 +279,16 @@ Component({
         this.setData({ phase: 'failed' })
         return
       }
+      const currentAvatarId = parseAvatarFileId(result.data.avatar)
+      if (options.cleanupCache === true) {
+        // ⚠️ 先清理、后 applyProfile：`applyProfile()` 会启动后台下载，刚写出的 `.part`
+        // 若落在这轮清理之后就会被删掉，下载成功也 rename 不回来。
+        // 弹层开着时 pending 是活草稿 —— 失败 / 8008 后「重试不重选」全靠它。
+        await cleanupAvatarCache(currentAvatarId, { keepPending: this.data.popupVisible })
+        // 清理是异步的：期间可能又发起了一次 `onShow`，旧结果不得再画上去。
+        if (requestId !== page.profileRequestId) return
+      }
       this.applyProfile(result.data)
-      // 只有拿到可信的当前头像 id 之后才清理 —— 删掉 ≠ 当前 id 的缓存与所有 pending。
-      // 上传成功后 pending 已转正，这里的清理不会误删刚保存的那张。
-      void cleanupAvatarCache(parseAvatarFileId(result.data.avatar))
     },
 
     /**
@@ -346,11 +372,20 @@ Component({
       const generation = page.avatarGeneration
       page.pendingAvatarPath = null
       page.uploadedAvatarUrl = null
+      page.pendingPrepareGeneration = generation
       // 选图期间先保持原预览；上传成功后才换成 pending 预览。
       this.setData({ avatarUploading: true, avatarError: '', avatarPreviewPath: this.data.avatarPath })
 
       const prepared = await prepareAvatar(tempPath)
-      if (generation !== page.avatarGeneration) return
+      if (generation !== page.avatarGeneration) {
+        // 关闭弹层 / 已重新选图后，流水线可能刚刚把 pending 又写了出来 —— 再删一次。
+        // 但若槽位已被更新的一代 prepare 认领，删掉会误伤活草稿，必须放过。
+        if (page.pendingPrepareGeneration === generation) {
+          page.pendingPrepareGeneration = undefined
+          await discardPendingAvatar()
+        }
+        return
+      }
       if (!prepared.ok) {
         this.setData({
           avatarUploading: false,
@@ -404,7 +439,8 @@ Component({
       page.avatarUploadTask = null
 
       if (!result.ok) {
-        const rateLimited = result.error.kind === 'business' && result.error.code === 8008
+        const rateLimited =
+          result.error.kind === 'business' && result.error.code === AVATAR_RATE_LIMIT_CODE
         this.setData({
           avatarUploading: false,
           avatarError: rateLimited ? PROFILE_COPY.avatarRateLimited : PROFILE_COPY.avatarUploadFailed,
@@ -444,10 +480,17 @@ Component({
       const pendingPath = page.pendingAvatarPath ?? null
       const uploadedUrl = page.uploadedAvatarUrl ?? null
       const savedAvatarUrl = (this.data.savedAvatarUrl as string | null | undefined) ?? null
-      const avatarUploaded = uploadedUrl !== null && uploadedUrl !== savedAvatarUrl
+      /**
+       * 唯一判据：这个头像地址相对服务端原值是否算一次变化。
+       *
+       * 上传前 / 重试后各判一次，但规则只有这一份 —— 两处各写一遍 `!== saved` 时，
+       * 只要有一处漏掉 `null` 判断就会把「没换头像」发成一次空更新。
+       */
+      const hasAvatarChange = (url: string | null): boolean =>
+        url !== null && url !== savedAvatarUrl
       const hasPendingAvatar = pendingPath !== null && uploadedUrl === null
 
-      if (!nicknameChanged && !avatarUploaded && !hasPendingAvatar) {
+      if (!nicknameChanged && !hasAvatarChange(uploadedUrl) && !hasPendingAvatar) {
         this.closeEditor()
         return
       }
@@ -465,7 +508,7 @@ Component({
       }
 
       const finalUrl = page.uploadedAvatarUrl ?? null
-      const shouldSendAvatar = finalUrl !== null && finalUrl !== savedAvatarUrl
+      const shouldSendAvatar = hasAvatarChange(finalUrl)
       const body: { nickname?: string; avatar?: string } = {}
       if (nicknameChanged) body.nickname = trimmed
       if (shouldSendAvatar && finalUrl !== null) body.avatar = finalUrl
@@ -484,7 +527,14 @@ Component({
 
       if (shouldSendAvatar && finalUrl !== null) {
         const fileId = parseAvatarFileId(finalUrl)
-        if (fileId !== null) await promotePendingAvatar(fileId)
+        // 显式消费转正结果：`false` 不能当成功。
+        const promoted = fileId !== null && (await promotePendingAvatar(fileId))
+        if (!promoted) {
+          // 安全兜底（允许一次下载）：PUT 已成功，服务端手里就是这张图 —— 本地没转正
+          // 不该让保存失败，也不该卡住弹层。下面的重拉会走 `resolveAvatar()` 的下载路径
+          // （`downloadFile` 恰好 1 次、两段式落盘），成功后屏上仍是新头像。
+          // pending 随后由 `closeEditor()` 删除，不留下跨会话垃圾。
+        }
       }
 
       this.closeEditor()

@@ -9,12 +9,13 @@
 // ⚠️ `wx.*` 全是「未编排即失败」的桩：头像若偷偷 `wx.uploadFile` / `wx.compressImage`，
 // 会以异常形式爆出来；页面若偷偷 `setStorageSync`，同理由 storage 断言挡住。
 
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { installWxStub, jsonResponse, networkFailure } from '../helpers/wx'
 import { requestsTo, respondInOrder, sentRequests } from '../helpers/http'
+import { collectSourceFiles } from '../helpers/source-scan'
 import {
   AVATAR_DIR,
   UPLOAD_DIR,
@@ -47,17 +48,9 @@ const profileScss = (): string => readFileSync(join(profileDir, 'profile.scss'),
 const copySource = (): string =>
   readFileSync(join(repoRoot, 'miniprogram', 'startup', 'copy.ts'), 'utf8')
 
-/** 收集 `miniprogram/` 下的源码文件（跳过构建产物）。 */
-function collectMiniprogramFiles(dir = join(repoRoot, 'miniprogram')): string[] {
-  const found: string[] = []
-  for (const name of readdirSync(dir)) {
-    if (name === 'miniprogram_npm' || name === 'node_modules' || name.startsWith('.')) continue
-    const path = join(dir, name)
-    if (statSync(path).isDirectory()) found.push(...collectMiniprogramFiles(path))
-    else if (/\.(ts|wxml|json|scss)$/.test(name) && !name.endsWith('.d.ts')) found.push(path)
-  }
-  return found
-}
+/** 收集 `miniprogram/` 下的源码文件 —— 扫描形状与其他源码守卫共用。 */
+const collectMiniprogramFiles = (): string[] =>
+  collectSourceFiles(join(repoRoot, 'miniprogram'), ['.ts', '.wxml', '.json', '.scss'])
 
 /** 剥掉注释后的源码 —— 结构断言读它（注释里讨论契约与不展示项是必要的）。 */
 function stripComments(source: string): string {
@@ -588,7 +581,7 @@ describe('#75 我的页 · 头像显示：只认本站文件地址', () => {
     expect(page.data.avatarPath).toBe('')
   })
 
-  it('13.4 成功后清理缓存：只留当前 id、清空 pending', async () => {
+  it('弹层关闭时 13.4 成功后清理缓存：只留当前 id、清空 pending', async () => {
     const { disk } = await mount([profileBody()], {
       files: {
         [`${AVATAR_DIR}/41`]: 'old',
@@ -612,6 +605,38 @@ describe('#75 我的页 · 头像显示：只认本站文件地址', () => {
     await settle()
 
     expect([...disk.files.keys()]).toEqual([`${AVATAR_DIR}/43`])
+  })
+
+  it('onShow 先清理再 applyProfile：刚起飞的下载 .part 不被本次清理误删', async () => {
+    let pendingDownload: Parameters<InstalledWxStub['downloadFile']>[0] | undefined
+    const { page, disk } = await mount(
+      [profileBody(), profileBody({ avatar: '/api/app/v1/files/43' })],
+      {
+        files: { [`${AVATAR_DIR}/42`]: 'cached' },
+        setup(stub, disk2) {
+          stub.downloadFile.mockImplementation((options) => {
+            // 真实平台在请求开始时就创建目标文件；这里同步落盘，让清理若排在后面就必然看见它。
+            disk2.files.set(options.filePath ?? '', 'partial-bytes')
+            pendingDownload = options
+            return { abort: vi.fn() }
+          })
+          // 同步成功让下载真正起飞在 cleanup 之前 —— 这正是旧顺序会删掉 .part 的窗口。
+          disk2.fs.access.mockImplementation(({ path, success }) => {
+            if (path === AVATAR_DIR) success?.()
+          })
+        },
+      },
+    )
+
+    page.onShow?.()
+    await settle()
+
+    expect(disk.files.has(`${AVATAR_DIR}/43.part`), '清理不得删掉刚起的下载').toBe(true)
+    pendingDownload?.success?.(downloadOk(`${AVATAR_DIR}/43.part`))
+    await settle()
+
+    expect(page.data.avatarPath).toBe(`${AVATAR_DIR}/43`)
+    expect(disk.files.has(`${AVATAR_DIR}/43`)).toBe(true)
   })
 })
 
@@ -883,7 +908,44 @@ describe('#75 我的页 · 保存只发变化字段', () => {
     expect(page.data.avatarPath, '屏上头像换成新 url 的本地缓存路径').toBe(AVATAR_77)
     expect(disk.files.has(PENDING)).toBe(false)
     expect(disk.files.get(AVATAR_77)).toBe('image-bytes')
-    expect(disk.files.has(AVATAR_42), '旧头像缓存被清理').toBe(false)
+    // 清理只归 onShow：保存后的重拉不再顺手扫一遍缓存，旧头像等下次进页再删。
+    expect(disk.files.has(AVATAR_42), '保存后的重拉不清理旧缓存').toBe(true)
+  })
+
+  it('promote 失败 → 保存仍成功关弹层；重拉恰好 1 次下载兜底，不崩不卡死', async () => {
+    const { wx, page, disk } = await mount(
+      [profileBody(), updateOk(), profileBody({ avatar: '/api/app/v1/files/77' })],
+      {
+        files: chooseFiles(),
+        setup(stub, disk2) {
+          arrangeImageInfo(stub)
+          arrangeUploads(stub, [uploadOk()])
+          arrangeDownloads(stub, disk2, [downloadOk(`${AVATAR_DIR}/77.part`)])
+          const realRename = disk2.fs.rename.getMockImplementation()
+          let promotionFailed = false
+          disk2.fs.rename.mockImplementation((options) => {
+            if (!promotionFailed && options.oldPath === PENDING && options.newPath === AVATAR_77) {
+              promotionFailed = true
+              queueMicrotask(() => options.fail?.({ errMsg: 'fail rename: permission denied' }))
+              return
+            }
+            realRename?.(options)
+          })
+        },
+      },
+    )
+    await chooseAndUpload(page)
+
+    await page.onSaveProfile?.()
+    await settle()
+
+    expect(wx.downloadFile, '转正失败后的重拉恰好下载 1 次兜底').toHaveBeenCalledTimes(1)
+    expect(wx.downloadFile.mock.calls[0]?.[0].url).toContain('/api/app/v1/files/77')
+    expect(page.data.popupVisible, '不得因为转正失败卡在弹层').toBe(false)
+    expect(page.data.saving).toBe(false)
+    expect(page.data.avatarPath, '兜底下载成功后屏上仍是新头像').toBe(AVATAR_77)
+    expect(disk.files.has(AVATAR_77)).toBe(true)
+    expect(disk.files.has(PENDING)).toBe(false)
   })
 
   it('昵称与头像都变 → 两个字段都发（昵称仍提交 trim 后的值）', async () => {
@@ -993,6 +1055,41 @@ describe('#75 我的页 · 保存只发变化字段', () => {
     expect(page.data.avatarPath).toBe(AVATAR_77)
   })
 
+  it('弹层开着时 onShow 重拉不得清掉失败 pending；再保存 = 再 1 次上传、0 次重选', async () => {
+    const { wx, page, disk } = await mount(
+      [profileBody(), profileBody(), updateOk(), profileBody({ avatar: '/api/app/v1/files/77' })],
+      {
+        files: chooseFiles(),
+        setup(stub) {
+          arrangeImageInfo(stub)
+          arrangeUploads(stub, [{ errMsg: 'uploadFile:fail timeout' }, uploadOk()])
+        },
+      },
+    )
+    page.onEditProfile?.()
+    await page.onChooseAvatar?.({ detail: { avatarUrl: TEMP_AVATAR } })
+    await settle()
+    expect(page.data.avatarError).toBe(PROFILE_COPY.avatarUploadFailed)
+    expect(disk.files.has(PENDING), '失败后 pending 还在').toBe(true)
+
+    // 第二次 `13.4`（等价于切后台再回来）—— 草稿还开着，清理必须放过 pending。
+    page.onShow?.()
+    await settle()
+    expect(profileRequests(wx)).toHaveLength(2)
+    expect(page.data.popupVisible).toBe(true)
+    expect(disk.files.has(PENDING), 'onShow 不得删掉活草稿的 pending').toBe(true)
+
+    await page.onSaveProfile?.()
+    await settle()
+
+    expect(wx.uploadFile, '保存重试 = 再传一次，不重新选图').toHaveBeenCalledTimes(2)
+    expect(wx.getImageInfo, '重试不重选，压缩流水线不再跑').toHaveBeenCalledTimes(1)
+    const requests = profileRequests(wx)
+    expect(requests[2]?.method).toBe('PUT')
+    expect(requests[2]?.data).toEqual({ avatar: '/api/app/v1/files/77' })
+    expect(page.data.popupVisible).toBe(false)
+  })
+
   it('上传重试仍失败 → 不发 PUT，弹层不关、待提交文件还在', async () => {
     const { wx, page, disk } = await mount([profileBody()], {
       files: chooseFiles(),
@@ -1062,6 +1159,92 @@ describe('#75 我的页 · 关闭弹层', () => {
     expect(page.data.avatarError).toBe('')
     expect(page.data.avatarPath, '当前头像不变').toBe(AVATAR_42)
     expect(profileRequests(wx), '取消不得发 PUT').toHaveLength(1)
+  })
+
+  it('压缩进行中关闭 → 迟到的 prepare 产物必须清掉，不得复活 pending', async () => {
+    let finishCompress: (() => void) | undefined
+    const { wx, page, disk } = await mount([profileBody()], {
+      files: chooseFiles({ '/tmp/compressed-1.jpg': 'compressed-bytes' }),
+      setup(stub) {
+        arrangeImageInfo(stub, 4000, 3000)
+        stub.compressImage.mockImplementation((options) => {
+          finishCompress = () =>
+            options.success?.({ tempFilePath: '/tmp/compressed-1.jpg', errMsg: 'compressImage:ok' })
+        })
+      },
+    })
+    page.onEditProfile?.()
+    void page.onChooseAvatar?.({ detail: { avatarUrl: TEMP_AVATAR } })
+    await settle()
+    expect(finishCompress, '流水线必须已经走到压缩这一步').toBeDefined()
+    expect(disk.files.has(PENDING)).toBe(true)
+
+    page.onCancelEdit?.()
+    await settle()
+    expect(disk.files.has(PENDING), '关闭先删掉 pending').toBe(false)
+
+    // 压缩此时才完成：`prepareAvatar()` 会把产物再次 copyFile 回 pending。
+    finishCompress?.()
+    await settle()
+
+    expect(disk.files.has(PENDING), '迟到的 prepare 不得把 pending 写回来').toBe(false)
+    expect(wx.uploadFile, '这一代已作废，不得再上传').not.toHaveBeenCalled()
+    expect(page.data.popupVisible).toBe(false)
+  })
+
+  it('迟到 prepare 不得删掉更新一代活草稿的 pending', async () => {
+    let finishFirstCompress: (() => void) | undefined
+    let imageInfoCalls = 0
+    const { wx, page, disk } = await mount([profileBody()], {
+      files: chooseFiles({
+        '/tmp/new-avatar.jpg': 'new-bytes',
+        '/tmp/compressed-1.jpg': 'compressed-bytes',
+      }),
+      setup(stub) {
+        stub.getImageInfo.mockImplementation((options) => {
+          imageInfoCalls += 1
+          const first = imageInfoCalls === 1
+          queueMicrotask(() =>
+            options.success?.({
+              width: first ? 4000 : 800,
+              height: first ? 3000 : 600,
+              path: PENDING,
+              type: 'jpg',
+              orientation: 'up',
+              errMsg: 'getImageInfo:ok',
+            }),
+          )
+        })
+        stub.compressImage.mockImplementation((options) => {
+          finishFirstCompress = () =>
+            options.success?.({ tempFilePath: '/tmp/compressed-1.jpg', errMsg: 'compressImage:ok' })
+        })
+        arrangeUploads(stub, [uploadOk()])
+      },
+    })
+
+    // 第一代：卡在压缩。
+    page.onEditProfile?.()
+    void page.onChooseAvatar?.({ detail: { avatarUrl: TEMP_AVATAR } })
+    await settle()
+    expect(finishFirstCompress).toBeDefined()
+
+    // 关闭后重新打开并选第二张 —— 第二代已经成功落盘并上传。
+    page.onCancelEdit?.()
+    await settle()
+    page.onEditProfile?.()
+    await page.onChooseAvatar?.({ detail: { avatarUrl: '/tmp/new-avatar.jpg' } })
+    await settle()
+    expect(disk.files.has(PENDING), '第二代 pending 已落盘').toBe(true)
+    expect(page.data.avatarPreviewPath).toBe(PENDING)
+
+    // 第一代的压缩现在才完成 —— 它不得把第二代的 pending 删掉。
+    finishFirstCompress?.()
+    await settle()
+
+    expect(disk.files.has(PENDING), '迟到一代不得误删新草稿').toBe(true)
+    expect(page.data.avatarPreviewPath).toBe(PENDING)
+    expect(wx.uploadFile, '迟到一代不得再上传').toHaveBeenCalledTimes(1)
   })
 
   it('已上传未保存时关闭 → 丢弃 url 并删 pending，不调服务端删除', async () => {

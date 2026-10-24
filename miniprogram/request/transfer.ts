@@ -61,7 +61,7 @@ export type DownloadResult =
  */
 export function upload<T>(path: string, options: UploadOptions): Promise<RequestResult<T>> {
   // 传输层的 401 不读契约码：恒定先刷（失败会自动转重登）。
-  return withLoginRecovery<T>(() => dispatchUpload<T>(path, options), () => 'refresh')
+  return withLoginRecovery<T>(() => dispatchUpload<T>(path, options), true)
 }
 
 /**
@@ -79,7 +79,7 @@ export function download(path: string, options: DownloadOptions): Promise<Downlo
   return withLoginRecovery<DownloadPayload>(
     () => dispatchDownload(path, options),
     // 同上传：不解析 2001/2005，恒定先刷（失败自动转重登）。
-    () => 'refresh',
+    true,
   ).then((result) => (result.ok ? { ok: true, filePath: result.data.filePath } : result))
 }
 
@@ -103,10 +103,7 @@ function dispatchUpload<T>(path: string, options: UploadOptions): Promise<Reques
         // 若把 401 交给 `classifyResponse`，一个网关 HTML 401 会被归成 `network` 而
         // **不触发恢复** —— 与「两条通道统一先刷」的口径相反。
         if (res.statusCode === 401) {
-          resolve({
-            ok: false,
-            error: { httpStatus: 401, code: null, message: null, kind: 'unauthorized' },
-          })
+          resolve({ ok: false, error: unauthorizedError() })
           return
         }
         resolve(classifyResponse<T>(res.statusCode, parseJson(res.data)))
@@ -138,24 +135,32 @@ function dispatchDownload(
         if (res.statusCode === 401) {
           // 401 的 body 已写进目标文件，这里**不读它**：契约码读不出来也无所谓，
           // 恢复路径恒定是「先刷（失败转重登）」。
-          resolve({
-            ok: false,
-            error: { httpStatus: 401, code: null, message: null, kind: 'unauthorized' },
-          })
+          resolve({ ok: false, error: unauthorizedError() })
           return
         }
         // ⚠️ 非 200 且非 401：`code` / `message` **恒为 null**。错误体在文件里，
         // 本模块不读盘；编一个 code / message 出来就是撒谎。
-        resolve({
-          ok: false,
-          error: { httpStatus: res.statusCode, code: null, message: null, kind: 'network' },
-        })
+        resolve({ ok: false, error: networkStatusError(res.statusCode) })
       },
       fail: (err) => {
         resolve(classifyFailure(err.errMsg))
       },
     })
   })
+}
+
+/**
+ * 传输层最小的两个错误对象工厂 —— 上传与下载必须长得**逐字节一样**。
+ *
+ * 两条通道各自内联一份字面量时，最危险的是其中一份「顺手」带上 `code` / `message`：
+ * 下载的错误体在文件里、上传的响应是字符串，两边都读不出业务码，凭空补一个就是撒谎。
+ */
+function unauthorizedError(): UnifiedError {
+  return { httpStatus: 401, code: null, message: null, kind: 'unauthorized' }
+}
+
+function networkStatusError(httpStatus: number): UnifiedError {
+  return { httpStatus, code: null, message: null, kind: 'network' }
 }
 
 /**
