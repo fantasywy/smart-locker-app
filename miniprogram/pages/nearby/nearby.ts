@@ -215,7 +215,7 @@ interface NearbyMapMarker {
   callout?: NearbyMapCallout
 }
 
-/** 全屏地图卡片浮层的数据 —— 由 `cover-view` 渲染，只放短文本。 */
+/** 全屏地图卡片浮层的数据 —— 由同层渲染的普通 `view` 承载，只放短文本。 */
 interface NearbySelectedCard {
   siteId: number
   name: string

@@ -10,7 +10,7 @@
        denied    → 未定位横幅，不是空页；列表仍可用
   ⚠️ 没有地图 / 列表切换，没有「查看柜机」「下单」「预约」出口。
   ⚠️ 地图带与列表共用 selectedSiteId；全屏地图是同页的次级状态，不是新页面。
-     全屏卡片浮层用 cover-view —— 原生 <map> 会盖住普通 view。
+     地图已是同层渲染，浮层用普通 view —— 不再需要 cover-view。
 -->
 <navigation-bar title="{{ title }}" back="{{false}}" />
 
@@ -98,10 +98,12 @@
       bindupdated="onMapUpdated"
       bindrendererror="onMapRenderError"
     >
-      <cover-view
+      <!-- 同层渲染后普通 view 可以叠在 map 上；cover-view 已被开发者工具标记为待替换。 -->
+      <view
+        wx:if="{{ !mapFailed }}"
         class="nearby__map-entry"
         bindtap="onOpenFullscreen"
-      >{{ mapFullscreenLabel }}</cover-view>
+      >{{ mapFullscreenLabel }}</view>
     </map>
 
     <view wx:if="{{ mapFailed }}" class="nearby__map-fail">
@@ -217,8 +219,9 @@
 
 <!--
   全屏地图 —— 同一页的次级入口（`showFullscreenMap`），不新增路由。
-  ⚠️ 卡片浮层与返回按钮都在 <map> 内、且只能用 cover-view / cover-image：
-     原生地图层级高于普通 view，普通浮层会被盖住。
+  ⚠️ 卡片浮层与返回按钮都是 map 的**兄弟节点**，不是 map 的子节点。
+     基础库 2.32.3 的 map 已支持同层渲染，普通 view 绝对定位即可叠在地图上；
+     做成兄弟节点也让点击不依赖 map 子节点的分发（实测「收起」「导航」都可点）。
 -->
 <view wx:if="{{ showFullscreenMap }}" class="nearby__fullscreen">
   <map
@@ -232,25 +235,25 @@
     bindregionchange="onRegionChange"
     bindupdated="onMapUpdated"
     bindrendererror="onMapRenderError"
-  >
-    <cover-view class="nearby__fs-exit" bindtap="onCloseFullscreen">{{ mapExitLabel }}</cover-view>
+  ></map>
 
-    <cover-view wx:if="{{ selectedCard.siteId }}" class="nearby__fs-card">
-      <cover-view class="nearby__fs-head">
-        <cover-view class="nearby__fs-name">{{ selectedCard.name }}</cover-view>
-        <cover-view
-          wx:if="{{ selectedCard.statusLabel }}"
-          class="nearby__fs-status is-{{ selectedCard.statusTone }}"
-        >{{ selectedCard.statusLabel }}</cover-view>
-      </cover-view>
-      <cover-view wx:if="{{ selectedCard.showDistance }}" class="nearby__fs-distance">{{ selectedCard.distanceText }}</cover-view>
-      <cover-view wx:if="{{ selectedCard.showAddress }}" class="nearby__fs-address">{{ selectedCard.address }}</cover-view>
-      <cover-view class="nearby__fs-footer">{{ selectedCard.footer }}</cover-view>
-      <cover-view
-        wx:if="{{ selectedCard.showNavigate }}"
-        class="nearby__fs-navigate"
-        bindtap="onFullscreenNavigate"
-      >{{ selectedCard.navigateLabel }}</cover-view>
-    </cover-view>
-  </map>
+  <view class="nearby__fs-exit" bindtap="onCloseFullscreen">{{ mapExitLabel }}</view>
+
+  <view wx:if="{{ selectedCard.siteId }}" class="nearby__fs-card">
+    <view class="nearby__fs-head">
+      <view class="nearby__fs-name">{{ selectedCard.name }}</view>
+      <view
+        wx:if="{{ selectedCard.statusLabel }}"
+        class="nearby__fs-status is-{{ selectedCard.statusTone }}"
+      >{{ selectedCard.statusLabel }}</view>
+    </view>
+    <view wx:if="{{ selectedCard.showDistance }}" class="nearby__fs-distance">{{ selectedCard.distanceText }}</view>
+    <view wx:if="{{ selectedCard.showAddress }}" class="nearby__fs-address">{{ selectedCard.address }}</view>
+    <view class="nearby__fs-footer">{{ selectedCard.footer }}</view>
+    <view
+      wx:if="{{ selectedCard.showNavigate }}"
+      class="nearby__fs-navigate"
+      bindtap="onFullscreenNavigate"
+    >{{ selectedCard.navigateLabel }}</view>
+  </view>
 </view>
