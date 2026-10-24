@@ -4,3 +4,8 @@
 # ⚠️ 与测试载体本身同一性质 —— 它是 devDependency 链上的构建步骤，不进小程序包。
 allowBuilds:
   esbuild: true
+
+# 微信开发者工具「构建 npm」只按 npm 的扁平 node_modules 布局跟随依赖，不承诺理解
+# pnpm 的符号链接结构（见 #40 研究）。hoisted 让 pnpm 产出类似 npm 的扁平目录。
+# 注意：pnpm 12 已不读 .npmrc 的 node-linker，必须写在这里。
+nodeLinker: hoisted
