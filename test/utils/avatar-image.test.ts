@@ -194,3 +194,38 @@ describe('#74 prepareAvatar：尺寸缩放与 quality 三轮', () => {
     expect(await prepareAvatar('/tmp/choose-avatar.jpg')).toEqual({ ok: false, reason: 'failed' })
   })
 })
+
+describe('#75 discardPendingAvatar：只删 pending，不碰缓存', () => {
+  it('删掉 upload/avatar，缓存目录原样保留', async () => {
+    const wx = installWxStub()
+    const files = new Map<string, string>([
+      [PENDING, 'pending-bytes'],
+      [`${USER_DATA}/avatar/42`, 'cached-bytes'],
+    ])
+    const fs = installFileSystem(wx, [1024])
+    fs.unlink.mockImplementation(({ filePath, success, fail }) => {
+      queueMicrotask(() => {
+        if (files.delete(filePath)) success?.()
+        else fail?.({ errMsg: `fail no such file or directory ${filePath}` })
+      })
+    })
+
+    const { discardPendingAvatar } = await import('../../miniprogram/utils/avatar-image')
+    await discardPendingAvatar()
+
+    expect(files.has(PENDING)).toBe(false)
+    expect(files.get(`${USER_DATA}/avatar/42`)).toBe('cached-bytes')
+    expect(fs.unlink).toHaveBeenCalledWith(expect.objectContaining({ filePath: PENDING }))
+  })
+
+  it('pending 不存在时静默 resolve（关闭弹层是尽力清理）', async () => {
+    const wx = installWxStub()
+    const fs = installFileSystem(wx, [1024])
+    fs.unlink.mockImplementation(({ fail }) => {
+      queueMicrotask(() => fail?.({ errMsg: 'fail no such file or directory' }))
+    })
+
+    const { discardPendingAvatar } = await import('../../miniprogram/utils/avatar-image')
+    await expect(discardPendingAvatar()).resolves.toBeUndefined()
+  })
+})

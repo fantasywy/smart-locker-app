@@ -89,3 +89,31 @@ describe('#74 api/files：端点与调用形状只做搬运', () => {
     expect(result.error.code).toBe(8008)
   })
 })
+
+describe('#75 api/files：uploadAvatar 透传 abort 回调', () => {
+  it('options.onTask 拿到 wx.uploadFile 的 task —— api 层不加工', async () => {
+    const wx = installWxStub()
+    seedStorage('auth.accessToken', 'ACCESS-1')
+    const task = { abort: vi.fn() }
+    wx.uploadFile.mockImplementation((options) => {
+      queueMicrotask(() => {
+        options.success?.({
+          statusCode: 200,
+          data: JSON.stringify({
+            code: 0,
+            message: 'ok',
+            data: { id: 42, url: '/api/app/v1/files/42', size: 1024, mime: 'image/jpeg', width: 1080, height: 1080 },
+          }),
+          errMsg: 'uploadFile:ok',
+        })
+      })
+      return task
+    })
+
+    const seen: unknown[] = []
+    await uploadAvatar('/USER_DATA/upload/avatar', { onTask: (uploadTask) => seen.push(uploadTask) })
+
+    expect(seen).toEqual([task])
+    expect(wx.uploadFile).toHaveBeenCalledTimes(1)
+  })
+})

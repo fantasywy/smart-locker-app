@@ -9,9 +9,9 @@
     • **失败不塌整页**：两块各自一行，下方「我的服务 / 帮助与支持」照常可点。
     • **不展示手机号**：模板里没有 `phone` 这个字段，也不从 data 读它。
 
-  ⚠️ **头像位只画本地默认图标**（`icon` 组件，构建期 data URI）：
-     不发网络请求、不出现加载中、不出现上传入口，也**没有**任何编译期开关。
-     上传接线由 #75 接管（#69 落票勘误）。
+  ⚠️ **头像位**：有本地缓存路径时画 `<image>`，否则画 `icon` 组件的本地默认图
+     （构建期 data URI）。路径只来自 `resolveAvatar()`，地址失配零请求。
+     上传入口是弹层里的 `button open-type="chooseAvatar"`，**没有**任何编译期开关。
 
   ⚠️ **本文件没有一句用户可见字面量**：所有文案来自 `startup/copy.ts`
      （`PROFILE_COPY` / `STATIC_EXITS` / `PAGE_TITLES`），页面 data 只是转手。
@@ -41,7 +41,13 @@
       aria-role="button"
     >
       <view class="profile__avatar">
-        <icon name="profile.avatar" tone="weak" size="{{32}}" />
+        <image
+          wx:if="{{ avatarPath }}"
+          class="profile__avatar-image"
+          src="{{ avatarPath }}"
+          mode="aspectFill"
+        />
+        <icon wx:else name="profile.avatar" tone="weak" size="{{32}}" />
       </view>
       <view class="profile__identity-copy">
         <view class="profile__nickname">{{ nickname }}</view>
@@ -165,11 +171,13 @@
 </view>
 
 <!--
-  ⑥ 昵称编辑弹层（半屏）。
-  ⚠️ 只有昵称一项：头像本票只读，弹层里不出现头像位 / 上传入口。
+  ⑥ 资料编辑弹层（半屏）。
+  ⚠️ 头像 = 原生 `button open-type="chooseAvatar"`；选图后立即压缩 + 上传。
+     上传中头像位显示 `van-loading`，且「保存」禁用（`saving || avatarUploading`）。
+  ⚠️ 预览优先用 pending 本地文件（上传成功后），否则回当前头像 / 默认图。
   ⚠️ `input type="nickname"` 让微信提供昵称快捷填写；`maxlength` 不设为 64 ——
      那样用户永远触发不到「昵称最多 64 个字符」，客户端校验就成了一句摆饰。
-  ⚠️ 保存失败留在弹层内（`nicknameError`），不关弹层、不丢草稿。
+  ⚠️ 保存 / 上传失败都留在弹层内（`nicknameError` / `avatarError`），不关弹层、不丢草稿。
 -->
 <van-popup
   show="{{ popupVisible }}"
@@ -181,6 +189,27 @@
 >
   <view class="profile__sheet">
     <view class="profile__sheet-title">{{ editProfileLabel }}</view>
+    <view class="profile__avatar-field">
+      <button
+        class="profile__avatar-button"
+        open-type="chooseAvatar"
+        bind:chooseavatar="onChooseAvatar"
+        hover-class="profile__avatar-button_active"
+        hover-start-time="0"
+        hover-stay-time="0"
+      >
+        <view class="profile__avatar profile__avatar--editor">
+          <van-loading wx:if="{{ avatarUploading }}" size="24px" />
+          <image
+            wx:elif="{{ avatarPreviewPath }}"
+            class="profile__avatar-image"
+            src="{{ avatarPreviewPath }}"
+            mode="aspectFill"
+          />
+          <icon wx:else name="profile.avatar" tone="weak" size="{{32}}" />
+        </view>
+      </button>
+    </view>
     <view class="profile__field">
       <view class="profile__field-label">{{ nicknameLabel }}</view>
       <input
@@ -190,6 +219,7 @@
         bindinput="onNicknameInput"
       />
     </view>
+    <view wx:if="{{ avatarError }}" class="profile__field-error">{{ avatarError }}</view>
     <view wx:if="{{ nicknameError }}" class="profile__field-error">{{ nicknameError }}</view>
     <view class="profile__sheet-actions">
       <van-button class="profile__sheet-cancel" plain block bind:click="onCancelEdit">
@@ -200,7 +230,7 @@
         type="primary"
         block
         loading="{{ saving }}"
-        disabled="{{ saving }}"
+        disabled="{{ saving || avatarUploading }}"
         bind:click="onSaveProfile"
       >
         {{ saveLabel }}

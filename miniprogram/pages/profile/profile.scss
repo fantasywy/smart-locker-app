@@ -61,6 +61,13 @@ page {
   background: v.$color-bg-page;
   border: 1px solid v.$color-border;
   border-radius: 50%;
+  overflow: hidden;
+}
+
+.profile__avatar-image {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
 }
 
 .profile__identity-copy {
@@ -256,6 +263,35 @@ page {
   font-size: v.$font-size-heading;
   font-weight: v.$font-weight-semibold;
   line-height: v.$line-height-heading;
+}
+
+.profile__avatar-field {
+  display: flex;
+  justify-content: center;
+  margin-top: v.$spacing-lg;
+}
+
+// 原生 chooseAvatar 按钮 —— 只包住 64px 头像，去掉默认边框 / 背景 / 内边距。
+.profile__avatar-button {
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  background: transparent;
+  border-radius: 50%;
+  line-height: 1;
+}
+
+.profile__avatar-button::after {
+  border: none;
+}
+
+.profile__avatar-button_active {
+  background: v.$color-bg-page;
+}
+
+.profile__avatar--editor {
+  // 弹层里头像居中，不需要身份区那一侧的右间距。
+  margin-right: 0;
 }
 
 .profile__field {

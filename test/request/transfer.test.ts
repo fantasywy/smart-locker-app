@@ -414,3 +414,54 @@ describe('#74 download：401 也走同一套恢复', () => {
     })
   })
 })
+
+describe('#75 upload：可选 onTask 交出 wx.uploadFile 返回的 task', () => {
+  it('首轮与 401 重放各回调一次，且回调的是 wx.uploadFile 当次返回的对象', async () => {
+    const wx = installWxStub()
+    seedStorage('auth.accessToken', 'ACCESS-OLD')
+    seedStorage('auth.refreshToken', 'REFRESH-1')
+    const tasks = [{ abort: vi.fn() }, { abort: vi.fn() }]
+    let index = 0
+    wx.uploadFile.mockImplementation((options) => {
+      const task = tasks[index]
+      index += 1
+      queueMicrotask(() => {
+        if (index === 1) {
+          options.success?.(
+            uploadBody({ code: 2001, message: '登录已过期', data: null }, 401),
+          )
+          return
+        }
+        options.success?.(uploadBody({ code: 0, message: 'ok', data: { id: 42, url: '/api/app/v1/files/42' } }))
+      })
+      return task as { abort: () => void }
+    })
+    replyRefreshRequests(wx, [refreshResponse('ACCESS-NEW')])
+
+    const seen: unknown[] = []
+    const result = await upload('/api/app/v1/files', {
+      filePath: '/USER_DATA/upload/avatar',
+      name: 'file',
+      onTask: (task) => seen.push(task),
+    })
+
+    expect(result.ok).toBe(true)
+    expect(wx.uploadFile).toHaveBeenCalledTimes(2)
+    expect(seen).toEqual(tasks)
+    expect(seen[0]).toBe(tasks[0])
+    expect(seen[1]).toBe(tasks[1])
+  })
+
+  it('不传 onTask 时行为不变（不抛错）', async () => {
+    const wx = installWxStub()
+    seedStorage('auth.accessToken', 'ACCESS-1')
+    replyUploads(wx, [
+      uploadBody({ code: 0, message: 'ok', data: { id: 42, url: '/api/app/v1/files/42' } }),
+    ])
+
+    const result = await upload('/api/app/v1/files', { filePath: '/USER_DATA/upload/avatar', name: 'file' })
+
+    expect(result.ok).toBe(true)
+    expect(wx.uploadFile).toHaveBeenCalledTimes(1)
+  })
+})

@@ -19,14 +19,28 @@ import type { DownloadResult } from '../request/transfer'
 import { FILES_PATH } from '../request/config'
 import { download, upload } from '../request/transfer'
 
+/** `uploadAvatar()` 的可选回调 —— 只转发传输层的 task，不加工。 */
+export interface UploadAvatarOptions {
+  /**
+   * 拿到本次 `wx.uploadFile` 的 task（用于「上传中关闭弹层 → abort」）。
+   *
+   * ⚠️ 401 重放会让它再回调一次；调用方保存最后收到的那个即可。
+   */
+  onTask?: (task: WechatMiniprogram.UploadTask) => void
+}
+
 /**
  * 上传头像文件（`POST /api/app/v1/files`）。
  *
  * @param filePath 压缩流水线产出的 pending 路径（`USER_DATA_PATH/upload/{槽位}`）
+ * @param options 可选回调；本层只透传给 `request/transfer.upload()`，不含业务逻辑
  * @returns 成功时 `AppFile` DTO；失败时统一异常对象（**不抛异常**）
  */
-export function uploadAvatar(filePath: string): Promise<RequestResult<AppFile>> {
-  return upload<AppFile>(FILES_PATH, { filePath, name: 'file' })
+export function uploadAvatar(
+  filePath: string,
+  options: UploadAvatarOptions = {},
+): Promise<RequestResult<AppFile>> {
+  return upload<AppFile>(FILES_PATH, { filePath, name: 'file', onTask: options.onTask })
 }
 
 /**
