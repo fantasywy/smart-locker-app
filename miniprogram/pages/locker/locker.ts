@@ -181,7 +181,7 @@ function pageDepth(): number {
   return Array.isArray(pages) && pages.length > 0 ? pages.length : 1
 }
 
-Component<LockerPageData, Record<string, never>, LockerPageMethods, Record<string, never>, true>({
+Component<LockerPageData, Record<string, never>, LockerPageMethods, [], Record<string, never>, true>({
   data: {
     title: PAGE_TITLES['pages/locker/locker'],
     phase: 'loading' as LockerPhase,

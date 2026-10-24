@@ -407,6 +407,7 @@ Component<
   ReservationListData,
   Record<string, never>,
   ReservationListMethods,
+  [],
   Record<string, never>,
   true
 >({
