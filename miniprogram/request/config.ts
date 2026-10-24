@@ -31,6 +31,18 @@ export const LOGIN_PATH = `${API_PREFIX}/auth/login`
 export const REFRESH_PATH = `${API_PREFIX}/auth/refresh`
 
 /**
+ * 用户端文件端点基路径 —— `POST /api/app/v1/files`（上传）与
+ * `GET /api/app/v1/files/{id}`（读）共用同一个前缀。
+ *
+ * ⚠️ 与登录路径同一条纪律：路径只有一个家。`api/files.ts` 从这里拼请求，
+ * `utils/avatar-cache.ts` 从这里派生「头像地址」的判别正则 —— 两处各写一遍
+ * `/api/app/v1/files` 就有「缓存判据认得出、请求打偏」的漂移空间。
+ *
+ * ⚠️ 它**不在**免鉴权名单里：读端点只认 app 令牌，且只能读本人上传。
+ */
+export const FILES_PATH = `${API_PREFIX}/files`
+
+/**
  * 内容端点的基路径 —— **免鉴权新端点**（spec #57 §13，后端待建）。
  *
  * ⚠️ 单独导出常量而不是在 `api/contents.ts` 里写一遍：路径只有一个家，

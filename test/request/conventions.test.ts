@@ -1,8 +1,13 @@
-// 请求层的**工程约束守卫** —— issue #18 剩下的几条 Acceptance criteria。
+// 请求层的**工程约束守卫** —— issue #18 / #74 的 Acceptance criteria。
 //
 // 这几条的共同点：它们是**关于代码形状**的约束，不是关于运行时行为的 ——
-// 「`pages/` 之外不得出现 `wx.request`」「`api/` 不含业务分支」「不引 store」。
-// 行为测试测不到它们（一个页面自己拼 URL 发请求，功能上照样能通），所以只能读源码。
+// 「唯一 HTTP 出口目录」「`api/` 不含业务分支」「不引 store」。行为测试测不到它们
+// （一个页面自己拼 URL 发请求，功能上照样能通），所以只能读源码。
+//
+// #74 把口径从「唯一 `wx.request` 调用点」改写成「**唯一 HTTP 出口目录**」：
+//   • `wx.request`            → 只出现在 `request/index.ts`
+//   • `wx.uploadFile` / `wx.downloadFile` → 只出现在 `request/transfer.ts`
+// 三条通道共用同一套 Bearer 与归一化，但**调用点**仍各自唯一。
 //
 // 断言风格同 `test/types/auth.test.ts` 的源码守卫：**把一条约束落成一条断言、
 // 失败时打印出违反的是哪一条**。判据一律取**剥离注释后**的源码 —— 注释里提 `wx.request`
@@ -51,36 +56,38 @@ function rel(path: string): string {
   return relative(repoRoot, path)
 }
 
-describe('#18 工程约束：唯一 HTTP 出口（硬规则 1）', () => {
-  it('⚠️ `wx.request` 只出现在 `miniprogram/request/` 里 —— 别处零出现', () => {
-    // 硬规则 1：「`pages/` 之外不得出现 `wx.request` —— 一切 HTTP 走 `request/`。
-    // 页面调 `api/` 的函数，不拼 URL、不拼 header。」
-    // 本守卫比那句更严一点：**整个 miniprogram/ 里只有 request/ 能出现它**。
-    // 严格是刻意的 —— 规则的原话是「pages/ 之外不得」，但把 `api/` 也算进去没有任何代价，
-    // 且堵死了「在 api/ 里自己发一条请求」这条最容易被接受的绕路。
-    const offenders: string[] = []
-    for (const file of collectSources(miniprogramDir)) {
-      if (file.startsWith(requestDir)) continue
-      const code = stripComments(readFileSync(file, 'utf8'))
-      if (/\bwx\s*\.\s*request\b/.test(code)) offenders.push(rel(file))
-    }
+/** 收集某个 `wx.*` API 在源码里的真正调用点（注释不算）。 */
+function callSitesOf(pattern: RegExp): string[] {
+  return collectSources(miniprogramDir)
+    .filter((file) => pattern.test(stripComments(readFileSync(file, 'utf8'))))
+    .map(rel)
+}
+
+describe('#74 工程约束：唯一 HTTP 出口目录', () => {
+  it('⚠️ `wx.request` 只出现在 `request/index.ts` —— 别处零出现', () => {
+    // #74 改写前的口径是「request/ 之外零出现」；现在三条通道都在 request/ 里，
+    // 但**一条通道仍只能有一个调用文件** —— 否则「附加 token + 归一化」这条单一路径
+    // 就不再是单一的了，新增的调用点很容易漏掉鉴权头或归一化。
+    const offenders = callSitesOf(/\bwx\s*\.\s*request\b/).filter(
+      (file) => file !== rel(join(requestDir, 'index.ts')),
+    )
 
     expect(
       offenders,
-      `以下文件在 request/ 之外出现了 wx.request —— 违反唯一 HTTP 出口约束（硬规则 1）：\n` +
+      `以下文件在 request/index.ts 之外出现了 wx.request —— 违反唯一 HTTP 出口约束：\n` +
         offenders.map((f) => `  • ${f}`).join('\n'),
     ).toEqual([])
   })
 
-  it('请求层**恰好有一个** `wx.request` 调用点', () => {
-    // 反面：如果 request/ 自己内部散落多处 `wx.request`，「附加 token + 归一化」这条
-    // 单一路径就不再是单一的了 —— 新增的调用点很容易漏掉鉴权头或归一化。
-    const callSites = collectSources(requestDir).filter((file) =>
-      /\bwx\s*\.\s*request\b/.test(stripComments(readFileSync(file, 'utf8'))),
-    )
-    expect(callSites.map(rel), '请求层应当只有一个文件真正调用 wx.request').toEqual([
-      rel(join(requestDir, 'index.ts')),
-    ])
+  it('⚠️ `wx.uploadFile` / `wx.downloadFile` 只出现在 `request/transfer.ts`', () => {
+    // 两条文件通道必须同住一个文件：它们共用 `recovery.ts` 的 Bearer 与 401 恢复，
+    // 拆开或散落到 `api/` 都会让「同一个 401 在两处走不同分支」重新成为可能。
+    const uploadSites = callSitesOf(/\bwx\s*\.\s*uploadFile\b/)
+    const downloadSites = callSitesOf(/\bwx\s*\.\s*downloadFile\b/)
+    const transfer = rel(join(requestDir, 'transfer.ts'))
+
+    expect(uploadSites, 'wx.uploadFile 的唯一调用文件必须是 request/transfer.ts').toEqual([transfer])
+    expect(downloadSites, 'wx.downloadFile 的唯一调用文件必须是 request/transfer.ts').toEqual([transfer])
   })
 })
 
@@ -229,6 +236,23 @@ describe('#18 工程约束：token 读写集中在一个模块', () => {
     expect(
       offenders,
       `以下页面里出现了裸的 API 前缀 —— 端点路径只在 api/ 里拼（硬规则 2）：\n` +
+        offenders.map((f) => `  • ${f}`).join('\n'),
+    ).toEqual([])
+  })
+
+  it('⚠️ `pages/` 不出现 `/api/app/v1/files` 字面量', () => {
+    // #74 的第三条守卫（票面单独列出）：头像上传 / 读取的地址只允许由
+    // `api/files.ts` 与 `utils/avatar-cache.ts` 拼。页面里出现这个字面量，说明它
+    // 绕过了 api 层 —— 下一步就是自己拼 URL、自己判状态。
+    const offenders: string[] = []
+    for (const file of collectSources(pagesDir)) {
+      const code = stripComments(readFileSync(file, 'utf8'))
+      if (code.includes('/api/app/v1/files')) offenders.push(rel(file))
+    }
+
+    expect(
+      offenders,
+      `以下页面里出现了 /api/app/v1/files 字面量 —— 文件端点只在 api/files.ts 里拼：\n` +
         offenders.map((f) => `  • ${f}`).join('\n'),
     ).toEqual([])
   })

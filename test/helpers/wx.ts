@@ -236,6 +236,156 @@ export interface WxShowToastOptions {
   complete?: () => void
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// #74 传输层 / 头像缓存需要的新 API —— 与既有桩同一条纪律：**未编排即抛错**。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** `wx.uploadFile` 的 success 回调参数形状（`data` 是**字符串**，不是对象）。 */
+export interface WxUploadFileSuccessResult {
+  data: string
+  statusCode: number
+  errMsg: string
+}
+
+/** `wx.uploadFile` 的 options —— 测试断言「只带 file part、无 formData、无 timeout」。 */
+export interface WxUploadFileOptions {
+  url: string
+  filePath: string
+  name: string
+  header?: Record<string, string>
+  formData?: Record<string, unknown>
+  timeout?: number
+  success?: (res: WxUploadFileSuccessResult) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `wx.uploadFile` 的返回 —— 只列调用方真正会用的 `abort()`。 */
+export interface WxUploadTask {
+  abort: () => void
+}
+
+/** `wx.downloadFile` 的 success 回调参数形状。 */
+export interface WxDownloadFileSuccessResult {
+  filePath: string
+  tempFilePath: string
+  statusCode: number
+  errMsg: string
+}
+
+/** `wx.downloadFile` 的 options。 */
+export interface WxDownloadFileOptions {
+  url: string
+  filePath?: string
+  header?: Record<string, string>
+  timeout?: number
+  success?: (res: WxDownloadFileSuccessResult) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `wx.downloadFile` 的返回 —— 只列调用方真正会用的 `abort()`。 */
+export interface WxDownloadTask {
+  abort: () => void
+}
+
+/** `wx.compressImage` 的 options —— 含 2.26.0 起的 `compressedWidth/Height`。 */
+export interface WxCompressImageOptions {
+  src: string
+  quality?: number
+  compressedWidth?: number
+  compressedHeight?: number
+  success?: (res: { tempFilePath: string; errMsg: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `wx.getImageInfo` 的 success 结果 —— 只列本仓库用到的字段。 */
+export interface WxGetImageInfoSuccessResult {
+  width: number
+  height: number
+  path?: string
+  type?: string
+  orientation?: string
+  errMsg?: string
+}
+
+/** `wx.getImageInfo` 的 options。 */
+export interface WxGetImageInfoOptions {
+  src: string
+  success?: (res: WxGetImageInfoSuccessResult) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/** `FileSystemManager.stat` 的 Stats —— 只列字节数。 */
+export interface WxStats {
+  size: number
+}
+
+interface WxFsCallbackOptions {
+  success?: () => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+export interface WxFsAccessOptions extends WxFsCallbackOptions {
+  path: string
+}
+
+export interface WxFsRenameOptions extends WxFsCallbackOptions {
+  oldPath: string
+  newPath: string
+}
+
+export interface WxFsCopyFileOptions extends WxFsCallbackOptions {
+  srcPath: string
+  destPath: string
+}
+
+export interface WxFsMkdirOptions extends WxFsCallbackOptions {
+  dirPath: string
+  recursive?: boolean
+}
+
+export interface WxFsUnlinkOptions extends WxFsCallbackOptions {
+  filePath: string
+}
+
+export interface WxFsReaddirOptions {
+  dirPath: string
+  success?: (res: { files: string[]; errMsg: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+export interface WxFsStatOptions {
+  path: string
+  recursive?: boolean
+  success?: (res: { stats: WxStats; errMsg: string }) => void
+  fail?: (err: WxRequestFailResult) => void
+  complete?: () => void
+}
+
+/**
+ * `FileSystemManager` —— 只列本仓库 #74 用到的成员。
+ *
+ * ⚠️ 同步 / 异步两套都列：缓存命中要**同步**判存在（命中必须同步返回本地路径，
+ * 否则头像位会先闪一下默认图），而落盘 / 清理走异步。
+ */
+export interface WxFileSystemManager {
+  access: Mock<(options: WxFsAccessOptions) => void>
+  accessSync: Mock<(path: string) => void>
+  rename: Mock<(options: WxFsRenameOptions) => void>
+  renameSync: Mock<(oldPath: string, newPath: string) => void>
+  copyFile: Mock<(options: WxFsCopyFileOptions) => void>
+  mkdir: Mock<(options: WxFsMkdirOptions) => void>
+  unlink: Mock<(options: WxFsUnlinkOptions) => void>
+  readdir: Mock<(options: WxFsReaddirOptions) => void>
+  stat: Mock<(options: WxFsStatOptions) => void>
+  statSync: Mock<(path: string, recursive?: boolean) => WxStats>
+}
+
 /** `wx.*` 全局的形状。刻意只列本仓库会碰到的成员 —— 用不到的 API 不预先编造。 */
 /** `installWxStub()` 的返回：桩本身，外加一个手动卸载口。 */
 export interface InstalledWxStub extends WxStub {
@@ -244,11 +394,18 @@ export interface InstalledWxStub extends WxStub {
 }
 
 export interface WxStub {
+  /** 本地用户目录 —— 缓存 / pending 路径的根（`wx.env.USER_DATA_PATH`）。 */
+  env: { USER_DATA_PATH: string }
   login: Mock<(options: WxLoginOptions) => void>
   getStorageSync: Mock<(key: string) => unknown>
   setStorageSync: Mock<(key: string, value: unknown) => void>
   removeStorageSync: Mock<(key: string) => void>
   request: Mock<(options: WxRequestOptions) => void>
+  uploadFile: Mock<(options: WxUploadFileOptions) => WxUploadTask>
+  downloadFile: Mock<(options: WxDownloadFileOptions) => WxDownloadTask>
+  compressImage: Mock<(options: WxCompressImageOptions) => void>
+  getImageInfo: Mock<(options: WxGetImageInfoOptions) => void>
+  getFileSystemManager: Mock<() => WxFileSystemManager>
   switchTab: Mock<(options: WxSwitchTabOptions) => void>
   navigateTo: Mock<(options: WxNavigateToOptions) => void>
   redirectTo: Mock<(options: WxNavigateToOptions) => void>
@@ -281,6 +438,15 @@ class UnstubbedWxCall extends Error {
 /** 构造一个「未编排即失败」的 mock：调用它只会抛出 UnstubbedWxCall。 */
 function unstubbed<TArgs extends unknown[]>(method: string): Mock<(...args: TArgs) => void> {
   return vi.fn((..._args: TArgs) => {
+    throw new UnstubbedWxCall(method)
+  })
+}
+
+/** 同上，但返回一个**有值**的 API（如 `uploadFile` 的 `UploadTask`）。 */
+function unstubbedResult<TArgs extends unknown[], TResult>(
+  method: string,
+): Mock<(...args: TArgs) => TResult> {
+  return vi.fn((..._args: TArgs): TResult => {
     throw new UnstubbedWxCall(method)
   })
 }
@@ -348,6 +514,8 @@ export function installWxStub(): InstalledWxStub {
   const memory = new Map<string, unknown>()
 
   const stub: WxStub = {
+    // 本地用户目录用固定值 —— 让「文件落在哪个路径」在断言里可读且稳定。
+    env: { USER_DATA_PATH: '/USER_DATA' },
     login: unstubbed<[WxLoginOptions]>('login'),
     getStorageSync: vi.fn((key: string) => memory.get(key)) as Mock<(key: string) => unknown>,
     setStorageSync: vi.fn((key: string, value: unknown) => {
@@ -357,6 +525,14 @@ export function installWxStub(): InstalledWxStub {
       memory.delete(key)
     }),
     request: unstubbed<[WxRequestOptions]>('request'),
+    // #74 三条通道里的另外两条 —— 同样未编排即抛错；返回 Task 供 abort 语义测试。
+    uploadFile: unstubbedResult<[WxUploadFileOptions], WxUploadTask>('uploadFile'),
+    downloadFile: unstubbedResult<[WxDownloadFileOptions], WxDownloadTask>('downloadFile'),
+    // 图片流水线的两个平台 API。未编排即抛错，让「没压缩 / 没量尺寸」当场现形。
+    compressImage: unstubbed<[WxCompressImageOptions]>('compressImage'),
+    getImageInfo: unstubbed<[WxGetImageInfoOptions]>('getImageInfo'),
+    // 文件系统管理器本身也是未编排即抛错 —— 测试必须显式给出一个内存盘。
+    getFileSystemManager: unstubbedResult<[], WxFileSystemManager>('getFileSystemManager'),
     // ⚠️ 未编排即失败（与 `login` / `request` 同一条纪律）：柜机页的「我的订单」出口
     // 若改回死按钮，这里会**抛错**而不是静默什么都不发生 —— 静默正是那个缺陷的症状。
     switchTab: unstubbed<[WxSwitchTabOptions]>('switchTab'),
